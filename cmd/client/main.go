@@ -120,15 +120,22 @@ func sendFlow(ctx context.Context, h host.Host, server peer.AddrInfo) error {
 		return err
 	}
 
-	// Addresses to advertise to the receiver: our own addresses (useful
-	// when on the same network) plus our relay addresses via the server.
-	addrs := append([]multiaddr.Multiaddr{}, h.Addrs()...)
+	// Addresses to advertise to the receiver: relay circuit addresses
+	// via the server first — those are the ones that matter when both
+	// sides are behind NAT — then our own addresses (useful when both
+	// are on the same network). The server caps the list, so trim it
+	// here rather than risk a rejected registration.
+	var addrs []multiaddr.Multiaddr
 	for _, sa := range server.Addrs {
 		circuit, err := multiaddr.NewMultiaddr(
 			fmt.Sprintf("%s/p2p/%s/p2p-circuit", sa, server.ID))
 		if err == nil {
 			addrs = append(addrs, circuit)
 		}
+	}
+	addrs = append(addrs, h.Addrs()...)
+	if len(addrs) > rendezvous.MaxAddrs {
+		addrs = addrs[:rendezvous.MaxAddrs]
 	}
 
 	// Register the room before anything else: the server's relay only
