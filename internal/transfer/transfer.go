@@ -2,8 +2,9 @@
 // between two peers. The rendezvous server plays no part in this stage.
 //
 // The flow: the receiver opens a stream to the sender. The sender first
-// writes a manifest (file names, sizes and SHA-256 digests), then streams
-// the raw bytes of each file in order. The receiver verifies each digest
+// writes a manifest (file names, sizes and SHA-256 digests) and waits
+// for the receiver to accept or decline. Only then does it stream the
+// raw bytes of each file in order. The receiver verifies each digest
 // while writing to disk and sends a final acknowledgement.
 package transfer
 
@@ -19,7 +20,8 @@ import (
 )
 
 // ProtocolID identifies the file transfer protocol on libp2p.
-const ProtocolID = "/filetransferilla/transfer/1.0.0"
+// 1.1.0 added the accept/decline step after the manifest.
+const ProtocolID = "/filetransferilla/transfer/1.1.0"
 
 // maxManifestBytes caps the manifest line so a malicious sender cannot
 // exhaust the receiver's memory before the manifest is even parsed.
@@ -37,7 +39,8 @@ type Manifest struct {
 	Files []FileInfo `json:"files"`
 }
 
-// ack is the receiver's confirmation sent at the end of the transfer.
+// ack is the receiver's answer to the manifest (accept/decline) and its
+// confirmation at the end of the transfer.
 type ack struct {
 	OK    bool   `json:"ok"`
 	Error string `json:"error,omitempty"`
@@ -67,6 +70,21 @@ func Send(s io.ReadWriteCloser, paths []string, onProgress ProgressFunc) error {
 	if err := json.NewEncoder(w).Encode(manifest); err != nil {
 		return fmt.Errorf("could not send manifest: %w", err)
 	}
+	if err := w.Flush(); err != nil {
+		return fmt.Errorf("could not send manifest: %w", err)
+	}
+
+	// The receiver inspects the manifest and explicitly accepts before
+	// a single file byte is sent. Only acks flow in this direction, so
+	// one decoder can safely be reused for both messages.
+	dec := json.NewDecoder(s)
+	var goAhead ack
+	if err := dec.Decode(&goAhead); err != nil {
+		return fmt.Errorf("no answer from receiver: %w", err)
+	}
+	if !goAhead.OK {
+		return fmt.Errorf("receiver declined: %s", goAhead.Error)
+	}
 
 	// Send the raw bytes of each file, in manifest order.
 	for i, p := range paths {
@@ -81,7 +99,7 @@ func Send(s io.ReadWriteCloser, paths []string, onProgress ProgressFunc) error {
 	// Wait for the receiver's acknowledgement so we don't declare
 	// success before the files are safely on disk over there.
 	var a ack
-	if err := json.NewDecoder(s).Decode(&a); err != nil {
+	if err := dec.Decode(&a); err != nil {
 		return fmt.Errorf("no acknowledgement from receiver: %w", err)
 	}
 	if !a.OK {
@@ -91,13 +109,11 @@ func Send(s io.ReadWriteCloser, paths []string, onProgress ProgressFunc) error {
 }
 
 // Receive saves the files arriving on the stream into outDir and returns
-// the paths of the saved files.
-func Receive(s io.ReadWriteCloser, outDir string, onProgress ProgressFunc) ([]string, error) {
+// the paths of the saved files. Before anything is written, confirm is
+// called with the manifest; returning false declines the transfer
+// (a nil confirm accepts everything).
+func Receive(s io.ReadWriteCloser, outDir string, confirm func(Manifest) bool, onProgress ProgressFunc) ([]string, error) {
 	defer s.Close()
-
-	if err := os.MkdirAll(outDir, 0o755); err != nil {
-		return nil, fmt.Errorf("could not create target directory: %w", err)
-	}
 
 	// Read the manifest as a single line. Careful: json.Decoder cannot
 	// be used here; it buffers extra data from the stream internally and
@@ -110,6 +126,20 @@ func Receive(s io.ReadWriteCloser, outDir string, onProgress ProgressFunc) ([]st
 	var manifest Manifest
 	if err := json.Unmarshal(line, &manifest); err != nil {
 		return nil, fmt.Errorf("could not parse manifest: %w", err)
+	}
+
+	// Let the user inspect what is coming — name and size of every
+	// file — and answer the sender before any disk space is used.
+	if confirm != nil && !confirm(manifest) {
+		json.NewEncoder(s).Encode(ack{OK: false, Error: "receiver declined the transfer"})
+		return nil, fmt.Errorf("transfer declined")
+	}
+	if err := json.NewEncoder(s).Encode(ack{OK: true}); err != nil {
+		return nil, fmt.Errorf("could not answer the sender: %w", err)
+	}
+
+	if err := os.MkdirAll(outDir, 0o755); err != nil {
+		return nil, fmt.Errorf("could not create target directory: %w", err)
 	}
 
 	var saved []string

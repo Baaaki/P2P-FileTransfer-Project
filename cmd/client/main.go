@@ -247,7 +247,7 @@ func receiveFlow(ctx context.Context, h host.Host, server peer.AddrInfo) error {
 		return fmt.Errorf("could not open transfer stream: %w", err)
 	}
 
-	saved, err := transfer.Receive(s, outDir, progressBar())
+	saved, err := transfer.Receive(s, outDir, confirmManifest, progressBar())
 	if err != nil {
 		return err
 	}
@@ -256,6 +256,19 @@ func receiveFlow(ctx context.Context, h host.Host, server peer.AddrInfo) error {
 		fmt.Println("  ", p)
 	}
 	return nil
+}
+
+// confirmManifest shows the incoming file list and asks the user to
+// approve before a single byte is written to disk.
+func confirmManifest(m transfer.Manifest) bool {
+	fmt.Println("\nIncoming files:")
+	var total int64
+	for _, f := range m.Files {
+		fmt.Printf("  %s (%s)\n", f.Name, formatBytes(f.Size))
+		total += f.Size
+	}
+	fmt.Printf("Total: %d file(s), %s\n", len(m.Files), formatBytes(total))
+	return strings.EqualFold(prompt("Accept? [y/N]"), "y")
 }
 
 // waitForDirect blocks until a non-relayed (direct) connection to the
