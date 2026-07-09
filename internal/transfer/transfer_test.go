@@ -187,4 +187,14 @@ func TestChecksumMismatch(t *testing.T) {
 	if _, err := Receive(receiver, outDir, nil); err == nil || !strings.Contains(err.Error(), "checksum") {
 		t.Fatalf("expected a checksum error, got: %v", err)
 	}
+
+	// A failed transfer must not leave anything behind — neither the
+	// final file nor a .part temp file.
+	entries, err := os.ReadDir(outDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range entries {
+		t.Errorf("failed transfer left a file behind: %s", e.Name())
+	}
 }

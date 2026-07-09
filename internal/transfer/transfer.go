@@ -194,11 +194,18 @@ func receiveFile(r io.Reader, outDir string, info FileInfo, onProgress ProgressF
 	// sends a name like "../../.bashrc", it cannot escape outDir.
 	path := availablePath(outDir, filepath.Base(info.Name))
 
-	f, err := os.Create(path)
+	// Write into a temporary .part file first; the final name only
+	// appears after the digest has been verified, so an interrupted
+	// transfer can never leave a corrupt file that looks complete.
+	f, err := os.CreateTemp(outDir, filepath.Base(path)+".*.part")
 	if err != nil {
 		return "", fmt.Errorf("could not create file: %w", err)
 	}
-	defer f.Close()
+	tmp := f.Name()
+	defer func() {
+		f.Close()
+		os.Remove(tmp) // no-op once the file has been renamed
+	}()
 
 	hasher := sha256.New()
 	buf := make([]byte, 32*1024)
@@ -211,7 +218,7 @@ func receiveFile(r io.Reader, outDir string, info FileInfo, onProgress ProgressF
 		n, err := io.ReadFull(r, buf[:chunk])
 		if n > 0 {
 			if _, werr := f.Write(buf[:n]); werr != nil {
-				return path, fmt.Errorf("could not write to disk: %w", werr)
+				return "", fmt.Errorf("could not write to disk: %w", werr)
 			}
 			hasher.Write(buf[:n])
 			received += int64(n)
@@ -220,12 +227,18 @@ func receiveFile(r io.Reader, outDir string, info FileInfo, onProgress ProgressF
 			}
 		}
 		if err != nil {
-			return path, fmt.Errorf("connection lost while receiving %s: %w", info.Name, err)
+			return "", fmt.Errorf("connection lost while receiving %s: %w", info.Name, err)
 		}
 	}
 
 	if got := hex.EncodeToString(hasher.Sum(nil)); got != info.SHA256 {
-		return path, fmt.Errorf("checksum mismatch for %s, the file may be corrupted", info.Name)
+		return "", fmt.Errorf("checksum mismatch for %s, the file may be corrupted", info.Name)
+	}
+	if err := f.Close(); err != nil {
+		return "", fmt.Errorf("could not finish writing %s: %w", info.Name, err)
+	}
+	if err := os.Rename(tmp, path); err != nil {
+		return "", fmt.Errorf("could not finalize %s: %w", info.Name, err)
 	}
 	return path, nil
 }
