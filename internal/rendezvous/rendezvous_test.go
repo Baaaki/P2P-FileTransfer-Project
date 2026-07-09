@@ -59,6 +59,17 @@ func TestRegisterValidation(t *testing.T) {
 	if resp := r.handle(sender, Request{Type: "bogus"}); resp.Type != "error" {
 		t.Errorf("unknown request type accepted: %+v", resp)
 	}
+
+	tooMany := make([]string, maxAddrs+1)
+	for i := range tooMany {
+		tooMany[i] = "/ip4/127.0.0.1/tcp/4001"
+	}
+	if resp := r.handle(sender, Request{Type: "register", Room: "a-b-1", Addrs: tooMany}); resp.Type != "error" {
+		t.Errorf("register with too many addresses accepted: %+v", resp)
+	}
+	if resp := r.handle(sender, Request{Type: "register", Room: "a-b-1", Addrs: []string{"garbage"}}); resp.Type != "error" {
+		t.Errorf("register without a single valid address accepted: %+v", resp)
+	}
 }
 
 func TestRoomTakeoverRejected(t *testing.T) {
