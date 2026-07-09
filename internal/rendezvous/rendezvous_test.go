@@ -64,7 +64,7 @@ func TestRegisterValidation(t *testing.T) {
 		t.Errorf("unknown request type accepted: %+v", resp)
 	}
 
-	tooMany := make([]string, maxAddrs+1)
+	tooMany := make([]string, MaxAddrs+1)
 	for i := range tooMany {
 		tooMany[i] = "/ip4/127.0.0.1/tcp/4001"
 	}

@@ -48,10 +48,13 @@ const (
 
 // Bounds on a single protocol message, so a malicious client cannot
 // make the other side buffer unlimited data.
-const (
-	maxMessageBytes = 16 << 10 // one JSON request/response
-	maxAddrs        = 32       // addresses in a register request
-)
+const maxMessageBytes = 16 << 10 // one JSON request/response
+
+// MaxAddrs bounds the address list in a register request. Exported so
+// the client can trim its own list before registering: a node with
+// several interfaces and transports easily advertises dozens of
+// addresses.
+const MaxAddrs = 64
 
 // Request is the message sent from client to server.
 type Request struct {
@@ -200,7 +203,7 @@ func (r *Registry) handle(from peer.ID, req Request) Response {
 		if existing, ok := r.rooms[req.Room]; ok && existing.info.ID != from {
 			return Response{Type: "error", Error: "room code is already in use"}
 		}
-		if len(req.Addrs) > maxAddrs {
+		if len(req.Addrs) > MaxAddrs {
 			return Response{Type: "error", Error: "too many addresses"}
 		}
 		if len(r.rooms) >= maxRooms {
