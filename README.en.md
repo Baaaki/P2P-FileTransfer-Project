@@ -27,9 +27,13 @@ Sender (Istanbul)                  Server (VPS)                Receiver (Izmir)
 2. **NAT traversal** — when both peers are behind NAT, the first connection
    is established through the server's **Circuit Relay v2** bridge, and
    libp2p's **DCUtR hole punching** upgrades it to a direct connection.
-3. **Transfer** — files stream over the direct connection with per-file
-   **SHA-256 verification**. If hole punching fails (e.g. symmetric NAT),
-   the transfer still completes through the relay as a fallback.
+   The relay only serves peers with an active room (ACL) — the server is
+   not a free bridge for unrelated nodes.
+3. **Transfer** — the receiver first sees the incoming file list (names +
+   sizes) and **approves it**; only then do the files stream over the
+   direct connection with per-file **SHA-256 verification**. If hole
+   punching fails (e.g. symmetric NAT), the transfer still completes
+   through the relay as a fallback.
 
 ## Tech stack
 
@@ -37,8 +41,8 @@ Sender (Istanbul)                  Server (VPS)                Receiver (Izmir)
 - libp2p features: TCP + QUIC transports, Circuit Relay v2, DCUtR hole
   punching, AutoNAT v2, UPnP port mapping, Noise/TLS encryption (always on)
 - Two small custom protocols: `/puresend/rendezvous/1.0.0`
-  (room register/lookup) and `/puresend/transfer/1.0.0`
-  (manifest + file bytes + acknowledgement)
+  (room register/lookup) and `/puresend/transfer/1.1.0`
+  (manifest + accept/decline + file bytes + acknowledgement)
 
 ```
 cmd/server      rendezvous + relay server (runs on a VPS)
@@ -51,6 +55,7 @@ internal/       the two protocol implementations
 ```bash
 git clone <repo> && cd PureSend
 go build ./...
+go test ./...   # unit tests + an end-to-end test over libp2p
 ```
 
 ### 1. Start the server — any machine with an open port (e.g. a cheap VPS)
@@ -93,14 +98,20 @@ finish). Share the printed room code with the receiver — it is valid for
 ### 3. Receiver
 
 Run the same command on the other machine, pick **2) Receive files** and
-enter the room code. Files land in `received/` by default, each verified
-against its SHA-256 digest:
+enter the room code. The incoming file list is shown for approval; once
+accepted, files land in `received/` by default, each verified against
+its SHA-256 digest:
 
 ```
 Sender found: 12D3KooWHxxef3pj...
 ✓ Direct P2P connection established — files will bypass the server.
+
+Incoming files:
+  photo1.jpg (2.1 MB)
+Total: 1 file(s), 2.1 MB
+Accept? [y/N]: y
   photo1.jpg  [████████████████████████] 100%  2.1 MB / 2.1 MB
-✓ 3 file(s) received and verified
+✓ 1 file(s) received and verified
 ```
 
 > **Trying it locally:** run all three programs on one machine in three
@@ -108,6 +119,11 @@ Sender found: 12D3KooWHxxef3pj...
 
 ## Limitations
 
-- Anyone who knows the room code can receive the files (single-transfer,
-  1-hour design; PAKE-based password auth would be a nice addition).
-- Interrupted transfers restart from scratch — no resume yet.
+- The first receiver to enter the room code gets the files
+  (single-transfer, 1-hour design). Guessing is impractical — ~1.7
+  million code combinations, a per-peer lookup limit on the server and
+  room-ownership protection — but PAKE-based password auth would still
+  be a nice addition.
+- Interrupted transfers restart from scratch — no resume yet. A partial
+  download is cleaned up together with its temporary `.part` file, so no
+  corrupt file is ever left behind looking complete.
