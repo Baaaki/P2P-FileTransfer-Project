@@ -61,6 +61,19 @@ func TestRegisterValidation(t *testing.T) {
 	}
 }
 
+func TestRoomTakeoverRejected(t *testing.T) {
+	r := NewRegistry()
+	register(r, sender, "apple-river-42")
+
+	if resp := register(r, peer.ID("attacker"), "apple-river-42"); resp.Type != "error" {
+		t.Fatalf("takeover by another peer accepted: %+v", resp)
+	}
+	// The owner itself may refresh its own room.
+	if resp := register(r, sender, "apple-river-42"); resp.Type != "ok" {
+		t.Fatalf("owner re-register rejected: %+v", resp)
+	}
+}
+
 func TestRoomExpiry(t *testing.T) {
 	r := NewRegistry()
 	register(r, sender, "old-room-10")
