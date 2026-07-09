@@ -120,13 +120,6 @@ func sendFlow(ctx context.Context, h host.Host, server peer.AddrInfo) error {
 		return err
 	}
 
-	// Reserve a relay slot on the server: if both sides are behind NAT,
-	// the receiver establishes its first connection to us through this
-	// bridge. A reservation is valid for 1 hour by default.
-	if _, err := relayclient.Reserve(ctx, h, server); err != nil {
-		return fmt.Errorf("relay reservation failed: %w", err)
-	}
-
 	// Addresses to advertise to the receiver: our own addresses (useful
 	// when on the same network) plus our relay addresses via the server.
 	addrs := append([]multiaddr.Multiaddr{}, h.Addrs()...)
@@ -138,6 +131,21 @@ func sendFlow(ctx context.Context, h host.Host, server peer.AddrInfo) error {
 		}
 	}
 
+	// Register the room before anything else: the server's relay only
+	// serves peers with an active room, so the reservation below would
+	// otherwise be refused.
+	room := rendezvous.NewRoomCode()
+	if err := rendezvous.Register(ctx, h, server.ID, room, addrs); err != nil {
+		return err
+	}
+
+	// Reserve a relay slot on the server: if both sides are behind NAT,
+	// the receiver establishes its first connection to us through this
+	// bridge. A reservation is valid for 1 hour by default.
+	if _, err := relayclient.Reserve(ctx, h, server); err != nil {
+		return fmt.Errorf("relay reservation failed: %w", err)
+	}
+
 	// Install the handler that sends the files once the receiver opens
 	// a stream.
 	done := make(chan error, 1)
@@ -146,12 +154,6 @@ func sendFlow(ctx context.Context, h host.Host, server peer.AddrInfo) error {
 		done <- transfer.Send(s, paths, progressBar())
 	})
 	defer h.RemoveStreamHandler(transfer.ProtocolID)
-
-	// Register the room on the server and show the code to the user.
-	room := rendezvous.NewRoomCode()
-	if err := rendezvous.Register(ctx, h, server.ID, room, addrs); err != nil {
-		return err
-	}
 
 	fmt.Println("\n┌────────────────────────────────┐")
 	fmt.Printf("│  Room code:  %-17s │\n", room)
