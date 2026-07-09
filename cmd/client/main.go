@@ -312,10 +312,13 @@ func prompt(label string) string {
 }
 
 func truncate(s string, max int) string {
-	if len(s) <= max {
+	// Slice by runes, not bytes: cutting a multi-byte character in half
+	// (e.g. "fotoğraf.jpg") would print garbage.
+	r := []rune(s)
+	if len(r) <= max {
 		return s
 	}
-	return s[:max-1] + "…"
+	return string(r[:max-1]) + "…"
 }
 
 func formatBytes(n int64) string {
