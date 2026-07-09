@@ -14,11 +14,11 @@
 package rendezvous
 
 import (
-	"bufio"
 	"context"
 	"crypto/rand"
 	"encoding/json"
 	"fmt"
+	"io"
 	"math/big"
 	"sync"
 	"time"
@@ -44,6 +44,13 @@ const maxRooms = 1000
 const (
 	lookupFailWindow = 1 * time.Minute
 	maxFailedLookups = 5
+)
+
+// Bounds on a single protocol message, so a malicious client cannot
+// make the other side buffer unlimited data.
+const (
+	maxMessageBytes = 16 << 10 // one JSON request/response
+	maxAddrs        = 32       // addresses in a register request
 )
 
 // Request is the message sent from client to server.
@@ -128,7 +135,7 @@ func roundTrip(ctx context.Context, h host.Host, server peer.ID, req Request) (*
 		return nil, fmt.Errorf("could not send request: %w", err)
 	}
 	var resp Response
-	if err := json.NewDecoder(bufio.NewReader(s)).Decode(&resp); err != nil {
+	if err := json.NewDecoder(io.LimitReader(s, maxMessageBytes)).Decode(&resp); err != nil {
 		return nil, fmt.Errorf("could not read server response: %w", err)
 	}
 	return &resp, nil
@@ -169,7 +176,7 @@ func (r *Registry) Handler(s network.Stream) {
 	s.SetDeadline(time.Now().Add(30 * time.Second))
 
 	var req Request
-	if err := json.NewDecoder(bufio.NewReader(s)).Decode(&req); err != nil {
+	if err := json.NewDecoder(io.LimitReader(s, maxMessageBytes)).Decode(&req); err != nil {
 		return
 	}
 
@@ -193,6 +200,9 @@ func (r *Registry) handle(from peer.ID, req Request) Response {
 		if existing, ok := r.rooms[req.Room]; ok && existing.info.ID != from {
 			return Response{Type: "error", Error: "room code is already in use"}
 		}
+		if len(req.Addrs) > maxAddrs {
+			return Response{Type: "error", Error: "too many addresses"}
+		}
 		if len(r.rooms) >= maxRooms {
 			return Response{Type: "error", Error: "server is full, try again later"}
 		}
@@ -201,6 +211,9 @@ func (r *Registry) handle(from peer.ID, req Request) Response {
 			if a, err := multiaddr.NewMultiaddr(s); err == nil {
 				info.Addrs = append(info.Addrs, a)
 			}
+		}
+		if len(info.Addrs) == 0 {
+			return Response{Type: "error", Error: "no valid address in the request"}
 		}
 		r.rooms[req.Room] = roomEntry{info: info, createdAt: time.Now()}
 		return Response{Type: "ok"}

@@ -137,6 +137,23 @@ func TestPathTraversalName(t *testing.T) {
 	}
 }
 
+// TestManifestSizeLimit checks that an absurdly large manifest is
+// rejected instead of being buffered into memory.
+func TestManifestSizeLimit(t *testing.T) {
+	outDir := t.TempDir()
+	m := Manifest{Files: []FileInfo{{
+		Name: strings.Repeat("a", 2<<20), // 2 MB name → manifest over the 1 MB cap
+		Size: 1,
+	}}}
+
+	sender, receiver := net.Pipe()
+	go fakeSend(t, sender, m, nil)
+
+	if _, err := Receive(receiver, outDir, nil); err == nil || !strings.Contains(err.Error(), "manifest") {
+		t.Fatalf("expected a manifest size error, got: %v", err)
+	}
+}
+
 // eagerEOFReader returns io.EOF together with the final chunk of data,
 // which the io.Reader contract explicitly allows.
 type eagerEOFReader struct{ data []byte }

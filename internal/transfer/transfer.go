@@ -21,6 +21,10 @@ import (
 // ProtocolID identifies the file transfer protocol on libp2p.
 const ProtocolID = "/filetransferilla/transfer/1.0.0"
 
+// maxManifestBytes caps the manifest line so a malicious sender cannot
+// exhaust the receiver's memory before the manifest is even parsed.
+const maxManifestBytes = 1 << 20
+
 // FileInfo describes a single file in the manifest.
 type FileInfo struct {
 	Name   string `json:"name"`
@@ -99,7 +103,7 @@ func Receive(s io.ReadWriteCloser, outDir string, onProgress ProgressFunc) ([]st
 	// be used here; it buffers extra data from the stream internally and
 	// would swallow the beginning of the file bytes that follow.
 	r := bufio.NewReader(s)
-	line, err := r.ReadBytes('\n')
+	line, err := readLimitedLine(r, maxManifestBytes)
 	if err != nil {
 		return nil, fmt.Errorf("could not read manifest: %w", err)
 	}
@@ -123,6 +127,25 @@ func Receive(s io.ReadWriteCloser, outDir string, onProgress ProgressFunc) ([]st
 		return saved, fmt.Errorf("could not send acknowledgement: %w", err)
 	}
 	return saved, nil
+}
+
+// readLimitedLine reads one \n-terminated line of at most max bytes,
+// unlike bufio.Reader.ReadBytes which buffers without any bound.
+func readLimitedLine(r *bufio.Reader, max int) ([]byte, error) {
+	var line []byte
+	for {
+		chunk, err := r.ReadSlice('\n')
+		line = append(line, chunk...)
+		if len(line) > max {
+			return nil, fmt.Errorf("manifest exceeds %d bytes", max)
+		}
+		if err == nil {
+			return line, nil
+		}
+		if err != bufio.ErrBufferFull {
+			return nil, err
+		}
+	}
 }
 
 // fileInfo computes a file's size and SHA-256 digest.
