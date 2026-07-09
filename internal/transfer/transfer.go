@@ -17,6 +17,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"time"
 )
 
 // ProtocolID identifies the file transfer protocol on libp2p.
@@ -156,6 +157,15 @@ func Receive(s io.ReadWriteCloser, outDir string, confirm func(Manifest) bool, o
 	if err := json.NewEncoder(s).Encode(ack{OK: true}); err != nil {
 		return saved, fmt.Errorf("could not send acknowledgement: %w", err)
 	}
+
+	// Linger until the sender closes the stream — it only does that
+	// after reading our ack. Returning (and closing) right away lets
+	// the process exit before the ack is actually transmitted, and the
+	// sender would wait for it in vain.
+	if d, ok := s.(interface{ SetReadDeadline(time.Time) error }); ok {
+		d.SetReadDeadline(time.Now().Add(10 * time.Second))
+	}
+	io.Copy(io.Discard, io.LimitReader(r, 1))
 	return saved, nil
 }
 
