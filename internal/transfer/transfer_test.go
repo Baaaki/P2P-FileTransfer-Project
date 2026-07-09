@@ -42,7 +42,7 @@ func TestRoundTrip(t *testing.T) {
 	sendErr := make(chan error, 1)
 	go func() { sendErr <- Send(sender, paths, nil) }()
 
-	saved, err := Receive(receiver, outDir, nil)
+	saved, err := Receive(receiver, outDir, nil, nil)
 	if err != nil {
 		t.Fatalf("Receive: %v", err)
 	}
@@ -77,7 +77,7 @@ func TestNameCollision(t *testing.T) {
 	sendErr := make(chan error, 1)
 	go func() { sendErr <- Send(sender, []string{src}, nil) }()
 
-	saved, err := Receive(receiver, outDir, nil)
+	saved, err := Receive(receiver, outDir, nil, nil)
 	if err != nil {
 		t.Fatalf("Receive: %v", err)
 	}
@@ -101,13 +101,41 @@ func fakeSend(t *testing.T, s net.Conn, m Manifest, payload []byte) {
 	if err := json.NewEncoder(s).Encode(m); err != nil {
 		return // receiver aborted; the test asserts on Receive's error
 	}
+	dec := json.NewDecoder(s)
+	var goAhead ack
+	if err := dec.Decode(&goAhead); err != nil || !goAhead.OK {
+		return
+	}
 	if len(payload) > 0 {
 		if _, err := s.Write(payload); err != nil {
 			return
 		}
 	}
 	var a ack
-	json.NewDecoder(s).Decode(&a)
+	dec.Decode(&a)
+}
+
+// TestDeclinedTransfer checks that a declined manifest stops the
+// transfer before anything reaches the disk, on both sides.
+func TestDeclinedTransfer(t *testing.T) {
+	srcDir := t.TempDir()
+	outDir := filepath.Join(t.TempDir(), "out")
+	src := writeTempFile(t, srcDir, "note.txt", []byte("data"))
+
+	sender, receiver := net.Pipe()
+	sendErr := make(chan error, 1)
+	go func() { sendErr <- Send(sender, []string{src}, nil) }()
+
+	decline := func(Manifest) bool { return false }
+	if _, err := Receive(receiver, outDir, decline, nil); err == nil {
+		t.Fatal("Receive reported success for a declined transfer")
+	}
+	if err := <-sendErr; err == nil || !strings.Contains(err.Error(), "declined") {
+		t.Fatalf("sender did not observe the decline: %v", err)
+	}
+	if _, err := os.Stat(outDir); !os.IsNotExist(err) {
+		t.Error("output directory was created for a declined transfer")
+	}
 }
 
 // TestPathTraversalName checks that a malicious file name like
@@ -125,7 +153,7 @@ func TestPathTraversalName(t *testing.T) {
 	sender, receiver := net.Pipe()
 	go fakeSend(t, sender, m, payload)
 
-	saved, err := Receive(receiver, outDir, nil)
+	saved, err := Receive(receiver, outDir, nil, nil)
 	if err != nil {
 		t.Fatalf("Receive: %v", err)
 	}
@@ -149,7 +177,7 @@ func TestManifestSizeLimit(t *testing.T) {
 	sender, receiver := net.Pipe()
 	go fakeSend(t, sender, m, nil)
 
-	if _, err := Receive(receiver, outDir, nil); err == nil || !strings.Contains(err.Error(), "manifest") {
+	if _, err := Receive(receiver, outDir, nil, nil); err == nil || !strings.Contains(err.Error(), "manifest") {
 		t.Fatalf("expected a manifest size error, got: %v", err)
 	}
 }
@@ -201,7 +229,7 @@ func TestChecksumMismatch(t *testing.T) {
 	sender, receiver := net.Pipe()
 	go fakeSend(t, sender, m, payload)
 
-	if _, err := Receive(receiver, outDir, nil); err == nil || !strings.Contains(err.Error(), "checksum") {
+	if _, err := Receive(receiver, outDir, nil, nil); err == nil || !strings.Contains(err.Error(), "checksum") {
 		t.Fatalf("expected a checksum error, got: %v", err)
 	}
 
