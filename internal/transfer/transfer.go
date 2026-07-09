@@ -16,8 +16,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-
-	"github.com/libp2p/go-libp2p/core/network"
 )
 
 // ProtocolID identifies the file transfer protocol on libp2p.
@@ -46,7 +44,9 @@ type ProgressFunc func(fileName string, done, total int64)
 
 // Send writes the given files to the stream. It runs inside the sending
 // side's stream handler, which fires when the receiver opens the stream.
-func Send(s network.Stream, paths []string, onProgress ProgressFunc) error {
+// The stream is any bidirectional byte pipe (a libp2p stream in practice,
+// a net.Pipe in tests).
+func Send(s io.ReadWriteCloser, paths []string, onProgress ProgressFunc) error {
 	defer s.Close()
 
 	// Build the manifest first: size and SHA-256 digest of every file.
@@ -88,7 +88,7 @@ func Send(s network.Stream, paths []string, onProgress ProgressFunc) error {
 
 // Receive saves the files arriving on the stream into outDir and returns
 // the paths of the saved files.
-func Receive(s network.Stream, outDir string, onProgress ProgressFunc) ([]string, error) {
+func Receive(s io.ReadWriteCloser, outDir string, onProgress ProgressFunc) ([]string, error) {
 	defer s.Close()
 
 	if err := os.MkdirAll(outDir, 0o755); err != nil {
