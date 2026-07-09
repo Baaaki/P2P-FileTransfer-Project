@@ -27,10 +27,14 @@ Gönderen (İstanbul)                Sunucu (VPS)                 Alıcı (İzmi
    bu adresleri sunucudan alır.
 2. **NAT delme** — İki taraf da NAT arkasındaysa ilk bağlantı sunucunun
    **Circuit Relay v2** köprüsü üzerinden kurulur; libp2p'nin **DCUtR hole
-   punching** mekanizması bunu doğrudan bağlantıya yükseltir.
-3. **Transfer** — Dosyalar doğrudan bağlantı üzerinden, dosya başına
-   **SHA-256 doğrulamasıyla** akar. Hole punching başarısız olursa
-   (ör. simetrik NAT) transfer yedek olarak relay üzerinden yine tamamlanır.
+   punching** mekanizması bunu doğrudan bağlantıya yükseltir. Relay
+   yalnızca aktif odası olan eşlere hizmet verir (ACL) — sunucu yabancı
+   düğümler için bedava köprü değildir.
+3. **Transfer** — Alıcı önce gelen dosya listesini (ad + boyut) görüp
+   **onaylar**; ancak ondan sonra dosyalar doğrudan bağlantı üzerinden,
+   dosya başına **SHA-256 doğrulamasıyla** akar. Hole punching başarısız
+   olursa (ör. simetrik NAT) transfer yedek olarak relay üzerinden yine
+   tamamlanır.
 
 ## Teknolojiler
 
@@ -39,8 +43,8 @@ Gönderen (İstanbul)                Sunucu (VPS)                 Alıcı (İzmi
   DCUtR hole punching, AutoNAT v2, UPnP port yönlendirme, Noise/TLS
   şifreleme (her zaman açık)
 - İki küçük özel protokol: `/filetransferilla/rendezvous/1.0.0`
-  (oda kayıt/sorgulama) ve `/filetransferilla/transfer/1.0.0`
-  (manifest + dosya baytları + onay)
+  (oda kayıt/sorgulama) ve `/filetransferilla/transfer/1.1.0`
+  (manifest + kabul/ret + dosya baytları + onay)
 
 ```
 cmd/server      rendezvous + relay sunucusu (VPS'te çalışır)
@@ -53,6 +57,7 @@ internal/       iki protokolün implementasyonu
 ```bash
 git clone <repo> && cd FileTransferilla
 go build ./...
+go test ./...   # birim testleri + libp2p üzerinden uçtan uca test
 ```
 
 ### 1. Sunucuyu başlat — portu açık herhangi bir makine (ör. ucuz bir VPS)
@@ -96,14 +101,20 @@ boş bırakın). Ekrana basılan oda kodunu alıcıya iletin — kod 1 saat geç
 ### 3. Alıcı tarafta
 
 Diğer bilgisayarda aynı komutu çalıştırın, **2) Receive files**'ı seçip oda
-kodunu girin. Dosyalar varsayılan olarak `received/` dizinine iner ve her
-biri SHA-256 özetiyle doğrulanır:
+kodunu girin. Gelen dosya listesi onayınıza sunulur; kabul ederseniz
+dosyalar varsayılan olarak `received/` dizinine iner ve her biri SHA-256
+özetiyle doğrulanır:
 
 ```
 Sender found: 12D3KooWHxxef3pj...
 ✓ Direct P2P connection established — files will bypass the server.
+
+Incoming files:
+  photo1.jpg (2.1 MB)
+Total: 1 file(s), 2.1 MB
+Accept? [y/N]: y
   photo1.jpg  [████████████████████████] 100%  2.1 MB / 2.1 MB
-✓ 3 file(s) received and verified
+✓ 1 file(s) received and verified
 ```
 
 > **Yerelde denemek:** üç programı da tek makinede üç ayrı terminalde,
@@ -111,6 +122,10 @@ Sender found: 12D3KooWHxxef3pj...
 
 ## Sınırlamalar
 
-- Oda kodunu bilen herkes dosyaları alabilir (tek transfer, 1 saatlik
-  tasarım; PAKE tabanlı parola doğrulama güzel bir ek olurdu).
-- Kesilen transfer baştan başlar — henüz devam etme (resume) yok.
+- Oda kodunu ilk giren alıcı dosyaları alabilir (tek transfer, 1 saatlik
+  tasarım). Kod tahminine karşı ~1,7 milyon kombinasyon, sunucuda eş
+  başına deneme sınırı ve oda sahipliği koruması var; PAKE tabanlı parola
+  doğrulama yine de güzel bir ek olurdu.
+- Kesilen transfer baştan başlar — henüz devam etme (resume) yok. Yarım
+  kalan indirme geçici `.part` dosyasıyla birlikte temizlenir; bitmiş
+  gibi görünen bozuk dosya kalmaz.
