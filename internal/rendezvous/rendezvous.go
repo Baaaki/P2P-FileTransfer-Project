@@ -38,6 +38,14 @@ const roomTTL = 1 * time.Hour
 // Maximum number of rooms the server keeps at once (a simple safeguard).
 const maxRooms = 1000
 
+// A peer that keeps guessing room codes is cut off: after
+// maxFailedLookups misses within lookupFailWindow, all further lookups
+// from that peer are rejected until the window expires.
+const (
+	lookupFailWindow = 1 * time.Minute
+	maxFailedLookups = 5
+)
+
 // Request is the message sent from client to server.
 type Request struct {
 	Type  string   `json:"type"`            // "register" or "lookup"
@@ -135,14 +143,24 @@ type roomEntry struct {
 	createdAt time.Time
 }
 
+// failCounter tracks a peer's failed lookups inside the current window.
+type failCounter struct {
+	count       int
+	windowStart time.Time
+}
+
 // Registry is a simple in-memory ledger of active rooms.
 type Registry struct {
 	mu    sync.Mutex
 	rooms map[string]roomEntry
+	fails map[peer.ID]failCounter
 }
 
 func NewRegistry() *Registry {
-	return &Registry{rooms: make(map[string]roomEntry)}
+	return &Registry{
+		rooms: make(map[string]roomEntry),
+		fails: make(map[peer.ID]failCounter),
+	}
 }
 
 // Handler is registered as the server's stream handler.
@@ -188,8 +206,17 @@ func (r *Registry) handle(from peer.ID, req Request) Response {
 		return Response{Type: "ok"}
 
 	case "lookup":
+		fc := r.fails[from]
+		if time.Since(fc.windowStart) > lookupFailWindow {
+			fc = failCounter{windowStart: time.Now()}
+		}
+		if fc.count >= maxFailedLookups {
+			return Response{Type: "error", Error: "too many failed lookups, try again later"}
+		}
 		entry, ok := r.rooms[req.Room]
 		if !ok {
+			fc.count++
+			r.fails[from] = fc
 			return Response{Type: "not_found"}
 		}
 		addrs := make([]string, len(entry.info.Addrs))
@@ -203,12 +230,18 @@ func (r *Registry) handle(from peer.ID, req Request) Response {
 	}
 }
 
-// dropExpired removes rooms past their TTL. Called with the lock held.
+// dropExpired removes rooms past their TTL and stale fail counters.
+// Called with the lock held.
 func (r *Registry) dropExpired() {
 	now := time.Now()
 	for room, e := range r.rooms {
 		if now.Sub(e.createdAt) > roomTTL {
 			delete(r.rooms, room)
+		}
+	}
+	for p, fc := range r.fails {
+		if now.Sub(fc.windowStart) > lookupFailWindow {
+			delete(r.fails, p)
 		}
 	}
 }
@@ -218,12 +251,33 @@ func (r *Registry) dropExpired() {
 // ---------------------------------------------------------------------------
 
 // Short, common words that are easy to say over the phone and easy to
-// type on any keyboard.
+// type on any keyboard. 138 words → 138 × 138 × 90 ≈ 1.7 million codes,
+// which together with the per-peer lookup limit makes guessing a live
+// room code impractical within its 1-hour lifetime.
 var words = []string{
 	"apple", "pear", "cherry", "melon", "olive", "almond",
 	"mint", "pepper", "lemon", "walnut", "river", "harbor",
 	"forest", "cloud", "drop", "meadow", "leaf", "cedar",
 	"pencil", "book", "lamp", "ferry", "balloon", "violin",
+	"anchor", "badge", "basil", "beach", "bell", "berry",
+	"bird", "brick", "bridge", "brook", "butter", "button",
+	"cabin", "camel", "candle", "canoe", "canyon", "castle",
+	"chalk", "circle", "clover", "comet", "copper", "coral",
+	"cotton", "crane", "cricket", "crystal", "daisy", "dolphin",
+	"eagle", "ember", "falcon", "feather", "flame", "flute",
+	"garden", "garnet", "ginger", "glacier", "grape", "hazel",
+	"heron", "honey", "island", "ivory", "jade", "jasmine",
+	"kite", "lagoon", "lantern", "lily", "linen", "lotus",
+	"magnet", "maple", "marble", "mango", "moss", "mountain",
+	"nest", "nutmeg", "oak", "ocean", "orchid", "otter",
+	"owl", "palm", "panda", "peach", "pearl", "pebble",
+	"pine", "planet", "plum", "pond", "poppy", "prairie",
+	"quartz", "rabbit", "raven", "reef", "ribbon", "robin",
+	"rocket", "rose", "saffron", "salmon", "seal", "shell",
+	"silver", "sparrow", "spring", "spruce", "star", "stone",
+	"sugar", "summit", "sunset", "swan", "thyme", "tiger",
+	"tulip", "turtle", "valley", "velvet", "wagon", "wave",
+	"whale", "willow", "winter", "wolf", "wren", "zebra",
 }
 
 // NewRoomCode returns an easy-to-read room code like "cherry-harbor-42".

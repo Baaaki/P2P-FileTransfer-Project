@@ -110,12 +110,40 @@ func TestNewRoomCodeFormat(t *testing.T) {
 	}
 }
 
-func TestWordListHasNoDuplicates(t *testing.T) {
+func TestWordList(t *testing.T) {
+	// Fewer words would shrink the code space and make guessing easier.
+	if len(words) < 128 {
+		t.Errorf("word list has %d entries, want at least 128", len(words))
+	}
 	seen := make(map[string]bool, len(words))
 	for _, w := range words {
 		if seen[w] {
 			t.Errorf("duplicate word in the code list: %q", w)
 		}
 		seen[w] = true
+	}
+}
+
+func TestLookupRateLimit(t *testing.T) {
+	r := NewRegistry()
+	register(r, sender, "apple-river-42")
+
+	for range maxFailedLookups {
+		if resp := r.handle(receiver, Request{Type: "lookup", Room: "wrong-guess"}); resp.Type != "not_found" {
+			t.Fatalf("miss not reported: %+v", resp)
+		}
+	}
+	// Once over the limit, even a valid code is rejected for this peer.
+	if resp := r.handle(receiver, Request{Type: "lookup", Room: "apple-river-42"}); resp.Type != "error" {
+		t.Fatalf("rate limit not applied: %+v", resp)
+	}
+	// Other peers are unaffected.
+	if resp := r.handle(peer.ID("other"), Request{Type: "lookup", Room: "apple-river-42"}); resp.Type != "found" {
+		t.Fatalf("rate limit leaked to another peer: %+v", resp)
+	}
+	// The block lifts once the window expires.
+	r.fails[receiver] = failCounter{count: maxFailedLookups, windowStart: time.Now().Add(-2 * lookupFailWindow)}
+	if resp := r.handle(receiver, Request{Type: "lookup", Room: "apple-river-42"}); resp.Type != "found" {
+		t.Fatalf("rate limit did not expire: %+v", resp)
 	}
 }
