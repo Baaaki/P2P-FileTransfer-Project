@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"io"
 	"net"
 	"os"
 	"path/filepath"
@@ -133,6 +134,39 @@ func TestPathTraversalName(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(filepath.Dir(outDir), "evil.txt")); !os.IsNotExist(err) {
 		t.Error("file escaped the output directory")
+	}
+}
+
+// eagerEOFReader returns io.EOF together with the final chunk of data,
+// which the io.Reader contract explicitly allows.
+type eagerEOFReader struct{ data []byte }
+
+func (r *eagerEOFReader) Read(p []byte) (int, error) {
+	if len(r.data) == 0 {
+		return 0, io.EOF
+	}
+	n := copy(p, r.data)
+	r.data = r.data[n:]
+	if len(r.data) == 0 {
+		return n, io.EOF
+	}
+	return n, nil
+}
+
+// TestReceiveFileDataWithEOF checks that a complete file is accepted
+// even when the last Read reports io.EOF alongside the data.
+func TestReceiveFileDataWithEOF(t *testing.T) {
+	outDir := t.TempDir()
+	payload := []byte("last read carries EOF")
+	sum := sha256.Sum256(payload)
+	info := FileInfo{Name: "f.txt", Size: int64(len(payload)), SHA256: hex.EncodeToString(sum[:])}
+
+	path, err := receiveFile(&eagerEOFReader{data: payload}, outDir, info, nil)
+	if err != nil {
+		t.Fatalf("receiveFile: %v", err)
+	}
+	if data, _ := os.ReadFile(path); !bytes.Equal(data, payload) {
+		t.Error("received content differs from the original")
 	}
 }
 
