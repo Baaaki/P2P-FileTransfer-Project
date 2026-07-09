@@ -204,11 +204,11 @@ func receiveFile(r io.Reader, outDir string, info FileInfo, onProgress ProgressF
 	buf := make([]byte, 32*1024)
 	var received int64
 	for received < info.Size {
-		chunk := int64(len(buf))
-		if remaining := info.Size - received; remaining < chunk {
-			chunk = remaining
-		}
-		n, err := r.Read(buf[:chunk])
+		chunk := min(int64(len(buf)), info.Size-received)
+		// io.ReadFull tolerates a Read that returns the final bytes
+		// together with io.EOF; a bare Read loop would misreport that
+		// as a lost connection.
+		n, err := io.ReadFull(r, buf[:chunk])
 		if n > 0 {
 			if _, werr := f.Write(buf[:n]); werr != nil {
 				return path, fmt.Errorf("could not write to disk: %w", werr)
