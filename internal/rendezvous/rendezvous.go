@@ -243,6 +243,35 @@ func (r *Registry) handle(from peer.ID, req Request) Response {
 	}
 }
 
+// HasPeer reports whether the peer currently owns an active room.
+func (r *Registry) HasPeer(p peer.ID) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.dropExpired()
+	for _, e := range r.rooms {
+		if e.info.ID == p {
+			return true
+		}
+	}
+	return false
+}
+
+// AllowReserve and AllowConnect make the Registry usable as the relay
+// service's ACL filter (circuitv2 relay.ACLFilter): only peers involved
+// in an active room may use the relay, so the server cannot be abused
+// as a free traffic bridge by unrelated libp2p nodes.
+
+// AllowReserve permits a relay reservation only for a room owner.
+func (r *Registry) AllowReserve(p peer.ID, _ multiaddr.Multiaddr) bool {
+	return r.HasPeer(p)
+}
+
+// AllowConnect permits relayed connections only towards a room owner
+// (the receiver dialing the sender through the relay).
+func (r *Registry) AllowConnect(_ peer.ID, _ multiaddr.Multiaddr, dest peer.ID) bool {
+	return r.HasPeer(dest)
+}
+
 // dropExpired removes rooms past their TTL and stale fail counters.
 // Called with the lock held.
 func (r *Registry) dropExpired() {

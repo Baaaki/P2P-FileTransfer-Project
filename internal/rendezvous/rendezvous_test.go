@@ -7,7 +7,11 @@ import (
 	"time"
 
 	"github.com/libp2p/go-libp2p/core/peer"
+	"github.com/libp2p/go-libp2p/p2p/protocol/circuitv2/relay"
 )
+
+// The Registry doubles as the relay service's access control filter.
+var _ relay.ACLFilter = (*Registry)(nil)
 
 var (
 	sender   = peer.ID("sender")
@@ -132,6 +136,24 @@ func TestWordList(t *testing.T) {
 			t.Errorf("duplicate word in the code list: %q", w)
 		}
 		seen[w] = true
+	}
+}
+
+func TestRelayACL(t *testing.T) {
+	r := NewRegistry()
+
+	if r.AllowReserve(sender, nil) {
+		t.Error("reservation allowed for a peer without a room")
+	}
+	register(r, sender, "apple-river-42")
+	if !r.AllowReserve(sender, nil) {
+		t.Error("reservation refused for a room owner")
+	}
+	if !r.AllowConnect(receiver, nil, sender) {
+		t.Error("relayed connection towards a room owner refused")
+	}
+	if r.AllowConnect(sender, nil, receiver) {
+		t.Error("relayed connection allowed towards a peer without a room")
 	}
 }
 

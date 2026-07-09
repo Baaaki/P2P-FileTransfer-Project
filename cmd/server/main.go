@@ -41,6 +41,8 @@ func main() {
 		log.Fatalf("could not prepare identity key: %v", err)
 	}
 
+	registry := rendezvous.NewRegistry()
+
 	h, err := libp2p.New(
 		libp2p.Identity(priv),
 		// Listen on both TCP and QUIC; clients use whichever works.
@@ -55,14 +57,15 @@ func main() {
 		// Enable the Relay v2 service. The default limits (2 minutes /
 		// 128 KB) are lifted so a transfer can still complete through
 		// the relay when a direct connection cannot be established.
-		libp2p.EnableRelayService(relay.WithInfiniteLimits()),
+		// The registry acts as the ACL: only peers with an active room
+		// may use the relay, so strangers cannot burn our bandwidth.
+		libp2p.EnableRelayService(relay.WithInfiniteLimits(), relay.WithACL(registry)),
 	)
 	if err != nil {
 		log.Fatalf("could not start libp2p host: %v", err)
 	}
 	defer h.Close()
 
-	registry := rendezvous.NewRegistry()
 	h.SetStreamHandler(rendezvous.ProtocolID, registry.Handler)
 
 	fmt.Println("Rendezvous + relay server is running.")
