@@ -159,8 +159,12 @@ func sendFlow(ctx context.Context, h host.Host, server peer.AddrInfo) error {
 	fmt.Println("Share this code with the receiver. It is valid for 1 hour.")
 	fmt.Println("Waiting for the receiver... (Ctrl+C to cancel)")
 
-	if err := <-done; err != nil {
-		return err
+	// A failed attempt (wrong peer, dropped connection) does not end
+	// the flow: the room is still registered, so keep waiting — the
+	// receiver can simply try again with the same code.
+	for err := <-done; err != nil; err = <-done {
+		fmt.Println("\n✗ Transfer attempt failed:", err)
+		fmt.Println("Still waiting for the receiver... (Ctrl+C to cancel)")
 	}
 	fmt.Printf("\n✓ %d file(s) sent successfully.\n", len(paths))
 	return nil
