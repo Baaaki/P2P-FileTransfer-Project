@@ -1,0 +1,9 @@
+# Compiled binaries
+/server
+/client
+
+# Server identity key — must never be committed
+*.key
+
+# Default directory for received files
+/received/
