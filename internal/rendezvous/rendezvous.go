@@ -169,6 +169,12 @@ func (r *Registry) handle(from peer.ID, req Request) Response {
 		if req.Room == "" || len(req.Addrs) == 0 {
 			return Response{Type: "error", Error: "room code and address list are required"}
 		}
+		// A room may only be re-registered by the peer that owns it.
+		// Otherwise anyone who learns the code could take the room
+		// over and serve their own files to the receiver.
+		if existing, ok := r.rooms[req.Room]; ok && existing.info.ID != from {
+			return Response{Type: "error", Error: "room code is already in use"}
+		}
 		if len(r.rooms) >= maxRooms {
 			return Response{Type: "error", Error: "server is full, try again later"}
 		}
