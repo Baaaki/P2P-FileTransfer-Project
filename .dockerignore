@@ -1,0 +1,5 @@
+# Keep these out of the image
+*.key
+received/
+*.md
+.git/
