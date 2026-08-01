@@ -1,0 +1,70 @@
+# Cross-compiles the desktop client for every OS and publishes it to
+# GitHub Releases.
+#
+#   export FT_SERVER=/dns4/puresend.madebybaki.com/tcp/443/tls/ws/p2p/12D3Koo...
+#   git tag v0.1.0 && git push --tags
+#
+# FT_SERVER is baked into the binary, which is what lets a user just
+# double-click it — no flags, no configuration.
+version: 2
+
+project_name: puresend
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: client
+    main: ./cmd/client
+    binary: puresend
+    env:
+      - CGO_ENABLED=0
+    goos: [linux, darwin, windows]
+    goarch: [amd64, arm64]
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w
+      - -X main.defaultServer={{ .Env.FT_SERVER }}
+
+archives:
+  - id: client
+    ids: [client]
+    # A single binary, so ship it plainly: zip on Windows, tar.gz elsewhere.
+    formats: [tar.gz]
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    name_template: >-
+      {{ .ProjectName }}_{{ .Version }}_
+      {{- if eq .Os "darwin" }}macOS{{ else }}{{ .Os }}{{ end }}_
+      {{- if eq .Arch "amd64" }}x86_64{{ else }}{{ .Arch }}{{ end }}
+    files:
+      - README.md
+      - LICENSE
+
+checksum:
+  name_template: "checksums.txt"
+
+changelog:
+  use: github
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^ci:"
+
+release:
+  draft: false
+  header: |
+    ## Kurulum
+
+    Aşağıdan işletim sistemine uygun dosyayı indir, arşivden çıkar ve çalıştır.
+    Ayar yapman gerekmiyor.
+
+  footer: |
+    **macOS not:** İlk açılışta "geliştirici doğrulanamadı" uyarısı çıkarsa,
+    dosyaya sağ tıklayıp *Aç* de, ya da terminalde:
+    `xattr -d com.apple.quarantine puresend`
