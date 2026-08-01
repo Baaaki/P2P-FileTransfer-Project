@@ -6,126 +6,215 @@ birbirini bulur; ardından dosyalar **sunucuya hiç uğramadan, doğrudan iki
 bilgisayar arasında** aktarılır — farklı ağlarda, ikisi de ev modemi (NAT)
 arkasında olsa bile.
 
+Kullanıcı hiçbir teknik şey görmez: programı açar, dosyayı seçer, ekranda
+çıkan **3 kelimelik kodu** arkadaşına iletir. Hepsi bu.
+
 🇬🇧 English documentation: [README.en.md](README.en.md)
+📋 Ürünleşme planı: [ROADMAP.md](ROADMAP.md)
 
 ```
-Gönderen (İstanbul)                Sunucu (VPS)                 Alıcı (İzmir)
-       │                                │                             │
-       │ 1. "cherry-harbor-42"          │                             │
-       │    odasını adreslerimle        │                             │
-       │    kaydet ────────────────────►│◄─── 2. "cherry-harbor-42"   │
-       │                                │        odasında kim var?    │
-       │                                │                             │
-       │◄══════ 3. Doğrudan P2P bağlantı (hole punching) ════════════►│
-       │                4. Dosyalar doğrudan akar                     │
+Gönderen (İstanbul)          Buluşma sunucusu           Alıcı (İzmir)
+       │                            │                          │
+       │ 1. "kiraz-liman-42"        │                          │
+       │    odasını aç ────────────►│◄─── 2. "kiraz-liman-42"  │
+       │                            │        odasında kim var? │
+       │                            │                          │
+       │◄═══ 3. Doğrudan P2P bağlantı (NAT delme) ════════════►│
+       │              4. Dosyalar doğrudan akar                │
 ```
+
+## Hangi klasör nerede çalışır?
+
+Bu ayrımı karıştırmamak önemli:
+
+| Klasör | Nerede çalışır | Nasıl dağıtılır |
+|---|---|---|
+| **`cmd/server/`** | 🖥️ **Ubuntu sunucunda**, 7/24 açık | Docker + Cloudflare Tunnel |
+| **`cmd/client/`** | 💻 **Kullanıcının masaüstünde** | GitHub Releases'ten indirilen tek dosya |
+| `internal/rendezvous/` | ikisinde de | ortak protokol |
+| `internal/transfer/` | sadece istemci | sunucu bu kodu hiç çalıştırmaz |
+| `internal/p2p/`, `internal/tui/` | sadece istemci | ağ katmanı + arayüz |
+| `deploy/` | 🖥️ sunucu | compose + cloudflared ayarları |
+
+**Kısaca:** sunucuda `cmd/server` çalışır ve dosyalara asla dokunmaz;
+dosyalar kullanıcının çalıştırdığı `cmd/client`'tan çıkar.
+
+---
+
+## Kullanıcı ne yapıyor? (teknik olmayan biri için)
+
+**Gönderen:**
+
+1. Programı açar → *"Dosya göndereceğim"*
+2. Dosya gezgininden dosyaları seçer → `s`
+3. Ekranda kod çıkar: **`kiraz-liman-42`**
+4. Kodu arkadaşına WhatsApp'tan yazar → *"✓ Arkadaşıma ilettim"*
+5. Arkadaşı kodu girince gönderme kendiliğinden başlar
+
+**Alan:**
+
+1. Programı açar → *"Bana dosya gönderilecek"*
+2. Kodu yazar: `kiraz-liman-42`
+3. Gelen dosya listesini görür → *"Evet, indir"*
+4. Dosyalar `İndirilenler/PureSend` klasörüne iner
+
+Hiçbir aşamada IP adresi, port ya da ayar dosyası yok.
+
+---
 
 ## Nasıl çalışıyor?
 
-1. **Buluşma** — Gönderen, rastgele bir oda kodunu (ör. `cherry-harbor-42`)
-   kendi ağ adresleriyle birlikte sunucuya kaydeder. Alıcı aynı kodu girince
-   bu adresleri sunucudan alır.
-2. **NAT delme** — İki taraf da NAT arkasındaysa ilk bağlantı sunucunun
-   **Circuit Relay v2** köprüsü üzerinden kurulur; libp2p'nin **DCUtR hole
-   punching** mekanizması bunu doğrudan bağlantıya yükseltir. Relay
-   yalnızca aktif odası olan eşlere hizmet verir (ACL) — sunucu yabancı
-   düğümler için bedava köprü değildir.
-3. **Transfer** — Alıcı önce gelen dosya listesini (ad + boyut) görüp
-   **onaylar**; ancak ondan sonra dosyalar doğrudan bağlantı üzerinden,
-   dosya başına **SHA-256 doğrulamasıyla** akar. Hole punching başarısız
-   olursa (ör. simetrik NAT) transfer yedek olarak relay üzerinden yine
-   tamamlanır.
+1. **Buluşma** — Gönderen rastgele bir oda kodunu kendi ağ adresleriyle
+   birlikte sunucuya kaydeder. Alıcı aynı kodu girince adresleri alır.
+2. **NAT delme** — İlk bağlantı sunucunun **Circuit Relay v2** köprüsü
+   üzerinden kurulur; **DCUtR hole punching** bunu doğrudan bağlantıya
+   yükseltir. Relay yalnızca aktif odası olan eşlere hizmet verir (ACL).
+3. **Transfer** — Alıcı gelen listeyi görüp **onaylar**; dosyalar doğrudan
+   bağlantı üzerinden, dosya başına **SHA-256 doğrulamasıyla** akar.
+   Delme başarısız olursa transfer relay üzerinden yedeklenir.
+
+### Cloudflare Tunnel ile neden WebSocket?
+
+`cloudflared` internete **yalnızca HTTP/WebSocket** açar. Ham TCP portu
+(`tcp://`) için karşı tarafın da `cloudflared access` çalıştırması gerekir;
+UDP/QUIC ise hiç açılamaz. Bu yüzden sunucu libp2p'yi **WebSocket
+transport** üzerinden konuşur — normal bir HTTP ingress'ten sorunsuz geçer.
+
+```
+İstemci ──wss://...:443──► Cloudflare ──ws://localhost:8080──► sunucu
+                            (TLS burada biter)
+```
+
+Tünel yalnızca **buluşma** ve **delme koordinasyonu** için kullanılır
+(birkaç KB). Delik açıldıktan sonra dosyalar Cloudflare'i hiç görmez.
+
+---
+
+## Sunucu kurulumu (Ubuntu + Cloudflare Tunnel + OpenShip)
+
+### 1. Sunucuyu başlat
+
+```bash
+PUBLIC_HOST=puresend.madebybaki.com \
+  docker compose -f deploy/docker-compose.yml up -d
+```
+
+Loglardan **Peer ID**'yi al — birazdan lazım:
+
+```bash
+docker logs puresend
+```
+
+```
+  Peer ID: 12D3KooWKKqpYTw3D8arNmcNG7ZK1mPfSH2cQ7ohZqHBmYN6eEAn
+
+Client address (bake this into the client build):
+  /dns4/puresend.madebybaki.com/tcp/443/tls/ws/p2p/12D3KooW...
+```
+
+> ⚠️ `rendezvous-key` volume'ünü **silme**. Peer ID değişirse daha önce
+> dağıttığın bütün istemciler çalışmaz hale gelir.
+
+Sağlık kontrolü:
+
+```bash
+curl localhost:8081/health
+# {"status":"ok","peer_id":"12D3KooW...","active_rooms":0}
+```
+
+### 2. Cloudflare Tunnel
+
+```bash
+cloudflared tunnel login
+cloudflared tunnel create puresend
+cloudflared tunnel route dns puresend puresend.madebybaki.com
+sudo cp deploy/cloudflared-config.yml /etc/cloudflared/config.yml
+sudo cloudflared service install
+```
+
+Ayrıntılar ve gerekçeler: [deploy/cloudflared-config.yml](deploy/cloudflared-config.yml)
+
+### 3. Dışarıdan eriştiğini doğrula
+
+Sunucunun **dışındaki** bir ağdan (telefon hotspot'u iyi bir test):
+
+```bash
+curl -sI https://puresend.madebybaki.com \
+     -H "Connection: Upgrade" -H "Upgrade: websocket"
+```
+
+### OpenShip ile
+
+`deploy/docker-compose.yml` doğrudan kullanılabilir. Önemli noktalar:
+
+- **Volume kalıcı olmalı** (`rendezvous-key` → `/data`)
+- **Health check**: `http://127.0.0.1:8081/health`
+- **Portlar `127.0.0.1`'e bağlı** — dışarı sadece cloudflared üzerinden açılır
+- `PUBLIC_HOST` ortam değişkeni ayarlanmalı
+
+---
+
+## İstemciyi yayınlama
+
+Sunucu adresi **derleme sırasında** gömülür; kullanıcı hiçbir ayar yapmaz.
+
+GitHub'da → *Settings → Secrets and variables → Actions → Variables* →
+`FT_SERVER` değişkenini oluştur:
+
+```
+/dns4/puresend.madebybaki.com/tcp/443/tls/ws/p2p/12D3KooW...
+```
+
+Sonra tag at:
+
+```bash
+git tag v0.1.0 && git push --tags
+```
+
+[GoReleaser](.goreleaser.yaml) 6 ikili üretir (Linux / macOS / Windows ×
+x86_64 / arm64) ve Releases sayfasına koyar.
+
+Elle derlemek istersen:
+
+```bash
+go build -ldflags "-X main.defaultServer=/dns4/.../p2p/12D3KooW..." ./cmd/client
+```
+
+---
+
+## Geliştirme
+
+```bash
+go build ./...
+go test ./...    # birim + libp2p üzerinden gerçek uçtan uca testler
+```
+
+Tek makinede denemek için üç terminal:
+
+```bash
+# 1) sunucu
+go run ./cmd/server -ws-port 8080 -health-port 8081
+
+# 2) gönderen  ve  3) alan  (Peer ID'yi sunucunun çıktısından al)
+go run ./cmd/client -server /ip4/127.0.0.1/tcp/8080/ws/p2p/<PeerID>
+```
 
 ## Teknolojiler
 
-- **Go 1.25+** — tek harici bağımlılık: **go-libp2p v0.48**
-- Kullanılan libp2p özellikleri: TCP + QUIC transport, Circuit Relay v2,
-  DCUtR hole punching, AutoNAT v2, UPnP port yönlendirme, Noise/TLS
-  şifreleme (her zaman açık)
-- İki küçük özel protokol: `/puresend/rendezvous/1.0.0`
-  (oda kayıt/sorgulama) ve `/puresend/transfer/1.1.0`
-  (manifest + kabul/ret + dosya baytları + onay)
-
-```
-cmd/server      rendezvous + relay sunucusu (VPS'te çalışır)
-cmd/client      interaktif terminal uygulaması (gönder / al)
-internal/       iki protokolün implementasyonu
-```
-
-## Kurulum ve çalıştırma
-
-```bash
-git clone <repo> && cd PureSend
-go build ./...
-go test ./...   # birim testleri + libp2p üzerinden uçtan uca test
-```
-
-### 1. Sunucuyu başlat — portu açık herhangi bir makine (ör. ucuz bir VPS)
-
-```bash
-go run ./cmd/server -port 4001
-```
-
-Güvenlik duvarında 4001 portunu (**TCP ve UDP**) açın. Sunucu, istemcilerin
-kullanacağı adresleri ekrana basar — genel (public) IP'yi içeren satırı
-kopyalayın:
-
-```
-/ip4/<VPS-IP>/tcp/4001/p2p/<PeerID>
-```
-
-Kimlik anahtarı `server.key` dosyasına kaydedilir; sunucu yeniden başlasa
-da adres değişmez.
-
-**Ya da Docker ile** (konteyner iç ağ IP'lerini yazdırır — adresi, genel IP
-ve loglardaki Peer ID ile kendiniz oluşturun):
-
-```bash
-docker build -t puresend-server .
-docker run -d -p 4001:4001 -p 4001:4001/udp -v ft-data:/data \
-  --restart unless-stopped puresend-server
-```
-
-> *İstemciyi* Docker'da çalıştırmayın — konteynerin ek NAT katmanı hole
-> punching'i bozar. İstemci tek bir statik ikili; doğrudan makinede çalıştırın.
-
-### 2. Gönderen tarafta
-
-```bash
-go run ./cmd/client -server /ip4/<VPS-IP>/tcp/4001/p2p/<PeerID>
-```
-
-**1) Send files**'ı seçin, dosya yollarını satır satır girin (bitirmek için
-boş bırakın). Ekrana basılan oda kodunu alıcıya iletin — kod 1 saat geçerlidir.
-
-### 3. Alıcı tarafta
-
-Diğer bilgisayarda aynı komutu çalıştırın, **2) Receive files**'ı seçip oda
-kodunu girin. Gelen dosya listesi onayınıza sunulur; kabul ederseniz
-dosyalar varsayılan olarak `received/` dizinine iner ve her biri SHA-256
-özetiyle doğrulanır:
-
-```
-Sender found: 12D3KooWHxxef3pj...
-✓ Direct P2P connection established — files will bypass the server.
-
-Incoming files:
-  photo1.jpg (2.1 MB)
-Total: 1 file(s), 2.1 MB
-Accept? [y/N]: y
-  photo1.jpg  [████████████████████████] 100%  2.1 MB / 2.1 MB
-✓ 1 file(s) received and verified
-```
-
-> **Yerelde denemek:** üç programı da tek makinede üç ayrı terminalde,
-> sunucunun yazdırdığı `127.0.0.1`'li adresi kullanarak çalıştırabilirsiniz.
+- **Go 1.25+**, **go-libp2p v0.48** — TCP + QUIC + WebSocket transport,
+  Circuit Relay v2, DCUtR hole punching, AutoNAT v2, UPnP, Noise/TLS
+- **Bubble Tea + Lipgloss** — terminal arayüzü
+- İki özel protokol: `/puresend/rendezvous/1.0.0` ve
+  `/puresend/transfer/1.1.0`
 
 ## Sınırlamalar
 
-- Oda kodunu ilk giren alıcı dosyaları alabilir (tek transfer, 1 saatlik
-  tasarım). Kod tahminine karşı ~1,7 milyon kombinasyon, sunucuda eş
-  başına deneme sınırı ve oda sahipliği koruması var; PAKE tabanlı parola
-  doğrulama yine de güzel bir ek olurdu.
-- Kesilen transfer baştan başlar — henüz devam etme (resume) yok. Yarım
-  kalan indirme geçici `.part` dosyasıyla birlikte temizlenir; bitmiş
-  gibi görünen bozuk dosya kalmaz.
+- Oda kodunu ilk giren alıcı dosyaları alabilir. ~1,7 milyon kombinasyon,
+  eş başına deneme sınırı ve oda sahipliği koruması var; yine de PAKE
+  tabanlı doğrulama güzel bir ek olurdu. Şu haliyle **sunucu güvenilir
+  taraftır** (alıcıya gönderenin kimliğini o söyler).
+- Kesilen transfer baştan başlar — resume yok. Yarım dosya `.part` olarak
+  temizlenir, bitmiş gibi görünen bozuk dosya kalmaz.
+- Klasör gönderilemiyor, sadece dosya.
+- Delme başarısız olursa relay bağlantı başına 256 MB ile sınırlı
+  (`-relay-data` ile değiştirilebilir).
