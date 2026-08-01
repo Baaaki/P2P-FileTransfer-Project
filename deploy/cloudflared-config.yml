@@ -1,0 +1,38 @@
+# Cloudflare Tunnel ingress for the rendezvous server.
+#
+# Install on the Ubuntu box:
+#   cloudflared tunnel login
+#   cloudflared tunnel create puresend
+#   cloudflared tunnel route dns puresend puresend.madebybaki.com
+#   sudo cp this file to /etc/cloudflared/config.yml
+#   sudo cloudflared service install
+#
+# WHY WEBSOCKET AND NOT A RAW TCP PORT
+#
+# cloudflared only proxies HTTP/HTTPS (including WebSocket upgrades) to
+# the public internet. A `service: tcp://...` ingress requires the *other*
+# side to run `cloudflared access tcp` too, and UDP/QUIC cannot be exposed
+# publicly at all. Raw public TCP would need Cloudflare Spectrum
+# (Enterprise). So the server speaks libp2p over WebSocket, which rides
+# straight through a normal HTTP ingress.
+#
+# Cloudflare terminates TLS on 443, so clients dial
+#   /dns4/puresend.madebybaki.com/tcp/443/tls/ws/p2p/<PeerID>
+# while the server itself listens on plain /ip4/0.0.0.0/tcp/8080/ws.
+
+tunnel: puresend
+credentials-file: /root/.cloudflared/puresend.json
+
+ingress:
+  - hostname: puresend.madebybaki.com
+    service: http://localhost:8080
+    originRequest:
+      # libp2p keeps one long-lived connection per client. Without a
+      # generous idle timeout Cloudflare would cut peers loose while they
+      # sit waiting for a friend to type the room code.
+      connectTimeout: 30s
+      # No response timeout: a peer may idle in a room for up to an hour.
+      noTLSVerify: true
+
+  # Everything else gets a 404 rather than being forwarded.
+  - service: http_status:404

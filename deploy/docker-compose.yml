@@ -1,0 +1,51 @@
+# Rendezvous + relay server for OpenShip / plain docker compose.
+#
+#   docker compose -f deploy/docker-compose.yml up -d
+#
+# Only this service runs on the Ubuntu box. Nothing here ever touches the
+# transferred files; it hands out addresses and bridges the first
+# connection until the two peers can talk directly.
+
+services:
+  rendezvous:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    container_name: puresend
+    restart: unless-stopped
+
+    command:
+      - "-ws-port=8080"
+      - "-health-port=8081"
+      - "-key=/data/server.key"
+      # Public address clients dial. Cloudflare terminates TLS on 443 and
+      # forwards plain WebSocket to us, which is why clients use /tls/ws
+      # while the listener above is plain /ws.
+      - "-announce=/dns4/${PUBLIC_HOST:?set PUBLIC_HOST}/tcp/443/tls/ws"
+      # Bounded relay fallback. The relay is mainly there to bootstrap
+      # hole punching (a few KB); this cap keeps a failed hole punch from
+      # streaming gigabytes through your home connection and Cloudflare.
+      - "-relay-data=268435456"     # 256 MB per connection
+      - "-relay-duration=10m"
+
+    ports:
+      # Bound to localhost only: cloudflared reaches it over the loopback,
+      # so the port is never exposed on your LAN or the internet.
+      - "127.0.0.1:8080:8080"
+      - "127.0.0.1:8081:8081"
+
+    volumes:
+      # The identity key MUST survive re-creation. The client binaries you
+      # release have this server's peer ID baked in — lose the key and
+      # every downloaded client breaks.
+      - rendezvous-key:/data
+
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8081/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  rendezvous-key:
