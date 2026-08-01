@@ -246,6 +246,15 @@ func (r *Registry) handle(from peer.ID, req Request) Response {
 	}
 }
 
+// ActiveRooms reports how many rooms are currently registered. Used by
+// the server's health endpoint.
+func (r *Registry) ActiveRooms() int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.dropExpired()
+	return len(r.rooms)
+}
+
 // HasPeer reports whether the peer currently owns an active room.
 func (r *Registry) HasPeer(p peer.ID) bool {
 	r.mu.Lock()

@@ -2,65 +2,118 @@
 //
 // It has two jobs:
 //  1. Rendezvous: the sender registers a room code, the receiver looks it up.
-//  2. Circuit Relay v2: when both sides are behind NAT, the first
-//     connection is established through this server; libp2p's hole
-//     punching mechanism (DCUtR) then uses that bridge to upgrade to a
-//     direct connection.
+//  2. Circuit Relay v2: the receiver's *first* connection to the sender is
+//     established through this server; libp2p's hole punching mechanism
+//     (DCUtR) then uses that bridge to negotiate a direct connection.
+//     Once the direct connection is up the files bypass this server
+//     entirely.
 //
-// To work on the public internet, run it on any machine with an open
-// port (e.g. a cheap VPS):
+// # Running behind Cloudflare Tunnel
+//
+// cloudflared only proxies HTTP/WebSocket to the public internet — a raw
+// TCP or QUIC port cannot be exposed that way. So the primary listener is
+// libp2p's WebSocket transport, which Cloudflare proxies natively:
+//
+//	cloudflared ingress:  p2p-filetransfer.example.com -> http://localhost:8080
+//	server listens on:    /ip4/0.0.0.0/tcp/8080/ws
+//	clients dial:         /dns4/p2p-filetransfer.example.com/tcp/443/tls/ws/p2p/<PeerID>
+//
+// TLS is terminated by Cloudflare, which is why the listener itself is
+// plain /ws while clients dial /tls/ws.
+//
+//	go run ./cmd/server -ws-port 8080 \
+//	  -announce /dns4/p2p-filetransfer.example.com/tcp/443/tls/ws
+//
+// # Running with a plain forwarded port
+//
+// If you can forward a port on your router instead, -port enables the raw
+// TCP+QUIC listeners and no tunnel is needed:
 //
 //	go run ./cmd/server -port 4001
 package main
 
 import (
+	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"log"
+	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
+	"time"
 
 	"filetransferilla/internal/rendezvous"
 
 	"github.com/libp2p/go-libp2p"
 	"github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/p2p/protocol/circuitv2/relay"
+	"github.com/multiformats/go-multiaddr"
 )
 
 func main() {
-	port := flag.Int("port", 4001, "TCP/UDP port to listen on")
+	wsPort := flag.Int("ws-port", 8080, "WebSocket port (the Cloudflare Tunnel target); 0 disables it")
+	port := flag.Int("port", 0, "raw TCP+QUIC port for setups with a forwarded port; 0 disables it")
+	healthPort := flag.Int("health-port", 8081, "port for the /health endpoint; 0 disables it")
 	keyPath := flag.String("key", "server.key", "path of the identity key file")
+	announce := flag.String("announce", "", "comma-separated public multiaddrs to advertise, e.g. /dns4/host/tcp/443/tls/ws")
+	relayData := flag.Int64("relay-data", 256<<20, "max bytes relayed per connection when hole punching fails")
+	relayDuration := flag.Duration("relay-duration", 10*time.Minute, "max lifetime of a relayed connection")
 	flag.Parse()
 
+	if *wsPort == 0 && *port == 0 {
+		log.Fatal("nothing to listen on: set -ws-port or -port")
+	}
+
 	// The server's identity (peer ID) must stay the same across restarts
-	// so the address we hand to clients remains valid. We therefore save
+	// so the address baked into released clients remains valid. We save
 	// the private key to disk and reload it on the next start.
 	priv, err := loadOrCreateKey(*keyPath)
 	if err != nil {
 		log.Fatalf("could not prepare identity key: %v", err)
 	}
 
+	announced, err := parseAnnounce(*announce)
+	if err != nil {
+		log.Fatalf("could not parse -announce: %v", err)
+	}
+
 	registry := rendezvous.NewRegistry()
 
-	h, err := libp2p.New(
+	opts := []libp2p.Option{
 		libp2p.Identity(priv),
-		// Listen on both TCP and QUIC; clients use whichever works.
-		libp2p.ListenAddrStrings(
-			fmt.Sprintf("/ip4/0.0.0.0/tcp/%d", *port),
-			fmt.Sprintf("/ip4/0.0.0.0/udp/%d/quic-v1", *port),
-		),
-		// The relay service normally waits until the node has verified
-		// it is publicly reachable. The server runs on a public machine
-		// anyway, so skip that wait.
+		libp2p.ListenAddrStrings(listenAddrs(*wsPort, *port)...),
+		// The relay service normally waits until the node has verified it
+		// is publicly reachable. Behind a tunnel that probe cannot
+		// succeed (the tunnel is outbound-only), so declare it public.
 		libp2p.ForceReachabilityPublic(),
-		// Enable the Relay v2 service. The default limits (2 minutes /
-		// 128 KB) are lifted so a transfer can still complete through
-		// the relay when a direct connection cannot be established.
-		// The registry acts as the ACL: only peers with an active room
-		// may use the relay, so strangers cannot burn our bandwidth.
-		libp2p.EnableRelayService(relay.WithInfiniteLimits(), relay.WithACL(registry)),
-	)
+		// Serve AutoNAT v2 so clients can discover whether their own
+		// addresses are reachable, which is what makes them advertise a
+		// sensible address set for hole punching.
+		libp2p.EnableAutoNATv2(),
+		// Relay v2. The registry acts as the ACL: only peers with an
+		// active room may use the relay, so strangers cannot burn our
+		// bandwidth. Limits are bounded rather than infinite — the relay
+		// exists to bootstrap hole punching (a few KB of DCUtR
+		// coordination), and a bounded fallback keeps a failed hole punch
+		// from streaming gigabytes through the tunnel.
+		libp2p.EnableRelayService(
+			relay.WithResources(relayResources(*relayData, *relayDuration)),
+			relay.WithACL(registry),
+		),
+	}
+	if len(announced) > 0 {
+		// Behind a tunnel the host's own socket addresses (0.0.0.0, the
+		// container's private IP) are useless to the outside world.
+		// Advertise only what clients can actually reach.
+		opts = append(opts, libp2p.AddrsFactory(func([]multiaddr.Multiaddr) []multiaddr.Multiaddr {
+			return announced
+		}))
+	}
+
+	h, err := libp2p.New(opts...)
 	if err != nil {
 		log.Fatalf("could not start libp2p host: %v", err)
 	}
@@ -68,19 +121,109 @@ func main() {
 
 	h.SetStreamHandler(rendezvous.ProtocolID, registry.Handler)
 
+	stopHealth := startHealthServer(*healthPort, h.ID().String(), registry)
+	defer stopHealth()
+
 	fmt.Println("Rendezvous + relay server is running.")
-	fmt.Println("Peer ID:", h.ID())
-	fmt.Println("\nAddresses for clients (pass one to the -server flag):")
-	for _, addr := range h.Addrs() {
+	fmt.Println()
+	fmt.Println("  Peer ID:", h.ID())
+	fmt.Println()
+	fmt.Println("Client address (bake this into the client build):")
+	for _, addr := range clientAddrs(h.Addrs(), announced) {
 		fmt.Printf("  %s/p2p/%s\n", addr, h.ID())
 	}
-	fmt.Println("\nPress Ctrl+C to stop.")
+	fmt.Println()
+	fmt.Printf("Relay fallback limit: %s per connection, %s max lifetime\n",
+		formatBytes(*relayData), *relayDuration)
+	fmt.Println("Press Ctrl+C to stop.")
 
 	// Keep running until Ctrl+C or SIGTERM.
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
 	<-sig
 	fmt.Println("\nShutting down.")
+}
+
+// listenAddrs builds the listen multiaddrs for the enabled ports.
+func listenAddrs(wsPort, rawPort int) []string {
+	var addrs []string
+	if wsPort > 0 {
+		// Plain /ws, not /wss: TLS is terminated by Cloudflare (or any
+		// other reverse proxy) in front of us.
+		addrs = append(addrs, fmt.Sprintf("/ip4/0.0.0.0/tcp/%d/ws", wsPort))
+	}
+	if rawPort > 0 {
+		addrs = append(addrs,
+			fmt.Sprintf("/ip4/0.0.0.0/tcp/%d", rawPort),
+			fmt.Sprintf("/ip4/0.0.0.0/udp/%d/quic-v1", rawPort),
+		)
+	}
+	return addrs
+}
+
+// parseAnnounce parses the comma-separated -announce value.
+func parseAnnounce(s string) ([]multiaddr.Multiaddr, error) {
+	var out []multiaddr.Multiaddr
+	for _, part := range strings.Split(s, ",") {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		a, err := multiaddr.NewMultiaddr(part)
+		if err != nil {
+			return nil, fmt.Errorf("%q: %w", part, err)
+		}
+		out = append(out, a)
+	}
+	return out, nil
+}
+
+// clientAddrs picks the addresses worth printing for an operator: the
+// announced ones if set, otherwise whatever the host is bound to.
+func clientAddrs(hostAddrs, announced []multiaddr.Multiaddr) []multiaddr.Multiaddr {
+	if len(announced) > 0 {
+		return announced
+	}
+	return hostAddrs
+}
+
+// relayResources bounds what a relayed connection may consume.
+func relayResources(data int64, duration time.Duration) relay.Resources {
+	rc := relay.DefaultResources()
+	rc.Limit = &relay.RelayLimit{Duration: duration, Data: data}
+	return rc
+}
+
+// startHealthServer exposes a tiny /health endpoint for OpenShip (or any
+// other supervisor) to probe. Returns a shutdown function.
+func startHealthServer(port int, peerID string, registry *rendezvous.Registry) func() {
+	if port <= 0 {
+		return func() {}
+	}
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprintf(w, "{\"status\":\"ok\",\"peer_id\":%q,\"active_rooms\":%d}\n",
+			peerID, registry.ActiveRooms())
+	})
+
+	srv := &http.Server{
+		Addr:              fmt.Sprintf(":%d", port),
+		Handler:           mux,
+		ReadHeaderTimeout: 5 * time.Second,
+	}
+	go func() {
+		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			log.Printf("health server stopped: %v", err)
+		}
+	}()
+
+	return func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		srv.Shutdown(ctx)
+	}
 }
 
 // loadOrCreateKey loads the identity key from disk, or generates and
@@ -103,4 +246,15 @@ func loadOrCreateKey(path string) (crypto.PrivKey, error) {
 		return nil, err
 	}
 	return priv, nil
+}
+
+func formatBytes(n int64) string {
+	switch {
+	case n >= 1<<30:
+		return fmt.Sprintf("%.1f GB", float64(n)/(1<<30))
+	case n >= 1<<20:
+		return fmt.Sprintf("%.0f MB", float64(n)/(1<<20))
+	default:
+		return fmt.Sprintf("%d B", n)
+	}
 }
