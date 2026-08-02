@@ -23,6 +23,62 @@ Gönderen (İstanbul)          Buluşma sunucusu           Alıcı (İzmir)
        │              4. Dosyalar doğrudan akar                │
 ```
 
+## İndir ve çalıştır
+
+Kurulum yok, ayar yok, hesap açmak yok.
+[**Releases**](https://github.com/Baaaki/P2P-FileTransfer-Project/releases/latest)
+sayfasından işletim sistemine uygun dosyayı indir, arşivden çıkar, çalıştır.
+
+| İşletim sistemin | İndireceğin dosya |
+|---|---|
+| Windows | `filetransferilla_<sürüm>_windows_x86_64.zip` |
+| macOS (M1 / M2 / M3 / M4) | `filetransferilla_<sürüm>_macOS_arm64.tar.gz` |
+| macOS (2020 öncesi, Intel) | `filetransferilla_<sürüm>_macOS_x86_64.tar.gz` |
+| Linux | `filetransferilla_<sürüm>_linux_x86_64.tar.gz` |
+
+Arşivin içinden `filetransferilla` adında **tek bir dosya** çıkar.
+Başka hiçbir şeye ihtiyacın yok.
+
+- **Windows:** dosyaya çift tıkla, program açılır.
+- **macOS:** çift tıkla — Terminal penceresinde açılır.
+- **Linux:** masaüstü ortamları terminal programlarını çift tıklamayla
+  açmayabilir; en garantisi terminalden çalıştırmak:
+  `chmod +x filetransferilla && ./filetransferilla`
+
+### İlk açılışta bir uyarı çıkarsa
+
+Program **imzalı olmadığı için** işletim sistemi ilk seferde soru sorabilir.
+Bu bir hata değil ve programda bir sorun olduğu anlamına gelmiyor — imza
+sertifikaları ücretli olduğu için alınmadı. Bir kez izin verdikten sonra
+bir daha sorulmaz.
+
+**macOS** — *"geliştirici doğrulanamadığı için açılamadı"* diyorsa dosyaya
+**sağ tıkla → Aç**, çıkan pencerede tekrar **Aç**'a bas. (Sadece çift
+tıklamak bu durumda işe yaramaz; sağ tık şart.) Alternatif olarak
+Terminal'de:
+
+```bash
+xattr -d com.apple.quarantine filetransferilla
+```
+
+**Windows** — *"Windows kişisel bilgisayarınızı korudu"* mavi ekranı
+çıkarsa: **Ek bilgi** → **Yine de çalıştır**.
+
+**Linux** — çalıştırma izni vermen gerekebilir:
+
+```bash
+chmod +x filetransferilla
+```
+
+İndirdiğin dosyanın bozulmadığını doğrulamak istersen, her sürümün
+yanındaki `checksums.txt` dosyasını kullanabilirsin:
+
+```bash
+sha256sum -c checksums.txt --ignore-missing
+```
+
+---
+
 ## Hangi klasör nerede çalışır?
 
 Bu ayrımı karıştırmamak önemli:

@@ -4,6 +4,11 @@ Bu dosya, projeyi "çalışan bir prototip"ten "sıradan bir insanın indirip
 kullanabileceği bir ürün"e dönüştürmek için yapılacakların tamamıdır.
 Hedef altyapı: **Ubuntu Server + Cloudflare Tunnel + OpenShip**.
 
+> **Durum:** Faz A–E'nin **kod ve yapılandırma tarafı tamamlandı.**
+> Geriye kalan tek iş [bölüm 3](#3-deploy-sırası-bu-sırayla-yapılacak)'teki
+> deploy adımları — onlar sunucuya, Cloudflare hesabına ve DNS'e erişim
+> istediği için elle yapılacak.
+
 ---
 
 ## 0. Altyapı gerçeği: Cloudflare Tunnel neyi taşır, neyi taşımaz?
@@ -101,32 +106,36 @@ kullanıcı `cmd/client`'ı indirir ve dosyalar onun bilgisayarından çıkar.
 
 ## 2. Yapılacaklar
 
-### Faz A — Sunucuyu tünele uygun hale getir
+### Faz A — Sunucuyu tünele uygun hale getir ✅
 
-- [ ] `cmd/server/main.go`: `-ws-port` ile `/ip4/0.0.0.0/tcp/<port>/ws`
+- [x] `cmd/server/main.go`: `-ws-port` ile `/ip4/0.0.0.0/tcp/<port>/ws`
       dinleyicisi ekle (Cloudflare Tunnel hedefi).
-- [ ] Ham TCP/QUIC dinleyicilerini `-port` ile **opsiyonel** yap (0 =
+- [x] Ham TCP/QUIC dinleyicilerini `-port` ile **opsiyonel** yap (0 =
       kapalı). Port yönlendirme yapabilenler için dursun.
-- [ ] `-announce` bayrağı: sunucunun public multiaddr'ını (`/dns4/.../
+- [x] `-announce` bayrağı: sunucunun public multiaddr'ını (`/dns4/.../
       tcp/443/tls/ws`) `AddrsFactory` ile ilan et. Relay circuit adresleri
       buna dayanacağı için şart.
-- [ ] `relay.WithInfiniteLimits()` → `relay.WithResources(...)`,
+- [x] `relay.WithInfiniteLimits()` → `relay.WithResources(...)`,
       `-relay-data` ve `-relay-duration` bayraklarıyla.
-- [ ] `libp2p.EnableAutoNATv2()` ekle — istemciler ulaşılabilirliklerini
+- [x] `libp2p.EnableAutoNATv2()` ekle — istemciler ulaşılabilirliklerini
       ölçebilsin (şu an sunucu bu servisi vermiyor).
-- [ ] `-health-port` üzerinde küçük bir HTTP `/health` endpoint'i —
+- [x] `-health-port` üzerinde küçük bir HTTP `/health` endpoint'i —
       OpenShip health check için.
-- [ ] Peer ID'yi açılışta net biçimde logla (deploy sonrası lazım olacak).
+- [x] Peer ID'yi açılışta net biçimde logla (deploy sonrası lazım olacak).
 
-### Faz B — İstemciyi TUI'den sürülebilir hale getir
+Ek olarak: tünel arkasında ulaşılabilirlik ölçülemediği için
+`ForceReachabilityPublic()`, relay'in kötüye kullanımını engellemek için
+de oda kaydını ACL olarak kullanan `relay.WithACL(registry)` eklendi.
 
-- [ ] `internal/p2p/` paketi: `Node` tipi — host kurulumu, sunucuya
+### Faz B — İstemciyi TUI'den sürülebilir hale getir ✅
+
+- [x] `internal/p2p/` paketi: `Node` tipi — host kurulumu, sunucuya
       bağlanma, oda kaydı, oda sorgulama, bağlantı türü izleme.
       **Hiçbir `fmt.Println` içermeyecek** — TUI kanal üzerinden olay alacak.
-- [ ] `cmd/client/main.go` sadece bayrakları okuyup TUI'yi başlatsın.
-- [ ] `defaultServer` değişkeni + `-ldflags -X` ile gömme.
+- [x] `cmd/client/main.go` sadece bayrakları okuyup TUI'yi başlatsın.
+- [x] `defaultServer` değişkeni + `-ldflags -X` ile gömme.
 
-### Faz C — Adım adım yönlendiren TUI
+### Faz C — Adım adım yönlendiren TUI ✅
 
 Tasarım ilkesi: **Kullanıcı hiçbir teknik terim görmeyecek.** "multiaddr",
 "peer", "NAT", "relay" kelimeleri arayüzde geçmeyecek. Her ekranda tek bir
@@ -159,37 +168,98 @@ Alma akışı:
 7. Bitti         → "✓ İndi! Dosyalar şurada: /home/.../Downloads/..."
 ```
 
-- [ ] Her ekranda alt bilgi çubuğu: hangi tuşlar çalışıyor.
-- [ ] Hata ekranları da düz Türkçe: "Kod bulunamadı. Ya yanlış yazıldı ya
+- [x] Her ekranda alt bilgi çubuğu: hangi tuşlar çalışıyor.
+- [x] Hata ekranları da düz Türkçe: "Kod bulunamadı. Ya yanlış yazıldı ya
       da süresi doldu (kodlar 1 saat geçerli)."
-- [ ] Ctrl+C her yerde temiz çıkış.
+- [x] Ctrl+C her yerde temiz çıkış.
 
-### Faz D — Dağıtım
+Her iki akış da `internal/tui/` içinde; `tui_test.go` tüm ekranların
+çizildiğini ve hata metinlerinin teknik terim sızdırmadığını doğruluyor.
 
-- [ ] `.goreleaser.yaml`: linux/darwin/windows × amd64/arm64 = 6 ikili,
+### Faz D — Dağıtım ✅
+
+- [x] `.goreleaser.yaml`: linux/darwin/windows × amd64/arm64 = 6 ikili,
       `CGO_ENABLED=0`, ldflags ile sunucu adresi gömülü, checksum.
-- [ ] `.github/workflows/release.yml`: `v*` tag'inde tetiklenir.
-- [ ] README'de "İndir ve çift tıkla" bölümü + macOS Gatekeeper notu.
+- [x] `.github/workflows/release.yml`: `v*` tag'inde tetiklenir.
+      (`FT_SERVER` ayarlanmamışsa release'i baştan durduruyor — yoksa
+      ölü ikili yayınlanırdı.)
+- [x] README'de "İndir ve çalıştır" bölümü + macOS Gatekeeper notu.
+      Windows SmartScreen ve Linux `chmod +x` notları da eklendi.
 
-### Faz E — Deploy
+### Faz E — Deploy ✅ *(kod tarafı)*
 
-- [ ] `deploy/cloudflared-config.yml` örneği.
-- [ ] `deploy/docker-compose.yml` (OpenShip'e verilecek).
-- [ ] `Dockerfile` güncelle: ws portu + health portu expose.
+- [x] `deploy/cloudflared-config.yml` örneği.
+- [x] `deploy/docker-compose.yml` (OpenShip'e verilecek).
+- [x] `Dockerfile` güncelle: ws portu + health portu expose.
 - [ ] DNS: `p2p-filetransfer.madebybaki.com` → tünel CNAME.
+      *Elle yapılacak:* `cloudflared tunnel route dns` komutu bunu
+      oluşturuyor, bölüm 3'e bak.
 
 ---
 
 ## 3. Deploy sırası (bu sırayla yapılacak)
 
-1. Sunucuyu OpenShip ile Ubuntu'ya kur, `/health` yeşil olsun.
-2. `cloudflared` ingress'i `p2p-filetransfer.madebybaki.com` →
-   `http://localhost:8080` olarak ayarla.
-3. Loglardan **Peer ID**'yi al.
-4. `wss://p2p-filetransfer.madebybaki.com` dışarıdan erişilebiliyor mu
-   test et (telefon hotspot'undan).
-5. Peer ID'yi GoReleaser ldflags'ine gömüp `v0.1.0` tag'i at.
-6. İki farklı ağdaki iki bilgisayarda indirip gerçek transfer dene.
+Kalan tek iş bu. Sunucuya, Cloudflare hesabına ve DNS'e erişim
+gerektirdiği için elle yapılacak.
+
+**1. Sunucuyu Ubuntu'ya kur, `/health` yeşil olsun.**
+
+```bash
+PUBLIC_HOST=p2p-filetransfer.madebybaki.com \
+  docker compose -f deploy/docker-compose.yml up -d
+
+curl localhost:8081/health
+# {"status":"ok","peer_id":"12D3KooW...","active_rooms":0}
+```
+
+**2. Loglardan Peer ID'yi al** — 5. adımda lazım, bir yere not et.
+
+```bash
+docker logs filetransferilla | grep "Peer ID"
+```
+
+> ⚠️ `rendezvous-key` volume'ü kalıcı olmalı. Peer ID değişirse
+> dağıttığın bütün istemciler çalışmaz hale gelir.
+
+**3. `cloudflared` ingress'ini ayarla** (DNS kaydını da bu oluşturur).
+
+```bash
+cloudflared tunnel login
+cloudflared tunnel create filetransferilla
+cloudflared tunnel route dns filetransferilla p2p-filetransfer.madebybaki.com
+sudo cp deploy/cloudflared-config.yml /etc/cloudflared/config.yml
+sudo cloudflared service install
+```
+
+**4. Dışarıdan erişimi doğrula** — sunucunun ağının *dışından*
+(telefon hotspot'u iyi bir test). `101 Switching Protocols` beklenir:
+
+```bash
+curl -sI https://p2p-filetransfer.madebybaki.com \
+     -H "Connection: Upgrade" -H "Upgrade: websocket"
+```
+
+**5. Peer ID'yi gömüp sürüm çıkar.** GitHub'da
+*Settings → Secrets and variables → Actions → Variables* altına
+`FT_SERVER` ekle:
+
+```
+/dns4/p2p-filetransfer.madebybaki.com/tcp/443/tls/ws/p2p/<PeerID>
+```
+
+Sonra tag at — release workflow'u 6 ikiliyi üretip yayınlar:
+
+```bash
+git tag v0.1.0 && git push --tags
+```
+
+> Değişken ayarlanmamışsa workflow bilerek durur; adressiz bir ikili
+> indiren herkes için ölü doğmuş olurdu.
+
+**6. Gerçek transfer denemesi** — iki *farklı ağdaki* iki bilgisayarda
+ikiliyi indir ve bir dosya gönder. Aktarım ekranında
+"✓ Doğrudan bağlantı kuruldu" yazmalı; "yedek yol" yazıyorsa delme
+başarısız olmuş demektir (relay 256 MB ile sınırlı).
 
 ---
 
