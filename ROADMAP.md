@@ -226,6 +226,22 @@ docker compose logs rendezvous | grep "Peer ID"
 
 **3. `cloudflared` ingress'ini ayarla** (DNS kaydını da bu oluşturur).
 
+Makinede **zaten bir tünel varsa** config'i üzerine yazma — tek bir
+`cloudflared` bütün hostname'lere aynı dosyadan hizmet eder, üzerine
+yazmak diğer projeleri düşürür. Mevcut `ingress:` listesine, catch-all
+404'ten **önce** kural ekle:
+
+```bash
+sudo cat /etc/cloudflared/config.yml
+cloudflared tunnel route dns <mevcut-tünel> puresend.madebybaki.com
+#   - hostname: puresend.madebybaki.com
+#     service: http://localhost:8080
+cloudflared tunnel ingress validate
+sudo systemctl restart cloudflared
+```
+
+Hiç tünel yoksa:
+
 ```bash
 cloudflared tunnel login
 cloudflared tunnel create puresend

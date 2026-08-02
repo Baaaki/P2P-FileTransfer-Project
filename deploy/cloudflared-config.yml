@@ -1,11 +1,14 @@
 # Cloudflare Tunnel ingress for the rendezvous server.
 #
-# Install on the Ubuntu box:
-#   cloudflared tunnel login
-#   cloudflared tunnel create puresend
-#   cloudflared tunnel route dns puresend puresend.madebybaki.com
-#   sudo cp this file to /etc/cloudflared/config.yml
-#   sudo cloudflared service install
+# ─────────────────────────────────────────────────────────────────────
+#  DO NOT COPY THIS OVER AN EXISTING /etc/cloudflared/config.yml.
+#
+#  One cloudflared instance serves every hostname on the box through a
+#  single config. If you already run a tunnel for another project,
+#  overwriting the file deletes that project's ingress rule and takes it
+#  offline. Merge the rule below into the existing `ingress:` list
+#  instead — see "ADDING TO AN EXISTING TUNNEL".
+# ─────────────────────────────────────────────────────────────────────
 #
 # WHY WEBSOCKET AND NOT A RAW TCP PORT
 #
@@ -19,20 +22,57 @@
 # Cloudflare terminates TLS on 443, so clients dial
 #   /dns4/puresend.madebybaki.com/tcp/443/tls/ws/p2p/<PeerID>
 # while the server itself listens on plain /ip4/0.0.0.0/tcp/8080/ws.
+#
+#
+# ADDING TO AN EXISTING TUNNEL (the usual case)
+#
+#   1. See what is already there — never edit blind:
+#        sudo cat /etc/cloudflared/config.yml
+#        cloudflared tunnel list
+#
+#   2. Point the hostname at the tunnel you already have:
+#        cloudflared tunnel route dns <existing-tunnel> \
+#          puresend.madebybaki.com
+#
+#      This writes a CNAME to <tunnel-id>.cfargotunnel.com. If you created
+#      the DNS record by hand, check it is exactly that CNAME and proxied
+#      (orange cloud) — an A record or a grey-cloud CNAME never reaches
+#      the tunnel.
+#
+#   3. Insert ONLY the hostname block below into the existing `ingress:`
+#      list, above the catch-all. Rules match top to bottom and the
+#      `http_status:404` entry matches everything, so anything placed
+#      after it is dead.
+#
+#   4. Check the file before trusting it, then reload:
+#        cloudflared tunnel ingress validate
+#        sudo systemctl restart cloudflared
+#
+#
+# FRESH INSTALL (no tunnel on the box yet)
+#
+#   cloudflared tunnel login
+#   cloudflared tunnel create puresend
+#   cloudflared tunnel route dns puresend puresend.madebybaki.com
+#   sudo cp deploy/cloudflared-config.yml /etc/cloudflared/config.yml
+#   sudo cloudflared service install
+#
+# Only in this case is the whole file below correct as-is.
 
 tunnel: puresend
 credentials-file: /root/.cloudflared/puresend.json
 
 ingress:
+  # ── This is the block to copy into an existing tunnel's ingress list ──
   - hostname: puresend.madebybaki.com
     service: http://localhost:8080
     originRequest:
-      # libp2p keeps one long-lived connection per client. Without a
-      # generous idle timeout Cloudflare would cut peers loose while they
-      # sit waiting for a friend to type the room code.
+      # The rendezvous server holds one long-lived connection per waiting
+      # peer, so the origin must be dialled patiently rather than treated
+      # like a short web request.
       connectTimeout: 30s
-      # No response timeout: a peer may idle in a room for up to an hour.
-      noTLSVerify: true
+  # ── end of block ──────────────────────────────────────────────────────
 
-  # Everything else gets a 404 rather than being forwarded.
+  # Everything else gets a 404 rather than being forwarded. This must stay
+  # last: it matches every hostname.
   - service: http_status:404
