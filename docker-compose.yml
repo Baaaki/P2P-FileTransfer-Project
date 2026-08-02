@@ -1,18 +1,31 @@
 # Rendezvous + relay server for OpenShip / plain docker compose.
 #
-#   docker compose -f deploy/docker-compose.yml up -d
+#   docker compose up -d
 #
 # Only this service runs on the Ubuntu box. Nothing here ever touches the
 # transferred files; it hands out addresses and bridges the first
 # connection until the two peers can talk directly.
+#
+# This file lives at the repo root on purpose. Openship roots the build
+# context at the repository for every service and ignores `context:`, so
+# a compose file in a subdirectory yields a build path that points
+# outside the repo — which the API rejects. Root + `context: .` makes
+# both bases agree.
 
 services:
   rendezvous:
     build:
-      context: ..
+      context: .
       dockerfile: Dockerfile
-    container_name: puresend
     restart: unless-stopped
+
+    # The server is configured entirely through the flags below, but the
+    # block is kept non-empty on purpose: the deploy API wants an
+    # environment on every service, and compose normalises an empty map
+    # away to nothing. UTC also keeps log timestamps comparable with the
+    # timestamps Cloudflare and Openship record.
+    environment:
+      TZ: UTC
 
     command:
       - "-ws-port=8080"
