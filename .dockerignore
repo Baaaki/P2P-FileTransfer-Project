@@ -1,5 +1,16 @@
-# Keep these out of the image
+# Keep these out of the image.
+#
+# Openship uses the repo root as the build context for every service, so
+# this is the only .dockerignore that counts. A clean clone has no
+# binaries in it; these entries are what keep a *local* build from
+# shipping a 34 MB compiled server to the daemon.
 *.key
 received/
 *.md
 .git/
+
+# Compiled binaries (see .gitignore — never committed, but present locally)
+/server
+/client
+/puresend
+dist/
