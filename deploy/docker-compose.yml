@@ -21,7 +21,14 @@ services:
       # Public address clients dial. Cloudflare terminates TLS on 443 and
       # forwards plain WebSocket to us, which is why clients use /tls/ws
       # while the listener above is plain /ws.
-      - "-announce=/dns4/${PUBLIC_HOST:?set PUBLIC_HOST}/tcp/443/tls/ws"
+      #
+      # A default rather than ${PUBLIC_HOST:?...}: the :? form refuses to
+      # parse the file at all when the variable is unset, and every tool
+      # that reads this compose without your shell environment — Openship
+      # importing the repo, an editor, `docker compose config` — then
+      # fails with "set PUBLIC_HOST" and reports it as a broken file.
+      # Setting PUBLIC_HOST still overrides this.
+      - "-announce=/dns4/${PUBLIC_HOST:-p2p-filetransfer.madebybaki.com}/tcp/443/tls/ws"
       # Bounded relay fallback. The relay is mainly there to bootstrap
       # hole punching (a few KB); this cap keeps a failed hole punch from
       # streaming gigabytes through your home connection and Cloudflare.
