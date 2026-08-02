@@ -184,13 +184,22 @@ func fetchCmd(ctx context.Context, node *p2p.Node, room, outDir string) tea.Cmd 
 }
 
 // waitEvent pulls the next event off the node's channel.
+//
+// Exactly one of these may be in flight at a time: it is armed once when
+// the node comes up and re-armed by handleEvent after every event. Two
+// readers on one channel would each take a different event and hand them
+// to the update loop in whatever order they happened to win the race —
+// enough to make the progress bar jump backwards, or to let the final
+// "done" overtake a straggling progress event and leave the user staring
+// at a transfer screen that never finishes.
 func waitEvent(node *p2p.Node) tea.Cmd {
 	return func() tea.Msg {
-		ev, ok := <-node.Events()
-		if !ok {
+		select {
+		case ev := <-node.Events():
+			return eventMsg{ev}
+		case <-node.Done():
 			return nil
 		}
-		return eventMsg{ev}
 	}
 }
 
@@ -224,20 +233,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case nodeReadyMsg:
 		m.node = msg.node
-		switch m.mode {
-		case modeSend:
-			m.screen = screenPickFiles
-			return m, m.picker.Init()
-		case modeReceive:
-			m.screen = screenEnterCode
-			return m, m.codeInput.Focus()
-		}
-		return m, nil
+		next, cmd := m.beginMode()
+		// The one place the event reader is armed; handleEvent keeps it
+		// going from here on.
+		return next, tea.Batch(cmd, waitEvent(msg.node))
 
 	case roomReadyMsg:
 		m.room = msg.room
 		m.screen = screenRoomCode
-		return m, waitEvent(m.node)
+		return m, nil
 
 	case eventMsg:
 		return m.handleEvent(msg.ev)
@@ -366,7 +370,8 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 			m.screen = screenFinding
 			m.status = "arkadaşın aranıyor"
-			return m, tea.Batch(fetchCmd(m.ctx, m.node, code, m.outDir), waitEvent(m.node))
+			// The event reader is already running; only start the fetch.
+			return m, fetchCmd(m.ctx, m.node, code, m.outDir)
 		}
 		var cmd tea.Cmd
 		m.codeInput, cmd = m.codeInput.Update(msg)
@@ -400,19 +405,36 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// beginMode opens the first screen of the chosen mode, once the node is
+// connected.
+func (m Model) beginMode() (Model, tea.Cmd) {
+	switch m.mode {
+	case modeSend:
+		m.screen = screenPickFiles
+		return m, m.picker.Init()
+	case modeReceive:
+		m.screen = screenEnterCode
+		return m, m.codeInput.Focus()
+	}
+	return m, nil
+}
+
 // answerConfirm sends the user's decision back to the transfer.
 func (m Model) answerConfirm(ok bool) (tea.Model, tea.Cmd) {
 	if m.reply != nil {
 		m.reply <- ok
 		m.reply = nil
 	}
-	if ok {
-		m.screen = screenTransfer
-	} else {
-		m.screen = screenWelcome
-		m.mode = modeNone
+	if !ok {
+		// Declining ends the session. Tear it down rather than just
+		// walking back to the menu: the refused transfer is about to
+		// report itself as failed, and the user who pressed "no" should
+		// not then be shown an error about it.
+		return m.reset(), nil
 	}
-	return m, waitEvent(m.node)
+	m.screen = screenTransfer
+	// No waitEvent here: handling the manifest event already re-armed it.
+	return m, nil
 }
 
 // addFile appends a chosen file, skipping duplicates.
@@ -429,10 +451,16 @@ func (m *Model) addFile(path string) {
 	m.picked = append(m.picked, pickedFile{path: path, name: info.Name(), size: info.Size()})
 }
 
-// reset returns to the main menu, keeping the open connection.
+// reset ends the session and returns to the main menu. The network layer
+// goes down with it and the next transfer builds a fresh one: that stops
+// the finished session from serving its files to whoever still has the
+// old code, and guarantees no leftover event can bleed into the next
+// transfer. Reconnecting costs a second, behind the spinner the user
+// already sees.
 func (m Model) reset() Model {
-	if m.mode == modeSend && m.node != nil {
-		m.node.StopHosting()
+	if m.node != nil {
+		m.node.Close()
+		m.node = nil
 	}
 	m.screen = screenWelcome
 	m.mode = modeNone

@@ -115,6 +115,37 @@ func TestConfirmRepliesToTransfer(t *testing.T) {
 	}
 }
 
+// TestDeclineEndsTheSession checks that saying "no" does more than answer
+// the transfer: it clears the session with it. The refused transfer
+// reports itself as failed a moment later, and that must not land the
+// user on an error screen about a refusal they chose themselves.
+func TestDeclineEndsTheSession(t *testing.T) {
+	reply := make(chan bool, 1)
+	m := New("x")
+	m.mode = modeReceive
+	m.screen = screenConfirm
+	m.reply = reply
+	m.room = "kiraz-liman-42"
+	m.manifest = transfer.Manifest{
+		Files: []transfer.FileInfo{{Name: "tatil.jpg", Size: 2 << 20}},
+	}
+
+	next := press(t, m, "n")
+
+	if got := <-reply; got {
+		t.Error("declining sent an approval to the transfer")
+	}
+	if next.screen != screenWelcome || next.mode != modeNone {
+		t.Errorf("screen/mode = %v/%v, want welcome/none", next.screen, next.mode)
+	}
+	if next.reply != nil {
+		t.Error("the reply channel was left dangling after answering")
+	}
+	if next.room != "" || len(next.manifest.Files) != 0 {
+		t.Error("session state survived the decline")
+	}
+}
+
 // TestPickFilesNeedsAFile guards the "s" shortcut: it must do nothing
 // until at least one file is chosen.
 func TestPickFilesNeedsAFile(t *testing.T) {

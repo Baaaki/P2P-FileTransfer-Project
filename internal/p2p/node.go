@@ -7,6 +7,7 @@ package p2p
 import (
 	"context"
 	"fmt"
+	"sync"
 	"time"
 
 	"puresend/internal/rendezvous"
@@ -80,6 +81,9 @@ type Node struct {
 	host   host.Host
 	server peer.AddrInfo
 	events chan Event
+
+	closeOnce sync.Once
+	done      chan struct{}
 }
 
 // New starts a libp2p host and connects it to the rendezvous server at
@@ -111,19 +115,33 @@ func New(ctx context.Context, serverAddr string) (*Node, error) {
 		return nil, fmt.Errorf("could not reach the meeting point: %w", err)
 	}
 
-	return &Node{host: h, server: *info, events: make(chan Event, 64)}, nil
+	return &Node{
+		host:   h,
+		server: *info,
+		events: make(chan Event, 64),
+		done:   make(chan struct{}),
+	}, nil
 }
 
-// Events returns the channel carrying transfer events. It is closed when
-// the node is closed.
+// Events returns the channel carrying transfer events. The channel is
+// never closed — a transfer may still be winding down and about to emit —
+// so a consumer selects on Done to learn when to stop reading.
 func (n *Node) Events() <-chan Event { return n.events }
 
-// Close shuts the host down.
-func (n *Node) Close() error { return n.host.Close() }
+// Done is closed when the node is closed.
+func (n *Node) Done() <-chan struct{} { return n.done }
+
+// Close shuts the host down. It is safe to call more than once.
+func (n *Node) Close() error {
+	n.closeOnce.Do(func() { close(n.done) })
+	return n.host.Close()
+}
 
 // emit delivers an event. Progress events are dropped when the consumer
 // is behind — they are superseded by the next one anyway — while every
-// other event blocks until delivered.
+// other event blocks until delivered. Nothing blocks once the node is
+// closed: a transfer that is still unwinding must not leave a goroutine
+// waiting on a reader that will never come back.
 func (n *Node) emit(e Event) {
 	if _, isProgress := e.(ProgressEvent); isProgress {
 		select {
@@ -132,7 +150,10 @@ func (n *Node) emit(e Event) {
 		}
 		return
 	}
-	n.events <- e
+	select {
+	case n.events <- e:
+	case <-n.done:
+	}
 }
 
 // progressFunc returns a throttled transfer.ProgressFunc.
@@ -194,9 +215,6 @@ func (n *Node) Host(ctx context.Context, paths []string) (string, error) {
 
 	return room, nil
 }
-
-// StopHosting removes the transfer handler, ending the wait for a receiver.
-func (n *Node) StopHosting() { n.host.RemoveStreamHandler(transfer.ProtocolID) }
 
 // ---------------------------------------------------------------------------
 // Receiving
