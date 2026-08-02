@@ -34,6 +34,7 @@ package main
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"flag"
 	"fmt"
@@ -57,8 +58,8 @@ func main() {
 	wsPort := flag.Int("ws-port", 8080, "WebSocket port (the Cloudflare Tunnel target); 0 disables it")
 	port := flag.Int("port", 0, "raw TCP+QUIC port for setups with a forwarded port; 0 disables it")
 	healthPort := flag.Int("health-port", 8081, "port for the /health endpoint; 0 disables it")
-	keyPath := flag.String("key", "server.key", "path of the identity key file")
-	announce := flag.String("announce", "", "comma-separated public multiaddrs to advertise, e.g. /dns4/host/tcp/443/tls/ws")
+	keyPath := flag.String("key", envOr("FT_KEY_PATH", "server.key"), "path of the identity key file")
+	announce := flag.String("announce", os.Getenv("FT_ANNOUNCE"), "comma-separated public multiaddrs to advertise, e.g. /dns4/host/tcp/443/tls/ws")
 	relayData := flag.Int64("relay-data", 256<<20, "max bytes relayed per connection when hole punching fails")
 	relayDuration := flag.Duration("relay-duration", 10*time.Minute, "max lifetime of a relayed connection")
 	flag.Parse()
@@ -70,7 +71,7 @@ func main() {
 	// The server's identity (peer ID) must stay the same across restarts
 	// so the address baked into released clients remains valid. We save
 	// the private key to disk and reload it on the next start.
-	priv, err := loadOrCreateKey(*keyPath)
+	priv, keySource, err := loadOrCreateKey(*keyPath)
 	if err != nil {
 		log.Fatalf("could not prepare identity key: %v", err)
 	}
@@ -127,10 +128,28 @@ func main() {
 	fmt.Println("Rendezvous + relay server is running.")
 	fmt.Println()
 	fmt.Println("  Peer ID:", h.ID())
+	fmt.Println("  Identity from:", keySource)
 	fmt.Println()
-	fmt.Println("Client address (bake this into the client build):")
-	for _, addr := range clientAddrs(h.Addrs(), announced) {
-		fmt.Printf("  %s/p2p/%s\n", addr, h.ID())
+
+	if len(announced) > 0 {
+		fmt.Println("Client address (bake this into the client build):")
+		for _, addr := range announced {
+			fmt.Printf("  %s/p2p/%s\n", addr, h.ID())
+		}
+	} else {
+		// Without -announce (or FT_ANNOUNCE) the only addresses we know
+		// are the ones this process is bound to — behind a tunnel or in a
+		// container those are private and useless to a client. Say so,
+		// rather than printing them under a heading that invites someone
+		// to ship them.
+		fmt.Println("No public address configured (-announce / FT_ANNOUNCE).")
+		fmt.Println("Clients must dial the hostname your tunnel serves, e.g.")
+		fmt.Printf("  /dns4/<your-host>/tcp/443/tls/ws/p2p/%s\n", h.ID())
+		fmt.Println()
+		fmt.Println("Bound to (private, not for clients):")
+		for _, addr := range h.Addrs() {
+			fmt.Printf("  %s\n", addr)
+		}
 	}
 	fmt.Println()
 	fmt.Printf("Relay fallback limit: %s per connection, %s max lifetime\n",
@@ -178,15 +197,6 @@ func parseAnnounce(s string) ([]multiaddr.Multiaddr, error) {
 	return out, nil
 }
 
-// clientAddrs picks the addresses worth printing for an operator: the
-// announced ones if set, otherwise whatever the host is bound to.
-func clientAddrs(hostAddrs, announced []multiaddr.Multiaddr) []multiaddr.Multiaddr {
-	if len(announced) > 0 {
-		return announced
-	}
-	return hostAddrs
-}
-
 // relayResources bounds what a relayed connection may consume.
 func relayResources(data int64, duration time.Duration) relay.Resources {
 	rc := relay.DefaultResources()
@@ -226,26 +236,63 @@ func startHealthServer(port int, peerID string, registry *rendezvous.Registry) f
 	}
 }
 
-// loadOrCreateKey loads the identity key from disk, or generates and
-// saves a new Ed25519 key if none exists.
-func loadOrCreateKey(path string) (crypto.PrivKey, error) {
+// envOr returns the environment variable's value, or fallback when it is
+// unset or empty.
+func envOr(key, fallback string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return fallback
+}
+
+// loadOrCreateKey resolves the server's identity, which decides its peer
+// ID and therefore whether the clients already released can still reach
+// it. Three sources, in order:
+//
+//  1. FT_IDENTITY_KEY — the base64 of a marshalled private key. Survives
+//     anything that happens to the container's disk, which is what makes
+//     it the right choice on a platform that mounts an anonymous volume
+//     (or none) and hands you a fresh one on every redeploy.
+//  2. the key file, when it exists.
+//  3. a freshly generated key, written to the file.
+//
+// Print an existing key in the form (1) wants with:
+//
+//	base64 -w0 /data/server.key
+func loadOrCreateKey(path string) (crypto.PrivKey, string, error) {
+	if encoded := os.Getenv("FT_IDENTITY_KEY"); encoded != "" {
+		data, err := base64.StdEncoding.DecodeString(strings.TrimSpace(encoded))
+		if err != nil {
+			return nil, "", fmt.Errorf("FT_IDENTITY_KEY is not valid base64: %w", err)
+		}
+		priv, err := crypto.UnmarshalPrivateKey(data)
+		if err != nil {
+			return nil, "", fmt.Errorf("FT_IDENTITY_KEY is not a valid key: %w", err)
+		}
+		return priv, "FT_IDENTITY_KEY", nil
+	}
+
 	if data, err := os.ReadFile(path); err == nil {
-		return crypto.UnmarshalPrivateKey(data)
+		priv, err := crypto.UnmarshalPrivateKey(data)
+		if err != nil {
+			return nil, "", fmt.Errorf("%s is not a valid key: %w", path, err)
+		}
+		return priv, path, nil
 	}
 
 	priv, _, err := crypto.GenerateEd25519Key(nil) // nil -> uses crypto/rand
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	data, err := crypto.MarshalPrivateKey(priv)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	// 0600: only the owner may read the key.
 	if err := os.WriteFile(path, data, 0o600); err != nil {
-		return nil, err
+		return nil, "", err
 	}
-	return priv, nil
+	return priv, path + " (newly generated)", nil
 }
 
 func formatBytes(n int64) string {
