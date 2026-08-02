@@ -180,6 +180,32 @@ curl localhost:8081/health
 
 ### 2. Cloudflare Tunnel
 
+**Makinede zaten bir tünel varsa** (başka bir proje için), config'i üzerine
+yazma — tek bir `cloudflared` bütün hostname'lere aynı dosyadan hizmet
+eder, üzerine yazarsan diğer projenin kuralı silinir ve o proje düşer.
+Mevcut `ingress:` listesine kural **ekle**:
+
+```bash
+sudo cat /etc/cloudflared/config.yml          # önce ne olduğuna bak
+cloudflared tunnel list
+
+cloudflared tunnel route dns <mevcut-tünel> p2p-filetransfer.madebybaki.com
+
+# config.yml'deki ingress listesine, catch-all 404'ten ÖNCE:
+#   - hostname: p2p-filetransfer.madebybaki.com
+#     service: http://localhost:8080
+#     originRequest:
+#       connectTimeout: 30s
+
+cloudflared tunnel ingress validate
+sudo systemctl restart cloudflared
+```
+
+Kurallar yukarıdan aşağı eşleşir ve `http_status:404` her şeyi yakalar —
+yeni kural ondan sonra kalırsa hiç çalışmaz.
+
+**Makinede hiç tünel yoksa** dosya olduğu gibi kullanılabilir:
+
 ```bash
 cloudflared tunnel login
 cloudflared tunnel create filetransferilla
