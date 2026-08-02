@@ -22,6 +22,58 @@ Sender (Istanbul)          Rendezvous server           Receiver (Izmir)
       │              4. Files flow directly                   │
 ```
 
+## Download and run
+
+No installer, no configuration, no account. Grab the file for your system
+from [**Releases**](https://github.com/Baaaki/PureSend/releases/latest),
+unpack it, run it.
+
+| Your system | File to download |
+|---|---|
+| Windows | `puresend_<version>_windows_x86_64.zip` |
+| macOS (M1 / M2 / M3 / M4) | `puresend_<version>_macOS_arm64.tar.gz` |
+| macOS (pre-2020, Intel) | `puresend_<version>_macOS_x86_64.tar.gz` |
+| Linux | `puresend_<version>_linux_x86_64.tar.gz` |
+
+The archive holds a **single file** called `puresend`. That is
+the whole program.
+
+- **Windows:** double-click it.
+- **macOS:** double-click it — it opens in a Terminal window.
+- **Linux:** desktop environments often refuse to double-click a terminal
+  program, so run it from a shell:
+  `chmod +x puresend && ./puresend`
+
+### If your system warns you on first launch
+
+The binaries are **not code-signed** (signing certificates cost money), so
+the OS asks once. It is not an error, and it does not recur after you
+allow it.
+
+**macOS** — if you get *"cannot be opened because the developer cannot be
+verified"*, **right-click → Open**, then **Open** again in the dialog.
+Plain double-clicking will not offer that choice; the right-click is what
+matters. Or, from a terminal:
+
+```bash
+xattr -d com.apple.quarantine puresend
+```
+
+**Windows** — on the *"Windows protected your PC"* screen, click
+**More info** → **Run anyway**.
+
+**Linux** — you may need to mark it executable:
+
+```bash
+chmod +x puresend
+```
+
+To verify the download, every release ships a `checksums.txt`:
+
+```bash
+sha256sum -c checksums.txt --ignore-missing
+```
+
 ## Which directory runs where?
 
 | Directory | Runs on | Shipped as |
