@@ -97,7 +97,7 @@ delme yeteneği hiç etkilenmez.
 | `internal/transfer/` | sadece istemci | Sunucu bu kodu hiç çalıştırmaz |
 | `internal/p2p/` *(yeni)* | sadece istemci | libp2p node yönetimi, TUI'den bağımsız |
 | `internal/tui/` *(yeni)* | sadece istemci | Bubble Tea arayüzü |
-| `deploy/` *(yeni)* | 🖥️ Ubuntu Server | cloudflared config, compose dosyası |
+| `deploy/` *(yeni)* | 🖥️ Ubuntu Server | cloudflared config (compose kökte) |
 
 **Tek cümlede:** Sunucuda `cmd/server` çalışır ve dosyalara asla dokunmaz;
 kullanıcı `cmd/client`'ı indirir ve dosyalar onun bilgisayarından çıkar.
@@ -189,7 +189,10 @@ Her iki akış da `internal/tui/` içinde; `tui_test.go` tüm ekranların
 ### Faz E — Deploy ✅ *(kod tarafı)*
 
 - [x] `deploy/cloudflared-config.yml` örneği.
-- [x] `deploy/docker-compose.yml` (OpenShip'e verilecek).
+- [x] `docker-compose.yml` — repo **kökünde**. OpenShip build context'ini
+      repoya sabitleyip compose'un `context:` alanını yok saydığı için,
+      alt dizindeki bir compose repo dışına taşan bir build yolu üretir
+      ve proje oluşturma 400 ile reddedilir.
 - [x] `Dockerfile` güncelle: ws portu + health portu expose.
 - [ ] DNS: `p2p-filetransfer.madebybaki.com` → tünel CNAME.
       *Elle yapılacak:* `cloudflared tunnel route dns` komutu bunu
@@ -206,7 +209,7 @@ gerektirdiği için elle yapılacak.
 
 ```bash
 PUBLIC_HOST=p2p-filetransfer.madebybaki.com \
-  docker compose -f deploy/docker-compose.yml up -d
+  docker compose up -d
 
 curl localhost:8081/health
 # {"status":"ok","peer_id":"12D3KooW...","active_rooms":0}
@@ -215,7 +218,7 @@ curl localhost:8081/health
 **2. Loglardan Peer ID'yi al** — 5. adımda lazım, bir yere not et.
 
 ```bash
-docker logs filetransferilla | grep "Peer ID"
+docker compose logs rendezvous | grep "Peer ID"
 ```
 
 > ⚠️ `rendezvous-key` volume'ü kalıcı olmalı. Peer ID değişirse

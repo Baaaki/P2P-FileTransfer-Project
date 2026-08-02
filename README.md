@@ -90,7 +90,7 @@ Bu ayrımı karıştırmamak önemli:
 | `internal/rendezvous/` | ikisinde de | ortak protokol |
 | `internal/transfer/` | sadece istemci | sunucu bu kodu hiç çalıştırmaz |
 | `internal/p2p/`, `internal/tui/` | sadece istemci | ağ katmanı + arayüz |
-| `deploy/` | 🖥️ sunucu | compose + cloudflared ayarları |
+| `deploy/` | 🖥️ sunucu | cloudflared ayarları (compose kökte) |
 
 **Kısaca:** sunucuda `cmd/server` çalışır ve dosyalara asla dokunmaz;
 dosyalar kullanıcının çalıştırdığı `cmd/client`'tan çıkar.
@@ -152,13 +152,13 @@ Tünel yalnızca **buluşma** ve **delme koordinasyonu** için kullanılır
 
 ```bash
 PUBLIC_HOST=p2p-filetransfer.madebybaki.com \
-  docker compose -f deploy/docker-compose.yml up -d
+  docker compose up -d
 ```
 
 Loglardan **Peer ID**'yi al — birazdan lazım:
 
 ```bash
-docker logs filetransferilla
+docker compose logs rendezvous
 ```
 
 ```
@@ -201,7 +201,7 @@ curl -sI https://p2p-filetransfer.madebybaki.com \
 
 ### OpenShip ile
 
-`deploy/docker-compose.yml` doğrudan kullanılabilir. Önemli noktalar:
+`docker-compose.yml` doğrudan kullanılabilir. Önemli noktalar:
 
 - **Volume kalıcı olmalı** (`rendezvous-key` → `/data`)
 - **Health check**: `http://127.0.0.1:8081/health`

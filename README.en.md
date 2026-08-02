@@ -83,7 +83,7 @@ sha256sum -c checksums.txt --ignore-missing
 | `internal/rendezvous/` | both | shared protocol |
 | `internal/transfer/` | client only | the server never runs this code |
 | `internal/p2p/`, `internal/tui/` | client only | network layer + interface |
-| `deploy/` | 🖥️ server | compose + cloudflared config |
+| `deploy/` | 🖥️ server | cloudflared config (compose lives at the root) |
 
 ## What the user actually does
 
@@ -126,9 +126,9 @@ Once the direct connection is up, Cloudflare never sees the files.
 
 ```bash
 PUBLIC_HOST=p2p-filetransfer.example.com \
-  docker compose -f deploy/docker-compose.yml up -d
+  docker compose up -d
 
-docker logs filetransferilla   # grab the Peer ID
+docker compose logs rendezvous   # grab the Peer ID
 curl localhost:8081/health
 ```
 
