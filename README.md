@@ -227,12 +227,57 @@ curl -sI https://puresend.madebybaki.com \
 
 ### OpenShip ile
 
-`docker-compose.yml` doğrudan kullanılabilir. Önemli noktalar:
+OpenShip compose dosyasını **kısmen** uyguluyor. Gerçekte gözlenen
+davranış (v0.4.8):
 
-- **Volume kalıcı olmalı** (`rendezvous-key` → `/data`)
-- **Health check**: `http://127.0.0.1:8081/health`
-- **Portlar `127.0.0.1`'e bağlı** — dışarı sadece cloudflared üzerinden açılır
-- `PUBLIC_HOST` ortam değişkeni ayarlanmalı
+| Compose bloğu | Ne oluyor |
+|---|---|
+| `build`, `image` | ✅ uygulanıyor — context repo köküne sabitleniyor |
+| `command:` | ❌ **yok sayılıyor** — Dockerfile'ın `CMD`'si çalışıyor |
+| `volumes:` | ❌ **yok sayılıyor** — Dockerfile'daki `VOLUME` için anonim volume açılıyor |
+| `ports:` | ⚠️ yeniden eşleniyor — `127.0.0.1:<sabitlenmiş>` (örn. `20001`) |
+| `environment:` | ✅ uygulanıyor |
+
+Bunun iki sonucu var ve ikisi de sessizce vurur:
+
+**1. `command:` düştüğü için `-announce` kaybolur.** Sunucu kendini
+konteynerin iç adresleriyle (`172.17.x.x`) tanıtır.
+
+**2. Anonim volume yeniden deploy'da kaybolur** — `server.key` gider,
+**Peer ID değişir** ve dağıttığın bütün istemciler ölür.
+
+İkisinin de çözümü ortam değişkeni, çünkü OpenShip onları uyguluyor:
+
+```bash
+# Mevcut anahtarı konteynerden al (deploy'dan ÖNCE!)
+docker exec <konteyner> base64 -w0 /data/server.key
+```
+
+OpenShip → servis → *Ortam değişkenleri*:
+
+| Değişken | Değer |
+|---|---|
+| `FT_IDENTITY_KEY` | yukarıdaki base64 çıktısı (**gizli tut**) |
+| `FT_ANNOUNCE` | `/dns4/puresend.madebybaki.com/tcp/443/tls/ws` |
+
+Böylece kimlik diskten tamamen bağımsız olur. Açılışta
+`Identity from: FT_IDENTITY_KEY` satırını görürsen doğru çalışıyordur.
+
+**cloudflared hedefi**, `8080` değil OpenShip'in sabitlediği port:
+
+```bash
+docker ps --format '{{.Names}}\t{{.Ports}}' | grep filetransfer
+# ... 127.0.0.1:20001->8080/tcp   →  ingress: http://localhost:20001
+```
+
+> ⚠️ Bu port yeniden deploy'da değişebilir. Değişirse tünel sessizce
+> kırılır — "bir gün çalışmıyor" olursa ilk buraya bak.
+
+`8081` host'a çıkmaz, sağlık kontrolü konteyner içinden:
+
+```bash
+docker exec <konteyner> wget -qO- http://127.0.0.1:8081/health
+```
 
 ---
 
