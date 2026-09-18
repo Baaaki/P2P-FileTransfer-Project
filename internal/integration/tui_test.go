@@ -43,9 +43,9 @@ func runCmd(t *testing.T, cmd tea.Cmd, timeout time.Duration) tea.Msg {
 // here is that choosing a mode actually dials the meeting point and lands
 // the user on the screen that asks for the code.
 func TestTUIReachesCodeEntryOverWebSocket(t *testing.T) {
-	_, serverAddr := newWSServer(t)
+	_, _, serverAddr := newWSServer(t)
 
-	var m tea.Model = tui.New(serverAddr)
+	var m tea.Model = tui.New(tui.Config{Servers: []string{serverAddr}})
 	if !strings.Contains(screenText(m), "Ne yapmak istiyorsun") {
 		t.Fatalf("first screen is not the welcome menu:\n%s", screenText(m))
 	}
@@ -78,7 +78,7 @@ func TestTUIReportsAnUnreachableServerInPlainLanguage(t *testing.T) {
 	// A syntactically valid address with nothing listening behind it.
 	dead := "/ip4/127.0.0.1/tcp/1/ws/p2p/12D3KooWKKqpYTw3D8arNmcNG7ZK1mPfSH2cQ7ohZqHBmYN6eEAn"
 
-	var m tea.Model = tui.New(dead)
+	var m tea.Model = tui.New(tui.Config{Servers: []string{dead}})
 	m, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	m, _ = m.Update(runCmd(t, cmd, 60*time.Second))
 

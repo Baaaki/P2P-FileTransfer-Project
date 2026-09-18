@@ -13,6 +13,7 @@ import (
 	"puresend/internal/rendezvous"
 
 	"github.com/libp2p/go-libp2p"
+	"github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/p2p/protocol/circuitv2/relay"
 )
@@ -20,26 +21,37 @@ import (
 // newWSServer starts a rendezvous server configured the way it runs in
 // production behind Cloudflare Tunnel: a plain WebSocket listener (TLS is
 // terminated by the tunnel), relay enabled with the registry as its ACL.
-func newWSServer(t *testing.T) (host.Host, string) {
+func newWSServer(t *testing.T) (host.Host, *rendezvous.Registry, string) {
+	t.Helper()
+	return startWSServer(t, nil, "/ip4/127.0.0.1/tcp/0/ws")
+}
+
+// startWSServer is newWSServer with a chosen identity and listen address,
+// for the tests that restart "the same" server.
+func startWSServer(t *testing.T, priv crypto.PrivKey, listen string) (host.Host, *rendezvous.Registry, string) {
 	t.Helper()
 
 	registry := rendezvous.NewRegistry()
-	h, err := libp2p.New(
-		libp2p.ListenAddrStrings("/ip4/127.0.0.1/tcp/0/ws"),
+	opts := []libp2p.Option{
+		libp2p.ListenAddrStrings(listen),
 		libp2p.ForceReachabilityPublic(),
 		libp2p.EnableRelayService(
 			relay.WithResources(relay.DefaultResources()),
 			relay.WithACL(registry),
 		),
-	)
+	}
+	if priv != nil {
+		opts = append(opts, libp2p.Identity(priv))
+	}
+	h, err := libp2p.New(opts...)
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { h.Close() })
-	h.SetStreamHandler(rendezvous.ProtocolID, registry.Handler)
+	registry.Serve(h)
 
 	addr := fmt.Sprintf("%s/p2p/%s", h.Addrs()[0], h.ID())
-	return h, addr
+	return h, registry, addr
 }
 
 // TestWebSocketRendezvous runs the whole product flow over the WebSocket
@@ -49,15 +61,15 @@ func TestWebSocketRendezvous(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
-	_, serverAddr := newWSServer(t)
+	_, _, serverAddr := newWSServer(t)
 
-	sender, err := p2p.New(ctx, serverAddr)
+	sender, err := p2p.New(ctx, []string{serverAddr})
 	if err != nil {
 		t.Fatalf("sender could not reach the ws server: %v", err)
 	}
 	defer sender.Close()
 
-	receiver, err := p2p.New(ctx, serverAddr)
+	receiver, err := p2p.New(ctx, []string{serverAddr})
 	if err != nil {
 		t.Fatalf("receiver could not reach the ws server: %v", err)
 	}
@@ -151,9 +163,9 @@ func TestWebSocketWrongCode(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	_, serverAddr := newWSServer(t)
+	_, _, serverAddr := newWSServer(t)
 
-	receiver, err := p2p.New(ctx, serverAddr)
+	receiver, err := p2p.New(ctx, []string{serverAddr})
 	if err != nil {
 		t.Fatal(err)
 	}
