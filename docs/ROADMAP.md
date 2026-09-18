@@ -49,7 +49,7 @@ go-libp2p'de **varsayılan olarak açık** (`defaults.go` → `Transport(ws.New)
 İstemcinin kullanacağı multiaddr:
 
 ```
-/dns4/puresend.madebybaki.com/tcp/443/tls/ws/p2p/<PeerID>
+/dns4/rendezvous.madebybaki.com/tcp/443/tls/ws/p2p/<PeerID>
 ```
 
 Sunucunun dinlediği multiaddr:
@@ -119,7 +119,7 @@ kullanıcı `cmd/client`'ı indirir ve dosyalar onun bilgisayarından çıkar.
       `-relay-data` ve `-relay-duration` bayraklarıyla.
 - [x] `libp2p.EnableAutoNATv2()` ekle — istemciler ulaşılabilirliklerini
       ölçebilsin (şu an sunucu bu servisi vermiyor).
-- [x] `-health-port` üzerinde küçük bir HTTP `/health` endpoint'i —
+- [x] `-health-addr` üzerinde küçük bir HTTP `/health` endpoint'i —
       OpenShip health check için.
 - [x] Peer ID'yi açılışta net biçimde logla (deploy sonrası lazım olacak).
 
@@ -194,7 +194,7 @@ Her iki akış da `internal/tui/` içinde; `tui_test.go` tüm ekranların
       alt dizindeki bir compose repo dışına taşan bir build yolu üretir
       ve proje oluşturma 400 ile reddedilir.
 - [x] `Dockerfile` güncelle: ws portu + health portu expose.
-- [ ] DNS: `puresend.madebybaki.com` → tünel CNAME.
+- [ ] DNS: `rendezvous.madebybaki.com` → tünel CNAME.
       *Elle yapılacak:* `cloudflared tunnel route dns` komutu bunu
       oluşturuyor, bölüm 3'e bak.
 
@@ -208,14 +208,14 @@ gerektirdiği için elle yapılacak.
 **1. Sunucuyu Ubuntu'ya kur, `/health` yeşil olsun.**
 
 ```bash
-PUBLIC_HOST=puresend.madebybaki.com \
+PUBLIC_HOST=rendezvous.madebybaki.com \
   docker compose up -d
 
 curl localhost:8081/health
 # {"status":"ok","peer_id":"12D3KooW...","active_rooms":0}
 ```
 
-**2. Loglardan Peer ID'yi al** — 5. adımda lazım, bir yere not et.
+**2. Loglardan Peer ID'yi al** — 5. ve 6. adımlarda lazım, bir yere not et.
 
 ```bash
 docker compose logs rendezvous | grep "Peer ID"
@@ -233,8 +233,8 @@ yazmak diğer projeleri düşürür. Mevcut `ingress:` listesine, catch-all
 
 ```bash
 sudo cat /etc/cloudflared/config.yml
-cloudflared tunnel route dns <mevcut-tünel> puresend.madebybaki.com
-#   - hostname: puresend.madebybaki.com
+cloudflared tunnel route dns <mevcut-tünel> rendezvous.madebybaki.com
+#   - hostname: rendezvous.madebybaki.com
 #     service: http://localhost:8080
 cloudflared tunnel ingress validate
 sudo systemctl restart cloudflared
@@ -245,25 +245,37 @@ Hiç tünel yoksa:
 ```bash
 cloudflared tunnel login
 cloudflared tunnel create puresend
-cloudflared tunnel route dns puresend puresend.madebybaki.com
+cloudflared tunnel route dns puresend rendezvous.madebybaki.com
 sudo cp deploy/cloudflared-config.yml /etc/cloudflared/config.yml
 sudo cloudflared service install
 ```
+
+Ardından Cloudflare'de hostname için **IP başına rate limiting kuralı**
+kur (Security → Security rules → Rate limiting rules; IP, 20 istek / 10
+saniye, Block). Sunucu tünel arkasında gerçek IP'leri göremez; kod
+tahminini IP başına sınırlayan tek yer burası. Ayrıntı README'de.
 
 **4. Dışarıdan erişimi doğrula** — sunucunun ağının *dışından*
 (telefon hotspot'u iyi bir test). `101 Switching Protocols` beklenir:
 
 ```bash
-curl -sI https://puresend.madebybaki.com \
+curl -sI https://rendezvous.madebybaki.com \
      -H "Connection: Upgrade" -H "Upgrade: websocket"
 ```
 
-**5. Peer ID'yi gömüp sürüm çıkar.** GitHub'da
+**5. Adresi sunucu listesine ekle.** `LandingPage/public/server.txt`
+dosyasına sunucunun açılışta bastığı istemci adresini yaz ve landing
+page'i yayınla. Yayınlanan istemciler gömülü adres cevap vermezse bu
+dosyaya bakar; Peer ID bir gün değişirse eski sürümleri bu kurtarır.
+Anahtarın base64 yedeğini de (`base64 -w0 /data/server.key`) sunucunun
+dışında bir yerde sakla.
+
+**6. Peer ID'yi gömüp sürüm çıkar.** GitHub'da
 *Settings → Secrets and variables → Actions → Variables* altına
 `FT_SERVER` ekle:
 
 ```
-/dns4/puresend.madebybaki.com/tcp/443/tls/ws/p2p/<PeerID>
+/dns4/rendezvous.madebybaki.com/tcp/443/tls/ws/p2p/<PeerID>
 ```
 
 Sonra tag at — release workflow'u 6 ikiliyi üretip yayınlar:
@@ -275,7 +287,7 @@ git tag v0.1.0 && git push --tags
 > Değişken ayarlanmamışsa workflow bilerek durur; adressiz bir ikili
 > indiren herkes için ölü doğmuş olurdu.
 
-**6. Gerçek transfer denemesi** — iki *farklı ağdaki* iki bilgisayarda
+**7. Gerçek transfer denemesi** — iki *farklı ağdaki* iki bilgisayarda
 ikiliyi indir ve bir dosya gönder. Aktarım ekranında
 "✓ Doğrudan bağlantı kuruldu" yazmalı; "yedek yol" yazıyorsa delme
 başarısız olmuş demektir (relay 256 MB ile sınırlı).
@@ -284,8 +296,18 @@ başarısız olmuş demektir (relay 256 MB ile sınırlı).
 
 ## 4. Kapsam dışı (v1 sonrası)
 
-- Klasör gönderme (şu an sadece dosya)
-- Yarım kalan transferi devam ettirme (resume)
-- PAKE — kodu şifreleme anahtarına çevirip sunucuyu güvenilmez tarafa
-  indirgemek
+Aşağıdakiler **7 Ağustos 2026 test raporundan sonra yapıldı** ve artık
+kapsam içinde:
+
+- ✅ Klasör gönderme
+- ✅ Yarım kalan transferi devam ettirme (resume)
+- ✅ PAKE — kod artık bir parola; sunucu güvenilir taraf değil
+- ✅ Başsız (headless) mod, `-version`, indirme klasörü seçimi
+- ✅ Sunucuda Prometheus metrikleri, çoklu buluşma sunucusu
+- ✅ Delik açılamayan iki ağ arasında relay yedeğini CI'da doğrulayan test
+
+Hâlâ kapsam dışı:
+
 - QR kod
+- Mobil istemci
+- Kod imzalama sertifikası (ücretli)

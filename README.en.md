@@ -9,14 +9,14 @@ The user never sees anything technical: open the app, pick a file, read
 the **three-word code** out to a friend. That's it.
 
 🇹🇷 Türkçe dokümantasyon: [README.md](README.md)
-📋 Productisation plan: [ROADMAP.md](ROADMAP.md)
+📋 Productisation plan: [ROADMAP.md](docs/ROADMAP.md)
 
 ```
 Sender (Istanbul)          Rendezvous server           Receiver (Izmir)
       │                            │                          │
       │ 1. open room               │                          │
-      │    "cherry-harbor-42" ────►│◄─── 2. who is in          │
-      │                            │        "cherry-harbor-42"?│
+      │    "kiraz-liman-42" ──────►│◄─── 2. who is in          │
+      │                            │        "kiraz-liman-42"?  │
       │                            │                          │
       │◄═══ 3. Direct P2P connection (hole punching) ════════►│
       │              4. Files flow directly                   │
@@ -68,10 +68,18 @@ xattr -d com.apple.quarantine puresend
 chmod +x puresend
 ```
 
-To verify the download, every release ships a `checksums.txt`:
+To verify the download, every release ships a `checksums.txt`; put it
+next to the archive you downloaded:
 
 ```bash
+# Linux
 sha256sum -c checksums.txt --ignore-missing
+
+# macOS — there is no sha256sum; shasum does the same job
+grep macOS checksums.txt | shasum -a 256 -c
+
+# Windows (PowerShell) — compare with the line in checksums.txt
+Get-FileHash .\puresend_*_windows_x86_64.zip -Algorithm SHA256
 ```
 
 ## Which directory runs where?
@@ -88,10 +96,18 @@ sha256sum -c checksums.txt --ignore-missing
 ## What the user actually does
 
 **Sending:** open the app → *"I want to send files"* → pick files → `s` →
-a code appears (`cherry-harbor-42`) → send it over WhatsApp → done.
+a code appears (`kiraz-liman-42`) → send it over WhatsApp → done.
 
 **Receiving:** open the app → *"Someone is sending me files"* → type the
-code → review the incoming list → *"Yes, download"*.
+code → review the incoming list → *"Yes, download"*. Case, Turkish
+letters and spaces instead of hyphens do not matter (`KİRAZ liman 42`
+works), and a code of the wrong shape, or with a word codes never use, is
+caught before the server is asked.
+
+Codes are two words from a list of 256 plain Turkish words and a number
+from 10 to 99 — about 5.9 million combinations. The interface is Turkish
+and so are the codes: they are read out over the phone, and "kiraz" is
+easier to spell to a Turkish speaker than "glacier".
 
 No IP addresses, no ports, no config files at any point.
 
@@ -105,7 +121,12 @@ No IP addresses, no ports, no config files at any point.
 3. **Transfer** — the receiver reviews and **approves** the incoming file
    list, then the bytes flow over the direct connection with a **SHA-256
    check per file**. If hole punching fails, the relay carries the
-   transfer as a bounded fallback.
+   transfer as a bounded fallback. An interrupted transfer resumes where
+   it stopped, without fetching finished files again.
+4. **Staying reachable** — the sender reads its files in the background
+   while the code is on screen, and if the connection to the meeting
+   point drops (the tunnel restarted, the server was redeployed) it
+   reconnects and puts the same code back.
 
 ### Why WebSocket behind Cloudflare Tunnel?
 
@@ -125,15 +146,36 @@ Once the direct connection is up, Cloudflare never sees the files.
 ## Running the server
 
 ```bash
-PUBLIC_HOST=p2p-filetransfer.example.com \
+PUBLIC_HOST=rendezvous.example.com \
   docker compose up -d
 
 docker compose logs rendezvous   # grab the Peer ID
 curl localhost:8081/health
+curl -s localhost:8081/metrics | grep -E '^(puresend|libp2p_relaysvc)_'
 ```
 
 > ⚠️ Never delete the `rendezvous-key` volume. If the peer ID changes,
-> every client you already released stops working.
+> every client you already released stops working. Keep a copy of
+> `base64 -w0 /data/server.key` off the box; `FT_IDENTITY_KEY` restores
+> the same identity anywhere.
+
+The health and metrics endpoint binds to `127.0.0.1:8081` by default
+(`-health-addr`); the image opens it inside the container, and the
+compose file maps it to the host's loopback only.
+
+`rate(libp2p_relaysvc_data_transferred_bytes_total[1h])` is the number to
+watch: hole punch coordination moves a few kilobytes through the relay,
+so anything measured in megabytes is transfers that fell back to it.
+
+**Behind a tunnel, every client has the same address.** libp2p allows an
+address 8 connections, 8 relay reservations and a trickle of new
+connections; behind cloudflared or Docker's port proxy that would be 8
+for the whole world. Connections from `-trusted-proxies` (loopback and
+private networks by default) are not limited per address, and the relay
+holds as many reservations as there can be rooms. Per-client limits
+belong to the tunnel, which can see real addresses: a Cloudflare rate
+limiting rule on the hostname — IP, 20 requests per 10 seconds, block —
+is available on the free plan and caps how fast anyone can guess codes.
 
 Cloudflare Tunnel setup and the reasoning behind it:
 [deploy/cloudflared-config.yml](deploy/cloudflared-config.yml)
@@ -148,6 +190,16 @@ configuration. Set the `FT_SERVER` repository variable to
 git tag v0.1.0 && git push --tags
 ```
 
+The release workflow runs vet and the whole test suite first, and
+installs `syft` for the SBOMs.
+
+Released clients also carry the address of a server list — by default
+the landing page's [`server.txt`](LandingPage/public/server.txt), or
+`FT_SERVER_LIST` if set. A client reads it only when none of its
+built-in addresses answers, so if the server ever moves or changes
+identity, adding the new address there keeps every copy already
+downloaded working. Add the server's address to it once it is deployed.
+
 [GoReleaser](.goreleaser.yaml) produces six binaries (Linux / macOS /
 Windows × x86_64 / arm64).
 
@@ -161,25 +213,62 @@ go test ./...   # unit tests + real end-to-end tests over libp2p
 Three terminals on one machine:
 
 ```bash
-go run ./cmd/server -ws-port 8080 -health-port 8081
+go run ./cmd/server -ws-port 8080
 go run ./cmd/client -server /ip4/127.0.0.1/tcp/8080/ws/p2p/<PeerID>
+```
+
+`make` lists everything else: `make test` runs the suite with the race
+detector, `make lint` runs golangci-lint and `make vuln` govulncheck (both
+through `go run`, at the versions CI uses, so they are always built by
+your own Go), and `make test-relay` proves the relay fallback still works
+between two networks that cannot see each other.
+
+### Headless mode
+
+For scripts, machines without a terminal, and CI. The room code goes to
+stdout on its own line; everything else goes to stderr.
+
+```bash
+puresend -send holiday/            # prints a code, waits
+puresend -receive kiraz-liman-42 -out /mnt/disk -yes
+puresend -version
 ```
 
 ## Technology
 
-- **Go 1.25+**, **go-libp2p v0.48** — TCP + QUIC + WebSocket transports,
+- **Go 1.26+** (go.mod, the Dockerfile and CI agree), **go-libp2p v0.49** —
+  TCP + QUIC + WebSocket transports,
   Circuit Relay v2, DCUtR hole punching, AutoNAT v2, UPnP, Noise/TLS
 - **Bubble Tea + Lipgloss** — terminal interface
-- Two custom protocols: `/puresend/rendezvous/1.0.0` and
-  `/puresend/transfer/1.1.0`
+- **schollz/pake** — turning the room code into a shared key (PAKE2 over P-256)
+- **Prometheus client_golang** — server metrics at `/metrics`
+- Two custom protocols: `/puresend/rendezvous/1.1.0` and
+  `/puresend/transfer/2.0.0`
+
+## Security model in one paragraph
+
+The room code is a password, not just a lookup key: both ends derive a
+shared key from it and prove they hold it before a file list is exchanged.
+The code never crosses the wire, and both peer IDs are bound into the
+exchange. So the **rendezvous server is not a trusted party** — it is what
+tells the receiver who the sender is, and a peer of its own would fail the
+handshake. A code works exactly once: the sender retires it the moment the
+transfer completes. See [SECURITY.md](docs/SECURITY.md).
 
 ## Limitations
 
-- Whoever enters the code first gets the files. ~1.7 million combinations,
-  a per-peer guess limit and room-ownership protection guard it, but PAKE
-  would be a real improvement — as it stands **the server is trusted**
-  (it is what tells the receiver who the sender is).
-- No resume; an interrupted transfer restarts. Partial downloads are
-  cleaned up, so a corrupt file never looks complete.
-- Files only, no directories.
-- Relay fallback is capped at 256 MB per connection (`-relay-data`).
+- **The relay fallback is capped at 256 MB per connection**
+  (`-relay-data`). A larger transfer between two peers that cannot open a
+  direct route will break off — the receiver is warned before it starts,
+  and a retry resumes where it stopped.
+- **Empty folders do not survive the trip**: the protocol moves files, and
+  the tree is rebuilt from their relative paths.
+- **Symbolic links are skipped**, not followed — one pointing outside a
+  chosen folder would quietly widen what you agreed to send.
+- **At most 5000 files per transfer.**
+- **Names Windows cannot store are refused** on a Windows receiver
+  (`? * < > | "`, device names like `CON` or `NUL`), before the transfer
+  starts. Names with control characters are refused everywhere.
+- **The server sees metadata**: who meets whom, and when. Not the files, and
+  not the room code.
+- **Binaries are not code-signed**; your OS may warn on first launch.
