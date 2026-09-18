@@ -1,0 +1,110 @@
+package main
+
+import (
+	"fmt"
+	"strings"
+	"testing"
+	"time"
+
+	"filetransferilla/internal/rendezvous"
+
+	"github.com/libp2p/go-libp2p/core/network"
+	"github.com/multiformats/go-multiaddr"
+	"github.com/prometheus/client_golang/prometheus"
+)
+
+// TestTunnelClientsAreNotOneClient is the limit that would have bitten on
+// the first busy evening. Behind cloudflared every client arrives from the
+// tunnel's address — through Docker's bridge, not even loopback — and
+// libp2p's defaults allow one address 8 connections. Connections from the
+// trusted proxy networks must not share that allowance; everyone else
+// still gets libp2p's limits.
+func TestTunnelClientsAreNotOneClient(t *testing.T) {
+	trusted, err := parsePrefixes(defaultTrustedProxies)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rm, err := resourceManager(trusted)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rm.Close()
+
+	open := func(ip string) error {
+		addr := multiaddr.StringCast(fmt.Sprintf("/ip4/%s/tcp/4001", ip))
+		_, err := rm.OpenConnection(network.DirInbound, true, addr)
+		return err
+	}
+
+	// A container behind Docker's port proxy sees the bridge gateway. 30
+	// at once is well past the 8 an address gets by default, and still
+	// under the separate cap on connections mid-handshake, which these —
+	// never finishing one — would otherwise run into.
+	for i := range 30 {
+		if err := open("172.18.0.1"); err != nil {
+			t.Fatalf("connection %d through the tunnel was refused: %v", i+1, err)
+		}
+	}
+
+	// A single address on the open internet is still held to the defaults.
+	var refused bool
+	for range 20 {
+		if open("203.0.113.7") != nil {
+			refused = true
+			break
+		}
+	}
+	if !refused {
+		t.Error("an ordinary internet address was let through without a limit")
+	}
+}
+
+// TestRelayHoldsASlotPerRoom: libp2p allows 8 reservations per address
+// and 128 in all. Every room owner needs one, and behind a tunnel they all
+// share one address.
+func TestRelayHoldsASlotPerRoom(t *testing.T) {
+	rc := relayResources(256<<20, 10*time.Minute)
+	for name, got := range map[string]int{
+		"MaxReservations":       rc.MaxReservations,
+		"MaxReservationsPerIP":  rc.MaxReservationsPerIP,
+		"MaxReservationsPerASN": rc.MaxReservationsPerASN,
+	} {
+		if got < rendezvous.MaxRooms {
+			t.Errorf("%s = %d, fewer than the %d rooms the server may hold", name, got, rendezvous.MaxRooms)
+		}
+	}
+	if rc.Limit == nil || rc.Limit.Data != 256<<20 || rc.Limit.Duration != 10*time.Minute {
+		t.Errorf("relay limit = %+v, want the configured one", rc.Limit)
+	}
+}
+
+func TestParsePrefixes(t *testing.T) {
+	got, err := parsePrefixes(" 10.0.0.0/8, ::1/128 ,,")
+	if err != nil || len(got) != 2 {
+		t.Fatalf("parsePrefixes = %v, %v", got, err)
+	}
+	if _, err := parsePrefixes("10.0.0.0"); err == nil {
+		t.Error("an address without a prefix length was accepted")
+	}
+}
+
+// TestMetricsRegister guards against a registration panic at startup,
+// which is how the duplicate "version" label was found last time.
+func TestMetricsRegister(t *testing.T) {
+	reg := prometheus.NewRegistry()
+	registerMetrics(reg, "12D3KooWtest", rendezvous.NewRegistry())
+	families, err := reg.Gather()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var names []string
+	for _, f := range families {
+		names = append(names, f.GetName())
+	}
+	all := strings.Join(names, " ")
+	for _, want := range []string{"filetransferilla_active_rooms", "filetransferilla_rooms_abandoned_total", "go_goroutines"} {
+		if !strings.Contains(all, want) {
+			t.Errorf("metric %s is missing from %s", want, all)
+		}
+	}
+}

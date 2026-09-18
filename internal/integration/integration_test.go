@@ -35,7 +35,7 @@ func TestEndToEnd(t *testing.T) {
 	// The three parties, all in-process on localhost.
 	server := newHost(t)
 	registry := rendezvous.NewRegistry()
-	server.SetStreamHandler(rendezvous.ProtocolID, registry.Handler)
+	registry.Serve(server)
 
 	sender := newHost(t)
 	receiver := newHost(t)
@@ -68,11 +68,15 @@ func TestEndToEnd(t *testing.T) {
 	}
 	sendErr := make(chan error, 1)
 	sender.SetStreamHandler(transfer.ProtocolID, func(s network.Stream) {
-		sendErr <- transfer.Send(s, paths, nil)
+		sendErr <- transfer.SendPaths(s, paths, transfer.Credentials{
+			Code:     room,
+			Sender:   sender.ID().String(),
+			Receiver: s.Conn().RemotePeer().String(),
+		}, transfer.Hooks{})
 	})
 
 	// Receiver side: look up the room, connect, approve, receive.
-	info, err := rendezvous.Lookup(ctx, receiver, server.ID(), room)
+	info, _, err := rendezvous.Lookup(ctx, receiver, server.ID(), room)
 	if err != nil {
 		t.Fatalf("lookup: %v", err)
 	}
@@ -93,7 +97,11 @@ func TestEndToEnd(t *testing.T) {
 		confirmed = true
 		return len(m.Files) == len(want)
 	}
-	saved, err := transfer.Receive(s, outDir, confirm, nil)
+	saved, err := transfer.Receive(s, outDir, transfer.Credentials{
+		Code:     room,
+		Sender:   info.ID.String(),
+		Receiver: receiver.ID().String(),
+	}, confirm, transfer.Hooks{})
 	if err != nil {
 		t.Fatalf("receive: %v", err)
 	}
