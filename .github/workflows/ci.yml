@@ -5,6 +5,9 @@ on:
     branches: [main]
   pull_request:
 
+permissions:
+  contents: read
+
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -13,6 +16,105 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
+          cache: true
+
+      - name: Check formatting
+        run: |
+          unformatted="$(gofmt -l $(find . -name '*.go' -not -path './LandingPage/*'))"
+          if [ -n "$unformatted" ]; then
+            echo "::error::these files need gofmt:"
+            echo "$unformatted"
+            exit 1
+          fi
+
       - run: go build ./...
       - run: go vet ./...
-      - run: go test ./...
+
+      # -race matters more than usual here: the transfer runs in a stream
+      # handler goroutine while the interface reads its events, and the two
+      # meet on a channel.
+      - name: Test
+        run: go test -race -timeout 15m -coverprofile=coverage.out -covermode=atomic ./...
+
+      - name: Coverage summary
+        run: go tool cover -func=coverage.out | tail -1 >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage
+          path: coverage.out
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      # Pinned, and the same version `make lint` runs, so CI and a laptop
+      # never disagree about what counts as a finding.
+      - uses: golangci/golangci-lint-action@v8
+        with:
+          version: v2.13.2
+
+  vulncheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      # Only vulnerabilities the code can actually reach fail the build.
+      - run: make vuln
+
+  # The one case no other test can reach: two peers that cannot see each
+  # other at all, so the transfer *has* to go through the relay. It needs
+  # no privileges — unprivileged user and network namespaces do it — which
+  # is what makes it runnable here on every commit.
+  relay-fallback:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      # The test's namespaces have no network at all. make builds the
+      # binaries before entering them, but a cold cache is cheaper to
+      # rule out here than to debug there.
+      - run: go mod download
+      # Ubuntu 24.04 lets AppArmor forbid unprivileged user namespaces,
+      # which is exactly what the test is built on. Runner images have
+      # varied on this; lift it only where the switch exists.
+      - name: Allow unprivileged user namespaces
+        run: |
+          if sysctl -n kernel.apparmor_restrict_unprivileged_userns >/dev/null 2>&1; then
+            sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          fi
+      - name: Relay fallback over isolated networks
+        run: make test-relay
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the server image
+        run: docker build -t filetransferilla-server:ci .
+      - name: It starts and answers its health check
+        run: |
+          # The same restrictions the compose file applies.
+          docker run -d --name ft -p 8081:8081 \
+            --read-only --tmpfs /tmp --cap-drop ALL \
+            --security-opt no-new-privileges:true \
+            filetransferilla-server:ci
+          for _ in $(seq 1 30); do
+            if curl -fsS localhost:8081/health; then ok=1; break; fi
+            sleep 1
+          done
+          [ -n "${ok:-}" ] || { docker logs ft; exit 1; }
+          curl -fsS localhost:8081/metrics | grep -q filetransferilla_active_rooms
+          curl -fsS localhost:8081/metrics | grep -q libp2p_relaysvc_status
+          docker rm -fv ft
