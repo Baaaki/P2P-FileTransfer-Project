@@ -17,6 +17,10 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        # Stamped into the binary so /health, /metrics and `-version` all
+        # agree on which build is running.
+        VERSION: "${FT_VERSION:-dev}"
     restart: unless-stopped
 
     # The server is configured entirely through the flags below, but the
@@ -26,10 +30,15 @@ services:
     # timestamps Cloudflare and Openship record.
     environment:
       TZ: UTC
+      # Tell the Go runtime about the memory limit below, so it collects
+      # garbage harder as it gets close instead of being killed at it.
+      GOMEMLIMIT: 400MiB
 
     command:
       - "-ws-port=8080"
-      - "-health-port=8081"
+      # All interfaces inside the container; the ports block below keeps
+      # it on the host's loopback.
+      - "-health-addr=0.0.0.0:8081"
       - "-key=/data/server.key"
       # Public address clients dial. Cloudflare terminates TLS on 443 and
       # forwards plain WebSocket to us, which is why clients use /tls/ws
@@ -41,12 +50,16 @@ services:
       # importing the repo, an editor, `docker compose config` — then
       # fails with "set PUBLIC_HOST" and reports it as a broken file.
       # Setting PUBLIC_HOST still overrides this.
-      - "-announce=/dns4/${PUBLIC_HOST:-p2p-filetransfer.madebybaki.com}/tcp/443/tls/ws"
+      - "-announce=/dns4/${PUBLIC_HOST:-rendezvous.madebybaki.com}/tcp/443/tls/ws"
       # Bounded relay fallback. The relay is mainly there to bootstrap
       # hole punching (a few KB); this cap keeps a failed hole punch from
       # streaming gigabytes through your home connection and Cloudflare.
       - "-relay-data=268435456"     # 256 MB per connection
       - "-relay-duration=10m"
+      # One sender cannot claim the whole room table and leave everyone
+      # else with "server is full". The program opens one room per
+      # session, so one is all an honest client needs.
+      - "-rooms-per-peer=1"
 
     ports:
       # Bound to localhost only: cloudflared reaches it over the loopback,
@@ -66,6 +79,29 @@ services:
       timeout: 5s
       retries: 3
       start_period: 10s
+
+    # Hardening. The server needs none of what a container gets by
+    # default: it writes only its key, to the volume; it binds only
+    # unprivileged ports; it never starts another process. Taking all of
+    # that away costs nothing and limits what a compromise could do.
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - "no-new-privileges:true"
+    # A server under a connection flood should hit its own limits, not
+    # take the rest of the box down with it.
+    mem_limit: 512m
+    pids_limit: 256
+    # Docker keeps container logs forever by default; a busy server fills
+    # the disk with them.
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
 volumes:
   rendezvous-key:

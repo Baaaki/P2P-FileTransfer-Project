@@ -20,7 +20,7 @@
 # straight through a normal HTTP ingress.
 #
 # Cloudflare terminates TLS on 443, so clients dial
-#   /dns4/p2p-filetransfer.madebybaki.com/tcp/443/tls/ws/p2p/<PeerID>
+#   /dns4/rendezvous.madebybaki.com/tcp/443/tls/ws/p2p/<PeerID>
 # while the server itself listens on plain /ip4/0.0.0.0/tcp/8080/ws.
 #
 #
@@ -32,7 +32,7 @@
 #
 #   2. Point the hostname at the tunnel you already have:
 #        cloudflared tunnel route dns <existing-tunnel> \
-#          p2p-filetransfer.madebybaki.com
+#          rendezvous.madebybaki.com
 #
 #      This writes a CNAME to <tunnel-id>.cfargotunnel.com. If you created
 #      the DNS record by hand, check it is exactly that CNAME and proxied
@@ -53,7 +53,7 @@
 #
 #   cloudflared tunnel login
 #   cloudflared tunnel create filetransferilla
-#   cloudflared tunnel route dns filetransferilla p2p-filetransfer.madebybaki.com
+#   cloudflared tunnel route dns filetransferilla rendezvous.madebybaki.com
 #   sudo cp deploy/cloudflared-config.yml /etc/cloudflared/config.yml
 #   sudo cloudflared service install
 #
@@ -64,7 +64,7 @@ credentials-file: /root/.cloudflared/filetransferilla.json
 
 ingress:
   # ── This is the block to copy into an existing tunnel's ingress list ──
-  - hostname: p2p-filetransfer.madebybaki.com
+  - hostname: rendezvous.madebybaki.com
     service: http://localhost:8080
     originRequest:
       # The rendezvous server holds one long-lived connection per waiting

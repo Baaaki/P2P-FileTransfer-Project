@@ -1,16 +1,26 @@
 # Keep these out of the image.
 #
 # Openship uses the repo root as the build context for every service, so
-# this is the only .dockerignore that counts. A clean clone has no
-# binaries in it; these entries are what keep a *local* build from
-# shipping a 34 MB compiled server to the daemon.
+# this is the only .dockerignore that counts. The image needs go.mod,
+# go.sum, cmd/ and internal/; everything else only makes the context
+# bigger. The landing page is the one that matters: after an `npm
+# install` its node_modules alone is hundreds of megabytes, sent to the
+# daemon on every build.
 *.key
 received/
 *.md
 .git/
+.github/
+docs/
+test/
+LandingPage/
+**/node_modules/
 
-# Compiled binaries (see .gitignore — never committed, but present locally)
+# Compiled binaries and test output (see .gitignore — never committed,
+# but present locally)
 /server
 /client
 /filetransferilla
+/bin/
 dist/
+coverage.out
