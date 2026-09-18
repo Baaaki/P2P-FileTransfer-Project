@@ -1,11 +1,14 @@
 # Cross-compiles the desktop client for every OS and publishes it to
 # GitHub Releases.
 #
-#   export FT_SERVER=/dns4/puresend.madebybaki.com/tcp/443/tls/ws/p2p/12D3Koo...
+#   export FT_SERVER=/dns4/rendezvous.madebybaki.com/tcp/443/tls/ws/p2p/12D3Koo...
 #   git tag v0.1.0 && git push --tags
 #
 # FT_SERVER is baked into the binary, which is what lets a user just
-# double-click it — no flags, no configuration.
+# double-click it — no flags, no configuration. FT_SERVER_LIST is the
+# address of a small text file listing the current meeting points, which a
+# client reads only if FT_SERVER stops answering: it is what keeps copies
+# already downloaded alive if the server ever changes address or identity.
 version: 2
 
 project_name: puresend
@@ -27,6 +30,30 @@ builds:
     ldflags:
       - -s -w
       - -X main.defaultServer={{ .Env.FT_SERVER }}
+      - -X main.defaultServerList={{ envOrDefault "FT_SERVER_LIST" "https://puresend.madebybaki.com/server.txt" }}
+      # Stamped so `puresend -version` can answer the first
+      # question any bug report raises.
+      - -X main.version={{ .Version }}
+      - -X main.commit={{ .FullCommit }}
+      - -X main.date={{ .Date }}
+
+  # The server is not something users download, but shipping it means a
+  # deployment can be pinned to a released version instead of to whatever
+  # main happened to be at the time.
+  - id: server
+    main: ./cmd/server
+    binary: puresend-server
+    env:
+      - CGO_ENABLED=0
+    goos: [linux]
+    goarch: [amd64, arm64]
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w
+      - -X main.version={{ .Version }}
+      - -X main.commit={{ .FullCommit }}
+      - -X main.date={{ .Date }}
 
 archives:
   - id: client
@@ -44,8 +71,24 @@ archives:
       - README.md
       - LICENSE
 
+  - id: server
+    ids: [server]
+    formats: [tar.gz]
+    name_template: >-
+      {{ .ProjectName }}-server_{{ .Version }}_{{ .Os }}_
+      {{- if eq .Arch "amd64" }}x86_64{{ else }}{{ .Arch }}{{ end }}
+    files:
+      - README.md
+      - LICENSE
+
 checksum:
   name_template: "checksums.txt"
+
+# A machine-readable list of what went into each archive, generated with
+# syft (the release workflow installs it). Anyone can then check a
+# download against a vulnerability database without taking it apart.
+sboms:
+  - artifacts: archive
 
 changelog:
   use: github

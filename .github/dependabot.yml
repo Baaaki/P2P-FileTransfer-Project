@@ -1,0 +1,25 @@
+# Dependency updates. Weekly rather than daily: this project has one
+# dependency that matters (go-libp2p) and a wall of pull requests would
+# just get ignored.
+version: 2
+updates:
+  - package-ecosystem: gomod
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      libp2p:
+        patterns: ["github.com/libp2p/*", "github.com/multiformats/*"]
+      charm:
+        patterns: ["github.com/charmbracelet/*"]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: monthly

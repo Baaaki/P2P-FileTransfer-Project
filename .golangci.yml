@@ -1,0 +1,66 @@
+# Lint configuration. The aim is a small set of checks that catch real
+# mistakes, not a wall of style complaints — a linter people turn off is
+# worse than no linter.
+version: "2"
+
+linters:
+  default: standard # errcheck, govet, ineffassign, staticcheck, unused
+  enable:
+    - bodyclose # an unclosed HTTP body leaks a connection
+    - copyloopvar
+    - errorlint # %w and errors.Is/As used properly
+    - misspell
+    - nilerr
+    - noctx
+    - revive
+    - unconvert
+    - usestdlibvars
+    - wastedassign
+
+  settings:
+    errcheck:
+      # Deliberate ignores that a check would only make noisier. Everything
+      # here is either a best-effort write on a connection that is already
+      # failing, or cleanup with nothing useful to do about a failure. Where
+      # the reasoning is less obvious, the call site writes `_ =` instead,
+      # so the decision is visible in the code being read.
+      exclude-functions:
+        - (*encoding/json.Encoder).Encode # telling a dead peer why it failed
+        - (io.Closer).Close
+        - (*os.File).Close # write handles are closed and checked explicitly
+        - os.Remove # removing leftovers that may already be gone
+        - fmt.Fprintf # writing to an http.ResponseWriter
+        - (github.com/libp2p/go-libp2p/core/network.Stream).SetDeadline
+    revive:
+      rules:
+        - name: exported
+          disabled: true # doc comments are reviewed by people, not by a rule
+    misspell:
+      # The interface is written in Turkish; several ordinary Turkish words
+      # look like misspelled English ones.
+      ignore-rules:
+        - adres
+        - hata
+        - kod
+        - servis
+
+    staticcheck:
+      checks:
+        - all
+        - -ST1000 # package comments are checked by review
+        - -ST1003 # initialisms; the codebase reads fine
+
+  exclusions:
+    rules:
+      # Tests deliberately ignore errors from setup helpers and drive
+      # failure paths that a linter reads as mistakes.
+      - path: _test\.go$
+        linters: [errcheck, noctx, bodyclose]
+
+formatters:
+  enable:
+    - gofmt
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0
