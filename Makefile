@@ -107,8 +107,13 @@ dev: build
 docker:
 	docker build -t filetransferilla-server:$(VERSION) .
 
+## deb: build a .deb package for Debian/Ubuntu/Mint
+deb:
+	./scripts/build-deb.sh
+
 ## clean: remove build output
 clean:
 	rm -rf $(BIN) coverage.out
 
-.PHONY: help build test test-short test-relay cover vet lint vuln fmt tidy dev docker clean
+.PHONY: help build test test-short test-relay cover vet lint vuln fmt tidy dev docker deb clean
+
