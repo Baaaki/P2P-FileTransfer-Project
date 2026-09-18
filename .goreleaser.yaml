@@ -81,6 +81,31 @@ archives:
       - README.md
       - LICENSE
 
+nfpms:
+  - id: client-deb
+    package_name: puresend
+    builds:
+      - client
+    formats:
+      - deb
+    file_name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Arch }}"
+    vendor: Baki
+    homepage: https://github.com/Baaaki/PureSend
+    maintainer: Baki <contact@madebybaki.com>
+    description: Guvenli, sifreli, dogrudan P2P dosya transfer araci
+    license: GPL-3.0
+    bindir: /usr/bin
+    contents:
+      - src: packaging/puresend.desktop
+        dst: /usr/share/applications/puresend.desktop
+        file_info:
+          mode: 0644
+      - src: packaging/puresend.svg
+        dst: /usr/share/icons/hicolor/scalable/apps/puresend.svg
+        file_info:
+          mode: 0644
+
+
 checksum:
   name_template: "checksums.txt"
 

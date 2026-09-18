@@ -1,0 +1,12 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=PureSend
+GenericName=P2P Dosya Transferi
+Comment=Uçtan uca şifreli, doğrudan P2P dosya transfer aracı
+Exec=puresend
+Icon=puresend
+Terminal=true
+Categories=Network;FileTransfer;
+Keywords=p2p;transfer;share;file;wormhole;dosya;paylasim;
+StartupNotify=false
