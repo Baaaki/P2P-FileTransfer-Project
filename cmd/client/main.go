@@ -24,12 +24,15 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"os/exec"
 	"runtime"
 	"strings"
 
 	"puresend/internal/headless"
 	"puresend/internal/p2p"
 	"puresend/internal/tui"
+
+	"github.com/charmbracelet/x/term"
 )
 
 // Build information, filled in at build time with -ldflags -X. Releases
@@ -100,7 +103,64 @@ func main() {
 	case *receive != "":
 		run(headless.Receive(servers, *receive, outDir, *yes, list))
 	default:
+		maybeSpawnTerminal()
 		run(tui.Run(tui.Config{Servers: servers, ServerList: *serverList, OutDir: *out}))
+	}
+}
+
+// maybeSpawnTerminal launches a terminal window if the user double-clicked
+// the binary from a graphical desktop (Linux Mint Nemo, Ubuntu Nautilus, etc.).
+func maybeSpawnTerminal() {
+	if runtime.GOOS != "linux" {
+		return
+	}
+	if os.Getenv("FT_IN_TERMINAL") != "" {
+		return
+	}
+	// If DISPLAY and WAYLAND_DISPLAY are empty, we are on a purely headless server without desktop.
+	if os.Getenv("DISPLAY") == "" && os.Getenv("WAYLAND_DISPLAY") == "" {
+		return
+	}
+	// If already running in a terminal emulator, do nothing.
+	if term.IsTerminal(os.Stdin.Fd()) || term.IsTerminal(os.Stdout.Fd()) {
+		return
+	}
+
+	exe, err := os.Executable()
+	if err != nil {
+		return
+	}
+
+	// Supported terminal emulators on Linux desktop environments
+	type termChoice struct {
+		bin  string
+		args []string
+	}
+	choices := []termChoice{
+		{"x-terminal-emulator", []string{"-e"}},
+		{"gnome-terminal", []string{"--"}},
+		{"mate-terminal", []string{"-e"}},
+		{"xfce4-terminal", []string{"-e"}},
+		{"konsole", []string{"-e"}},
+		{"alacritty", []string{"-e"}},
+		{"kitty", nil},
+		{"xterm", []string{"-e"}},
+	}
+
+	for _, c := range choices {
+		path, err := exec.LookPath(c.bin)
+		if err != nil {
+			continue
+		}
+		var cmdArgs []string
+		cmdArgs = append(cmdArgs, c.args...)
+		cmdArgs = append(cmdArgs, exe)
+		cmdArgs = append(cmdArgs, os.Args[1:]...)
+		cmd := exec.Command(path, cmdArgs...)
+		cmd.Env = append(os.Environ(), "FT_IN_TERMINAL=1")
+		if err := cmd.Start(); err == nil {
+			os.Exit(0)
+		}
 	}
 }
 
