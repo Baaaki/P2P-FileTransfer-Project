@@ -479,6 +479,12 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		case "esc", "q":
 			m.screen = m.backScreen
 			return m, nil
+		case "backspace", "left", "u":
+			parent := filepath.Dir(m.dirPicker.CurrentDirectory)
+			if parent != "" && parent != m.dirPicker.CurrentDirectory {
+				m.dirPicker.CurrentDirectory = parent
+				return m, m.dirPicker.Init()
+			}
 		}
 		var cmd tea.Cmd
 		m.dirPicker, cmd = m.dirPicker.Update(msg)
@@ -771,13 +777,14 @@ func (m Model) viewPickFiles() string {
 func (m Model) viewOutDir() string {
 	var b strings.Builder
 	b.WriteString(titleStyle.Render("📁  İnen dosyalar nereye kaydedilsin?") + "\n\n")
-	b.WriteString(helpStyle.Render("Klasörlerin içine girmek için Enter'a bas. İçinde olduğun") + "\n")
-	b.WriteString(helpStyle.Render("klasörü seçmek için s'ye bas.") + "\n\n")
+	b.WriteString(helpStyle.Render("• Enter : Seçili klasörün içine gir") + "\n")
+	b.WriteString(helpStyle.Render("• Backspace veya ← : Bir üst klasöre çık") + "\n")
+	b.WriteString(helpStyle.Render("• s : Aşağıda 'Şu an burası' yazan klasörü seç") + "\n\n")
 	b.WriteString(bodyStyle.Render("Şu an burası: ") + "\n")
 	b.WriteString(fileStyle.Render(m.dirPicker.CurrentDirectory) + "\n\n")
 	b.WriteString(m.dirPicker.View() + "\n")
-	b.WriteString(buttonSelStyle.Render("s  ·  Burayı seç") + "\n\n")
-	b.WriteString(footerStyle.Render("↑ ↓ gez  ·  Enter aç  ·  s seç  ·  Esc vazgeç"))
+	b.WriteString(buttonSelStyle.Render("s  ·  Burayı seç ("+filepath.Base(m.dirPicker.CurrentDirectory)+")") + "\n\n")
+	b.WriteString(footerStyle.Render("↑ ↓ gez  ·  Enter aç  ·  Backspace/← yukarı çık  ·  s seç  ·  Esc vazgeç"))
 	return b.String()
 }
 
