@@ -1,0 +1,11 @@
+# FileTransferilla — current meeting point addresses.
+#
+# A released client reads this file only when none of the addresses built
+# into it answers: if the rendezvous server ever changes host or identity,
+# copies already downloaded find it here instead of stopping for good.
+#
+# One multiaddr per line, tried in order. Lines starting with # are ignored.
+# After deploying the server, add the address it prints under
+# "Client address", for example:
+#
+#   /dns4/rendezvous.madebybaki.com/tcp/443/tls/ws/p2p/12D3KooW...

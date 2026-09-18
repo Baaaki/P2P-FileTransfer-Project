@@ -1,0 +1,61 @@
+name: landing
+
+on:
+  push:
+    branches: [main]
+    paths: ["LandingPage/**", ".github/workflows/landing.yml"]
+  pull_request:
+    paths: ["LandingPage/**", ".github/workflows/landing.yml"]
+
+permissions:
+  contents: read
+
+jobs:
+  # A page that does not build or lint never reaches the deploy.
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: LandingPage
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: LandingPage/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run build
+      # Released clients fall back to this file when their built-in server
+      # address stops answering; the page is what publishes it.
+      - name: The server list ships with the page
+        run: test -f dist/server.txt
+
+  # Deploying from here is optional. If the Vercel project is connected
+  # through Vercel's own Git integration (Root Directory: LandingPage), it
+  # deploys every push by itself: leave VERCEL_PROJECT_ID unset and this
+  # job never runs. To deploy from Actions instead, turn off the
+  # integration's automatic deploys and set the VERCEL_ORG_ID and
+  # VERCEL_PROJECT_ID variables and the VERCEL_TOKEN secret.
+  deploy:
+    needs: build
+    if: github.event_name == 'push' && vars.VERCEL_PROJECT_ID != ''
+    runs-on: ubuntu-latest
+    env:
+      VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: npx --yes vercel@latest pull --yes --environment=production --token="$VERCEL_TOKEN"
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      - run: npx --yes vercel@latest build --prod --token="$VERCEL_TOKEN"
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      - run: npx --yes vercel@latest deploy --prebuilt --prod --token="$VERCEL_TOKEN"
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
