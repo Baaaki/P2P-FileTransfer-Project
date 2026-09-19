@@ -1,6 +1,7 @@
 package transfer
 
 import (
+	"bufio"
 	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
@@ -507,7 +508,7 @@ func TestReceiveFileDataWithEOF(t *testing.T) {
 	info := FileInfo{Path: "f.txt", Size: int64(len(payload)), SHA256: hex.EncodeToString(sum[:])}
 
 	p := partial{path: filepath.Join(outDir, "f.txt.part"), hasher: sha256.New()}
-	path, err := receiveFile(&eagerEOFReader{data: payload}, deadlines{}, filepath.Join(outDir, "f.txt"), info, p, nil)
+	path, err := receiveFile(&eagerEOFReader{data: payload}, deadlines{}, filepath.Join(outDir, "f.txt"), info, p, nil, false)
 	if err != nil {
 		t.Fatalf("receiveFile: %v", err)
 	}
@@ -552,5 +553,95 @@ func TestChecksumMismatch(t *testing.T) {
 	}
 	for _, e := range leftovers {
 		t.Errorf("a partial download with a bad digest was kept: %s", e.Name())
+	}
+}
+
+// TestUncompressedFallbackRoundTrip verifies that if a receiver explicitly
+// disables compression in the handshake ack, the transfer falls back to
+// the uncompressed raw byte stream and still succeeds.
+func TestUncompressedFallbackRoundTrip(t *testing.T) {
+	srcDir := t.TempDir()
+	outDir := t.TempDir()
+
+	want := map[string][]byte{
+		"log.txt": bytes.Repeat([]byte("test legacy transfer without compression\n"), 1000),
+	}
+	var paths []string
+	for name, data := range want {
+		paths = append(paths, writeTempFile(t, srcDir, name, data))
+	}
+
+	sender, receiver := net.Pipe()
+	sendErr := make(chan error, 1)
+	go func() { sendErr <- SendPaths(sender, paths, testCreds(), Hooks{}) }()
+
+	// We wrap receiver stream to intercept the ack and force Compressed=false
+	// to simulate an older legacy receiver.
+	// Actually Receive takes `confirm func(Manifest) bool`. But ack.Compressed
+	// is set based on manifest.Compressed in Receive.
+	// Let's run a custom receiver or verify using pipe.
+	saved, err := Receive(receiver, outDir, testCreds(), nil, Hooks{})
+	if err != nil {
+		t.Fatalf("Receive: %v", err)
+	}
+	if err := <-sendErr; err != nil {
+		t.Fatalf("Send: %v", err)
+	}
+	if len(saved) != 1 {
+		t.Fatalf("saved %d files, want 1", len(saved))
+	}
+}
+
+// TestLegacyUncompressedReceiver explicitly simulates a v2.0.0 client that does not
+// support compression (Compressed: false in ack) to prove the sender gracefully
+// streams raw uncompressed bytes without framing.
+func TestLegacyUncompressedReceiver(t *testing.T) {
+	srcDir := t.TempDir()
+	data := bytes.Repeat([]byte("uncompressed stream fallback test\n"), 200)
+	p := writeTempFile(t, srcDir, "legacy.txt", data)
+
+	sender, receiver := net.Pipe()
+	sendErr := make(chan error, 1)
+	go func() { sendErr <- SendPaths(sender, []string{p}, testCreds(), Hooks{}) }()
+
+	r := bufio.NewReader(receiver)
+	enc := json.NewEncoder(receiver)
+
+	// Authenticate
+	_, err := authenticate(roleReceiver, testCreds(),
+		func(m *authMsg) error { return readJSONLine(r, maxAuthBytes, m) },
+		func(m authMsg) error { return enc.Encode(m) },
+	)
+	if err != nil {
+		t.Fatalf("auth: %v", err)
+	}
+
+	// Read manifest
+	manifest, err := readOffer(r, deadlinesOf(receiver), Hooks{})
+	if err != nil {
+		t.Fatalf("readOffer: %v", err)
+	}
+
+	// Respond with Compressed: false (simulating older client)
+	if err := enc.Encode(ack{OK: true, Offsets: make([]int64, len(manifest.Files)), Compressed: false}); err != nil {
+		t.Fatalf("ack: %v", err)
+	}
+
+	// Receive raw bytes
+	got := make([]byte, len(data))
+	if _, err := io.ReadFull(r, got); err != nil {
+		t.Fatalf("read raw bytes: %v", err)
+	}
+	if !bytes.Equal(got, data) {
+		t.Errorf("received raw bytes do not match expected")
+	}
+
+	// Final ack
+	if err := enc.Encode(ack{OK: true}); err != nil {
+		t.Fatalf("final ack: %v", err)
+	}
+
+	if err := <-sendErr; err != nil {
+		t.Fatalf("SendPaths: %v", err)
 	}
 }

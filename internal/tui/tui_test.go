@@ -543,3 +543,19 @@ func TestReceiverSeesSenderPreparing(t *testing.T) {
 		t.Errorf("the sender's progress is not shown:\n%s", m.View())
 	}
 }
+
+// TestWelcomeShowsUpdateNotification tests that receiving an update notification
+// displays the update banner on the welcome screen.
+func TestWelcomeShowsUpdateNotification(t *testing.T) {
+	m := New(Config{Servers: []string{"x"}, Version: "v0.2.0"})
+	next, _ := m.Update(updateAvailableMsg{tag: "v0.3.0"})
+	updated := next.(Model)
+
+	view := updated.View()
+	if !strings.Contains(view, "Yeni bir sürüm mevcut (v0.3.0)") {
+		t.Errorf("expected update banner in view, got:\n%s", view)
+	}
+	if !strings.Contains(view, "puresend -update") {
+		t.Errorf("expected update command instruction in view, got:\n%s", view)
+	}
+}
