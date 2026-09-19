@@ -26,3 +26,4 @@ package() {
         install -Dm644 "${srcdir}/filetransferilla.svg" "${pkgdir}/usr/share/icons/hicolor/scalable/apps/filetransferilla.svg"
     fi
 }
+

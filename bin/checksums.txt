@@ -1,0 +1,32 @@
+# ==============================================================================
+#   ______ _ _    _______                        __           _ _ _       
+#  |  ____(_) |  |__   __|                      / _|         (_) | |      
+#  | |__   _| | ___ | |_ __ __ _ _ __  ___      | |_ ___ _ __ _| | | __ _ 
+#  |  __| | | |/ _ \| | '__/ _` | '_ \/ __|_____|  _/ _ \ '__| | | |/ _` |
+#  | |    | | |  __/| | | | (_| | | | \__ \_____| ||  __/ |  | | | | (_| |
+#  |_|    |_|_|\___||_|_|  \__,_|_| |_|___/     |_| \___|_|  |_|_|_|\__,_|
+#
+#  FILETRANSFERILLA · RESMI SURUM SAGLAMA TOPLAMLARI (SHA-256 CHECKSUMS)
+#  Surum / Version : v0.3.0
+#  Web Sitesi      : https://p2p-filetransfer.madebybaki.com
+#  Kaynak Kod      : https://github.com/Baaaki/P2P-FileTransfer-Project
+# ==============================================================================
+#
+#  [TR] Dogrulama Nasil Yapilir?
+#       Linux / macOS : sha256sum -c checksums.txt --ignore-missing
+#       Windows (PS)  : Get-FileHash <dosya_adi> -Algorithm SHA256
+#
+#  [EN] How to Verify?
+#       Linux / macOS : sha256sum -c checksums.txt --ignore-missing
+#       Windows (PS)  : Get-FileHash <file_name> -Algorithm SHA256
+#
+# ==============================================================================
+
+7804a22e7a2b859829df132996d2ad4d6dabb07509d25170920b4978784827e2  filetransferilla
+fa689e59d7da32b7b8a80a0f6ddf410507f5735ce5546ae5cbaec053aa5d7902  filetransferilla.exe
+77e2dbf36b737215b5a5b22d8cb21a3e7eb60c5a34c7e00f5de6f4989eb9c9ac  filetransferilla_mac_arm64
+f68daccc1f911abffd9ed3206e9cbb3438859c77dbf19edff3f23394ce0a667f  filetransferilla_0.3.0_amd64.deb
+
+# ==============================================================================
+#  [✓] All official release binaries verified with SHA-256
+# ==============================================================================
