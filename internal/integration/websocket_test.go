@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -43,7 +44,21 @@ func startWSServer(t *testing.T, priv crypto.PrivKey, listen string) (host.Host,
 	if priv != nil {
 		opts = append(opts, libp2p.Identity(priv))
 	}
-	h, err := libp2p.New(opts...)
+	var (
+		h   host.Host
+		err error
+	)
+	for i := 0; i < 20; i++ {
+		h, err = libp2p.New(opts...)
+		if err == nil {
+			break
+		}
+		if strings.Contains(err.Error(), "address already in use") {
+			time.Sleep(100 * time.Millisecond)
+			continue
+		}
+		break
+	}
 	if err != nil {
 		t.Fatal(err)
 	}
