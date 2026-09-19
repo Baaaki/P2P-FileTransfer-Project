@@ -2,7 +2,7 @@
 # Contributor: PureSend Contributors
 
 pkgname=puresend-bin
-pkgver=0.3.0
+pkgver=1.0.0
 pkgrel=1
 pkgdesc="Fast, secure, p2p terminal file transfer tool (WebRTC/P2P, End-to-End Encrypted)"
 arch=('x86_64')
@@ -13,7 +13,7 @@ conflicts=('puresend')
 source_x86_64=("https://puresend.madebybaki.com/downloads/puresend"
                "puresend.desktop"
                "puresend.svg")
-sha256sums_x86_64=('6be34f8313d65e739077ba45b360f4b9deaa2df1211df0ef2f4c83ea1988cfbc'
+sha256sums_x86_64=('b228d18ec4c8d90d42ae91748e98d9c02bc88d6f0c44e260e07c6cbca05bdb13'
                    'SKIP'
                    'SKIP')
 

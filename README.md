@@ -94,7 +94,7 @@ puresend -send ./belgeler/
 puresend -receive kiraz-liman-42 -out /var/backups -yes
 
 # En son sürüme güncelle
-puresend update
+puresend -update
 ```
 
 ---

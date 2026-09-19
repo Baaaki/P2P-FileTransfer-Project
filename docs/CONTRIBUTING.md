@@ -12,7 +12,7 @@ their tools themselves, with your Go, at the versions CI uses.
 
 ```bash
 git clone https://github.com/Baaaki/PureSend
-cd P2P-FileTransfer-Project
+cd PureSend
 make            # lists the targets
 make test       # the whole suite, race detector on
 ```

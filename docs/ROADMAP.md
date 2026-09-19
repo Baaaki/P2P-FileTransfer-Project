@@ -36,7 +36,8 @@ go-libp2p'de **varsayılan olarak açık** (`defaults.go` → `Transport(ws.New)
 ```
 İstemci                    Cloudflare Edge            Ubuntu Server
    │                             │                          │
-   │  wss://p2p-filetransfer...  │                          │
+   │  wss://puresend...  │                          │
+   │  wss://puresend...          │                          │
    │  /tcp/443/tls/ws  ─────────►│  TLS burada biter        │
    │                             │                          │
    │                             │  ws:// (düz) ───────────►│ cloudflared

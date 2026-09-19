@@ -114,14 +114,8 @@ nfpms:
 checksum:
   name_template: "checksums.txt"
 
-# A machine-readable list of what went into each archive, generated with
-# syft (the release workflow installs it). Anyone can then check a
-# download against a vulnerability database without taking it apart.
-sboms:
-  - artifacts: archive
-
 changelog:
-  use: github
+  use: git
   sort: asc
   filters:
     exclude:
@@ -132,12 +126,19 @@ changelog:
 release:
   draft: false
   header: |
-    ## Kurulum
+    # 📦 PureSend
 
-    Aşağıdan işletim sistemine uygun dosyayı indir, arşivden çıkar ve çalıştır.
-    Ayar yapman gerekmiyor.
+    Go ile geliştirilmiş, uçtan uca şifreli (Zero-Trust) ve doğrudan eşler arası (P2P) dosya ve klasör transfer sistemi.
+
+    ### ⚡ Hızlı Kurulum
+
+    - **Linux & macOS:** `curl -fsSL https://puresend.madebybaki.com/install.sh | sh`
+    - **Windows (PowerShell):** `irm https://puresend.madebybaki.com/install.ps1 | iex`
+    - **Arch Linux (AUR):** `yay -S puresend-bin`
+
+    ---
 
   footer: |
-    **macOS not:** İlk açılışta "geliştirici doğrulanamadı" uyarısı çıkarsa,
-    dosyaya sağ tıklayıp *Aç* de, ya da terminalde:
+    ---
+    **macOS Notu:** İlk açılışta *"geliştirici doğrulanamadı"* uyarısı çıkarsa, dosyaya sağ tıklayıp *Aç* deyin ya da terminalde şu komutu çalıştırın:
     `xattr -d com.apple.quarantine puresend`

@@ -277,7 +277,10 @@ func (c *cutAfter) Write(p []byte) (int, error) {
 func TestResumeAfterInterruption(t *testing.T) {
 	srcDir := t.TempDir()
 	outDir := t.TempDir()
-	payload := bytes.Repeat([]byte("puresend"), 64*1024) // 1 MB
+	payload := make([]byte, 1<<20) // 1 MB
+	for i := range payload {
+		payload[i] = byte(i*31%251 + 1)
+	}
 	src := writeTempFile(t, srcDir, "video.bin", payload)
 
 	// First attempt: dies partway through.

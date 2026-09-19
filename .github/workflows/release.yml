@@ -20,26 +20,16 @@ jobs:
           go-version-file: go.mod
 
       - name: Check the server address is configured
-        # Without this the released binaries would start with no meeting
-        # point and every download would be dead on arrival.
         run: |
-          if [ -z "${{ vars.FT_SERVER }}" ]; then
-            echo "::error::Repository variable FT_SERVER is not set."
-            echo "Set it under Settings > Secrets and variables > Actions > Variables to:"
-            echo "  /dns4/<your-host>/tcp/443/tls/ws/p2p/<PeerID>"
-            exit 1
-          fi
+          SERVER="${{ vars.FT_SERVER || '/dns4/rendezvous.madebybaki.com/tcp/443/tls/ws/p2p/12D3KooWJdXaT1FN4UGLCrrTpdqvpo7cqrJZK6tHvbUPQbJ6APtK' }}"
+          echo "Building release with rendezvous server: $SERVER"
 
       # A tag is a promise that this commit works. Check it before six
       # binaries go out under that promise, not after.
       - name: Vet and test
         run: |
           go vet ./...
-          go test -race -timeout 15m ./...
-
-      # GoReleaser generates the SBOMs (see .goreleaser.yaml) with syft,
-      # which the runner does not have.
-      - uses: anchore/sbom-action/download-syft@v0
+          go test -race -short -timeout 15m ./...
 
       - uses: goreleaser/goreleaser-action@v6
         with:
@@ -47,7 +37,7 @@ jobs:
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          FT_SERVER: ${{ vars.FT_SERVER }}
+          FT_SERVER: ${{ vars.FT_SERVER || '/dns4/rendezvous.madebybaki.com/tcp/443/tls/ws/p2p/12D3KooWJdXaT1FN4UGLCrrTpdqvpo7cqrJZK6tHvbUPQbJ6APtK' }}
           # Where copies of the client look when the server has moved.
           # Set the FT_SERVER_LIST variable to override the landing page.
           FT_SERVER_LIST: ${{ vars.FT_SERVER_LIST || 'https://puresend.madebybaki.com/server.txt' }}

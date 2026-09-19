@@ -94,7 +94,7 @@ puresend -send ./backups/
 puresend -receive apple-port-42 -out /var/data -yes
 
 # In-place self-update to latest release
-puresend update
+puresend -update
 ```
 
 ---
