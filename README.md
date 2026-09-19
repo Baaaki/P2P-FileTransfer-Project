@@ -147,7 +147,7 @@ go run ./cmd/client -server /ip4/127.0.0.1/tcp/8080/ws/p2p/<PeerID>
 | **`internal/transfer/`** | Dosya aktarımı, SPAKE2 kimlik doğrulama ve resume motoru |
 | **`internal/tui/`** | Bubble Tea & Lipgloss tabanlı terminal arayüzü |
 | **`internal/safetext/`** | Terminal kaçış dizileri ve bidi/RTLO güvenlik filtresi |
-| **`LandingPage/`** | React 19 + Vite + Tailwind v4 tanıtım sayfası ve TUI simülatörü |
+| **`scripts/`** | Yerel `.deb` paketleme ve derleme betikleri |
 | **`packaging/`** | `.desktop` başlatıcı, SVG simge ve `.deb` paket tanımları |
 | **`deploy/`** | Cloudflare Tunnel yapılandırma şablonları |
 

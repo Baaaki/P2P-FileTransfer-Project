@@ -45,11 +45,11 @@ help:
 ## build: build the client and the server into ./bin
 build: $(BIN)/puresend $(BIN)/puresend-server
 
-$(BIN)/puresend: $(shell find . -name '*.go' -not -path './LandingPage/*')
+$(BIN)/puresend: $(shell find . -name '*.go')
 	@mkdir -p $(BIN)
 	$(GO) build -trimpath -ldflags "$(CLIENT_LDFLAGS)" -o $@ ./cmd/client
 
-$(BIN)/puresend-server: $(shell find . -name '*.go' -not -path './LandingPage/*')
+$(BIN)/puresend-server: $(shell find . -name '*.go')
 	@mkdir -p $(BIN)
 	$(GO) build -trimpath -ldflags "$(LDFLAGS)" -o $@ ./cmd/server
 
@@ -88,7 +88,7 @@ vuln:
 
 ## fmt: gofmt the tree
 fmt:
-	gofmt -w $$(find . -name '*.go' -not -path './LandingPage/*')
+	gofmt -w $$(find . -name '*.go')
 
 ## tidy: go mod tidy
 tidy:

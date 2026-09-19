@@ -138,7 +138,7 @@ make deb        # Build Debian/Ubuntu .deb package
 | **`internal/transfer/`** | File transfer protocol, SPAKE2 auth, partial resume engine |
 | **`internal/tui/`** | Bubble Tea & Lipgloss terminal user interface |
 | **`internal/safetext/`** | ANSI escape sequence & Unicode bidi sanitization filter |
-| **`LandingPage/`** | React 19 + Vite + Tailwind v4 showcase & browser TUI demo |
+| **`scripts/`** | Local `.deb` packaging and build helper scripts |
 | **`packaging/`** | Desktop launcher (`.desktop`), SVG app icon, packaging configs |
 | **`deploy/`** | Cloudflare Tunnel configuration templates |
 

@@ -20,7 +20,7 @@ jobs:
 
       - name: Check formatting
         run: |
-          unformatted="$(gofmt -l $(find . -name '*.go' -not -path './LandingPage/*'))"
+          unformatted="$(gofmt -l $(find . -name '*.go'))"
           if [ -n "$unformatted" ]; then
             echo "::error::these files need gofmt:"
             echo "$unformatted"
