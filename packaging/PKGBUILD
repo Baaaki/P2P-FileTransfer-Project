@@ -1,0 +1,28 @@
+# Maintainer: Baki <karasoglu.bakican@gmail.com>
+# Contributor: FileTransferilla Contributors
+
+pkgname=filetransferilla-bin
+pkgver=0.3.0
+pkgrel=1
+pkgdesc="Fast, secure, p2p terminal file transfer tool (WebRTC/P2P, End-to-End Encrypted)"
+arch=('x86_64')
+url="https://p2p-filetransfer.madebybaki.com"
+license=('MIT')
+provides=('filetransferilla')
+conflicts=('filetransferilla')
+source_x86_64=("https://p2p-filetransfer.madebybaki.com/downloads/filetransferilla"
+               "filetransferilla.desktop"
+               "filetransferilla.svg")
+sha256sums_x86_64=('7804a22e7a2b859829df132996d2ad4d6dabb07509d25170920b4978784827e2'
+                   'SKIP'
+                   'SKIP')
+
+package() {
+    install -Dm755 "${srcdir}/filetransferilla" "${pkgdir}/usr/bin/filetransferilla"
+    if [ -f "${srcdir}/filetransferilla.desktop" ]; then
+        install -Dm644 "${srcdir}/filetransferilla.desktop" "${pkgdir}/usr/share/applications/filetransferilla.desktop"
+    fi
+    if [ -f "${srcdir}/filetransferilla.svg" ]; then
+        install -Dm644 "${srcdir}/filetransferilla.svg" "${pkgdir}/usr/share/icons/hicolor/scalable/apps/filetransferilla.svg"
+    fi
+}
