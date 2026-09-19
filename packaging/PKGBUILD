@@ -26,3 +26,4 @@ package() {
         install -Dm644 "${srcdir}/puresend.svg" "${pkgdir}/usr/share/icons/hicolor/scalable/apps/puresend.svg"
     fi
 }
+

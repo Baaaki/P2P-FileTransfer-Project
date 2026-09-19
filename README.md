@@ -1,167 +1,146 @@
 # PureSend 📦
 
-> **Uçtan uca şifreli, sunucusuz doğrudan P2P dosya ve klasör transfer aracı.**  
-> İki cihaz arasında aracı sunucuya dosya yüklemeden, ev modemleri (NAT) arkasında olsalar dahi güvenle dosya aktarın.
+> **Go (Golang) ile geliştirilmiş, uçtan uca şifreli (Zero-Trust) ve doğrudan eşler arası (P2P) dosya transfer sistemi.**  
+> Bulut sağlayıcılarına, üyeliklere veya üçüncü taraf sunuculara ihtiyaç duymadan; ev modemleri (NAT) ve kurumsal güvenlik duvarları arkasındaki cihazlar arasında doğrudan veri akışı sağlar.
 
-[![CI Status](https://github.com/Baaaki/PureSend/actions/workflows/ci.yml/badge.svg)](https://github.com/Baaaki/PureSend/actions)
+[![CI Pipeline](https://github.com/Baaaki/PureSend/actions/workflows/ci.yml/badge.svg)](https://github.com/Baaaki/PureSend/actions)
 [![Go Version](https://img.shields.io/github/go-mod/go-version/Baaaki/PureSend)](https://go.dev/)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
 [![Latest Release](https://img.shields.io/github/v/release/Baaaki/PureSend)](https://github.com/Baaaki/PureSend/releases/latest)
 
-🇬🇧 **[English Documentation](README.en.md)** | 🌐 **[Web Sitesi & Canlı Demo](https://puresend.madebybaki.com)** | 📋 **[Yol Haritası](docs/ROADMAP.md)** | 🛡️ **[Güvenlik Politikası](docs/SECURITY.md)**
+🌐 **[Canlı Web Sitesi](https://puresend.madebybaki.com)** | 🇬🇧 **[English Documentation (README.en.md)](README.en.md)** | 🛡️ **[Güvenlik Politikası](docs/SECURITY.md)** | ✉️ **[İletişim](mailto:contact@madebybaki.com)**
 
 ---
 
-## ✨ Öne Çıkan Özellikler
+## 🎯 Projenin Amacı ve Öne Çıkanlar
 
-- 🚀 **Doğrudan P2P Aktarım:** Dosyalarınız hiçbir bulut veya aracı sunucuya kaydedilmez; doğrudan iki bilgisayar arasında akar.
-- 🔑 **Sıfır Ayar, 3 Kelimelik Kod:** Port yönlendirme (port forwarding), IP yapılandırması veya hesap açma yok. Ekranda çıkan kodu arkadaşınıza iletin, yeter.
-- 🛡️ **Kriptografik Güvenlik (PAKE/SPAKE2):** Oda kodu aynı zamanda parola işlevi görür. Buluşma sunucusu dosyalarınızı veya parolanızı göremez, araya giremez (Zero-Trust).
-- ⚡ **NAT Delme & Akıllı Yedek (Hole Punching):** DCUtR ve UPnP ile ev ağları arasında doğrudan tünel açılır; delik açılamazsa sınırlı relay devreye girer.
-- 📂 **Klasör ve Çoklu Dosya:** Klasör hiyerarşisi bozulmadan tek seferde binlerce dosya aktarımı.
-- 🔄 **Kaldığı Yerden Devam (Resume):** Bağlantı kopsa bile aktarılan dosyalar tekrar indirilmez; yarım kalan dosya `.part` üzerinden devam eder.
-- 💻 **TUI & Headless CLI:** Hem kullanımı keyifli Terminal Arayüzü (Bubble Tea) hem de betikler ve CI için CLI bayrakları (`-send`, `-receive`).
-- 🐧 **Masaüstü Entegrasyonu:** Debian/Ubuntu için `.deb` paketi, sistem başlatıcı (`.desktop`), SVG simgesi ve Linux'ta çift tıklamayla otomatik terminal açma.
+PureSend, büyük dosyaların ve dizin ağaçlarının aracı sunucularda depolanmadan, gizlilikten ödün verilmeden ve karmaşık ağ ayarları (port forwarding, sabit IP vb.) gerektirmeden iletilmesi amacıyla tasarlanmış modern bir sistem aracıdır.
 
----
-
-## 🚀 Hızlı Başlangıç
-
-> [!TIP]
-> **🟢 Canlı ve Kullanıma Hazır:**  
-> PureSend şu an **canlı olarak çalışmaktadır**! Herhangi bir sunucu kurmanıza, port yönlendirmenize veya ayar yapmanıza gerek yoktur. Ortak ve resmi buluşturucu sunucumuz (`rendezvous.madebybaki.com`) 7/24 devrededir. Doğrudan aşağıdaki linklerden işletim sisteminize uygun olanı indirip hemen kullanmaya başlayabilirsiniz.
-
-### İndir ve Çalıştır
-
-Tüm derlenmiş ikililer doğrudan deponun [`bin/`](bin/) klasöründe hazırdır. Aşağıdaki linklere tıklayarak doğrudan indirebilirsiniz:
-
-| Platform | İndirme Bağlantısı (`bin/`) | Kurulum & Çalıştırma |
-|---|---|---|
-| **Ubuntu / Debian / Mint** | [📥 `puresend_0.3.0_amd64.deb`](https://github.com/Baaaki/PureSend/raw/main/bin/puresend_0.3.0_amd64.deb) | `sudo apt install ./puresend_0.3.0_amd64.deb` *(Menüye eklenir)* |
-| **Windows** | [📥 `puresend.exe`](https://github.com/Baaaki/PureSend/raw/main/bin/puresend.exe) | İndir ve çift tıkla |
-| **Linux (Taşınabilir)** | [📥 `puresend`](https://github.com/Baaaki/PureSend/raw/main/bin/puresend) | `chmod +x puresend && ./puresend` *(Çift tıkla da çalışır)* |
-| **macOS (Apple Silicon · M1-M4)** | [📥 `puresend_mac_arm64`](https://github.com/Baaaki/PureSend/raw/main/bin/puresend_mac_arm64) | `chmod +x puresend_mac_arm64 && ./puresend_mac_arm64` |
-
-> 📦 Alternatif olarak arşiv paketlerine ve kaynak kodlara [**GitHub Releases**](https://github.com/Baaaki/PureSend/releases/latest) sayfasından da ulaşabilirsiniz.
-
-#### İlk Açılış Uyarısı Hakkında
-Uygulama ikilileri açık kaynak olarak derlendiği ve ücretli imzalama sertifikası taşımadığı için işletim sisteminiz ilk açılışta izin isteyebilir:
-- **macOS:** Dosyaya **Sağ tıkla → Aç** deyin (veya terminalde `xattr -d com.apple.quarantine puresend`).
-- **Windows:** *"Windows kişisel bilgisayarınızı korudu"* ekranında **Ek bilgi → Yine de çalıştır**'a tıklayın.
-- **Linux:** Gerekirse `chmod +x puresend` ile çalıştırma yetkisi verin.
+* **Sıfır Güven (Zero-Trust) Kriptografi:** Parola tabanlı anahtar değişimi (**SPAKE2 / PAKE**) kullanır. Buluşma sunucusu dosyaları veya parolayı göremez, trafiği dinleyemez.
+* **Akıllı NAT Delme (Hole Punching):** **libp2p**, **DCUtR** ve **UPnP** protokolleriyle modemler arasında doğrudan şifreli tünel açar; doğrudan tünelin açılamadığı katı simetrik ağlarda şifreli geçiş köprüsüne (bounded relay) güvenle yedeklenir.
+* **Kaldığı Yerden Devam (Resume Engine):** Ağ kopmalarında aktarılan dosyalar baştan indirilmez; `.part` geçici dosyaları üzerinden blok seviyesinde SHA-256 sağlama doğrulamasıyla devam eder.
+* **Reaktif Terminal Arayüzü (TUI):** **Bubble Tea** (Elm Mimarisi) ile geliştirilmiş, çift dilli (TR/EN, işletim sistemi dilini otomatik algılama ve çalışma anında `L` tuşuyla geçiş) modern terminal deneyimi.
+* **Headless / CI/CD Desteği:** Terminali olmayan sunucular veya betikler için doğrudan komut satırı bayrakları (`-send`, `-receive`, `-yes`).
 
 ---
 
-## 💡 Nasıl Kullanılır?
+## 🛠️ Teknoloji Yığını (Tech Stack)
 
-### 1. Terminal Arayüzü (TUI) ile
+| Alan | Teknolojiler |
+| :--- | :--- |
+| **Programlama Dili** | Go (Golang 1.24) — `CGO_ENABLED=0` (tamamen bağımsız statik ikili dosyalar) |
+| **Ağ & Eşler Arası (P2P)** | libp2p, WebSockets, TLS, DCUtR (Hole Punching), Circuit Relay v2, STUN/UPnP |
+| **Güvenlik & Kriptografi** | SPAKE2 (PAKE), AES-GCM, SHA-256 blok doğrulama, RTLO/bidi terminal temizleme |
+| **Kullanıcı Arayüzü** | Charmbracelet Bubble Tea (Elm Architecture), Lipgloss |
+| **Dağıtım & DevOps** | Docker, Docker Compose, GitHub Actions CI/CD, Debian (`.deb`), Arch Linux (`PKGBUILD`) |
 
-Uygulamayı açmanız yeterlidir:
+---
+
+## ⚡ Hızlı Kurulum
+
+İşletim sisteminize uygun tek satırlık komutu terminalde çalıştırarak anında kurabilir ve güncelleyebilirsiniz:
+
+```bash
+# Linux & macOS (Bash) — Otomatik mimari tespiti ve PATH entegrasyonu
+curl -fsSL https://puresend.madebybaki.com/install.sh | sh
+
+# Windows (PowerShell) — Tek kopya, otomatik güncelleme ve PATH entegrasyonu
+irm https://puresend.madebybaki.com/install.ps1 | iex
+
+# Arch Linux (AUR)
+yay -S puresend-bin
+```
+
+> **Klasik İndirme:** Kurulum yapmadan taşınabilir (portable) çalıştırmak için [GitHub Releases](https://github.com/Baaaki/PureSend/releases/latest) veya [Web Sitemizden](https://puresend.madebybaki.com/#indir) doğrudan `.exe`, `mac_arm64` veya `.deb` dosyalarını indirebilirsiniz.
+
+---
+
+## 🧩 Nasıl Çalışır? (Protokol Akışı)
+
+```
+Gönderici (İstemci A)           Buluşma Sunucusu (Rendezvous)         Alıcı (İstemci B)
+       │                                     │                               │
+       │ 1. Odayı aç ("kiraz-liman-42")      │                               │
+       │────────────────────────────────────►│◄──────────────────────────────│ 2. Odayı sor ("kiraz-liman-42")
+       │                                     │                               │
+       │◄═══════════ 3. SPAKE2 Kriptografik Doğrulama & NAT Delme ══════════►│
+       │                                                                     │
+       │════════════ 4. Dosyalar DOĞRUDAN P2P Olarak Akar (SHA-256) ═════════►│
+```
+
+1. **Buluşma (Discovery):** Gönderici 3 kelimelik geçici bir oda kodu türeterek sunucuya sinyal bırakır.
+2. **Kimlik Doğrulama:** Eşler, sunucuya güvenmeden oda kodunu ortak parola kullanarak **SPAKE2** ile şifreli tünel oluşturur.
+3. **Doğrudan Bağlantı:** **DCUtR** koordinasyonu ile her iki tarafın NAT cihazı delinir ve eşler doğrudan birbirine bağlanır.
+4. **Doğrulanmış Aktarım:** Dosyalar blok blok şifreli olarak karşı tarafa iletilir; iniş tamamlandığında SHA-256 ile teyit edilir.
+
+---
+
+## 💻 Kullanım
+
+### 1. Etkileşimli Terminal Arayüzü (TUI)
 ```bash
 puresend
 ```
-* **Gönderen:** *"Dosya göndereceğim"* seçin → Dosyaları/klasörleri seçin (`Enter` ile seç, `f` ile tüm klasör, `Backspace` ile üst klasör) → `s` ile başlatın → Ekranda beliren 3 kelimelik kodu (`kiraz-liman-42`) arkadaşınıza iletin.
-* **Alan:** *"Bana dosya gönderilecek"* seçin → 3 kelimelik kodu yazın → Onaylayın. Dosyalar `İndirilenler/PureSend` dizinine iner (indirme klasörünü arayüzden veya `-out` ile değiştirebilirsiniz).
+* **Gönder:** Dosya veya klasörleri seçin $\rightarrow$ Ekranda çıkan 3 kelimelik kodu alıcıya verin.
+* **Al:** 3 kelimelik kodu girin $\rightarrow$ Aktarımı onaylayın (dosyalar otomatik olarak `İndirilenler/PureSend` dizinine kaydedilir).
+* **Dil:** `[L]` tuşuna basarak anında Türkçe / İngilizce arasında geçiş yapın.
 
-### 2. Başsız (Headless) CLI Modu
+### 2. Otomasyon ve Betikler İçin CLI Modu
+```bash
+# Belirtilen dizini arka planda gönder
+puresend -send ./belgeler/
 
-Grafik arayüzü olmayan sunucular veya betik otomasyonları için:
+# Kodu doğrudan hedef dizine indir ve onay istemeden tamamla
+puresend -receive kiraz-liman-42 -out /var/backups -yes
+
+# En son sürüme güncelle
+puresend update
+```
+
+---
+
+## 📂 Proje Dizin Mimarisi
+
+```
+├── cmd/
+│   ├── client/          # Terminal istemcisi (TUI + Headless CLI giriş noktası)
+│   └── server/          # Rendezvous & Circuit Relay v2 buluşma sunucusu
+├── internal/
+│   ├── p2p/             # libp2p host yönetimi, çoklu sunucu ve dinamik liste senkronizasyonu
+│   ├── transfer/        # SPAKE2 doğrulama motoru, chunk streaming ve resume mantığı
+│   ├── tui/             # Bubble Tea bileşenleri, modeller, formatlayıcılar ve tuş haritaları
+│   ├── i18n/            # İşletim sistemi yerel dil algılama ve çift dil (TR/EN) sözlüğü
+│   ├── update/          # GitHub API üzerinden çalışan in-place ikili dosya güncelleme motoru
+│   └── safetext/        # Terminal escape dizisi ve RTLO karakter güvenlik filtresi
+├── packaging/           # Arch Linux PKGBUILD, .desktop başlatıcı ve uygulama simgeleri
+└── scripts/             # Otomatik .deb paketleme ve derleme otomasyonları
+```
+
+---
+
+## 🧪 Testler ve Kod Kalitesi
+
+Proje, kurumsal Go standartlarına uygun olarak yüksek birim test kapsamı ve yarış durumu denetimiyle geliştirilmiştir:
 
 ```bash
-# Dosya veya klasör gönder (kodu stdout'a yazar ve alıcıyı bekler)
-puresend -send tatil/
+# Yarış durumu (race detector) ile birim testleri çalıştır
+make test
+# veya
+go test -v -race ./...
 
-# Kodu alıp doğrudan belirtilen klasöre indir
-puresend -receive kiraz-liman-42 -out /mnt/depo -yes
+# Statik kod analizi (linter)
+golangci-lint run
 
-# Sürüm bilgisi
-puresend -version
+# Güvenlik açığı taraması
+govulncheck ./...
 ```
 
 ---
 
-## 🔍 Nasıl Çalışıyor?
+## 📄 Lisans & İletişim
 
-```
-Gönderen (İstanbul)              Buluşma Sunucusu (Rendezvous)             Alıcı (İzmir)
-      │                                       │                                  │
-      │ 1. "kiraz-liman-42" odasını aç        │                                  │
-      │──────────────────────────────────────►│◄─────────────────────────────────│ 2. "kiraz-liman-42" kimde?
-      │                                       │                                  │
-      │◄═══════════ 3. SPAKE2 El Sıkışması & NAT Delme (Hole Punching) ═════════►│
-      │                                                                          │
-      │════════════ 4. Dosyalar DOĞRUDAN P2P Olarak Akar (SHA-256) ══════════════►│
-```
+Bu proje [GNU General Public License v3.0](LICENSE) ile sunulmaktadır.
 
-1. **Buluşma:** Gönderen rastgele bir oda kodunu sunucuya kaydeder; alıcı aynı kodu arar.
-2. **Kimlik Doğrulama (PAKE):** İki taraf, oda kodundan **SPAKE2** ile ortak bir anahtar türetir ve Peer ID'lerini bağlar. Kod sunucuya asla iletilmez; sunucu yalan söylese bile transfer başlamaz.
-3. **NAT Delme:** İlk temas sunucunun **Circuit Relay v2** köprüsünden geçer; **DCUtR** bunu doğrudan eşler arası P2P bağlantıya yükseltir.
-4. **Güvenli Aktarım:** Dosyalar blok blok, dosya başına **SHA-256 sağlama doğrulamasıyla** doğrudan akar. Transfer koparsa kaldığı yerden devam eder.
-
----
-
-## 🛠️ Kendi Sunucunu Barındırma (Self-Hosting)
-
-Resmi istemciler gömülü topluluk sunucusuna bağlanır. Ancak kendi buluşma sunucunuzu çalıştırmak isterseniz:
-
-```bash
-PUBLIC_HOST=rendezvous.example.com docker compose up -d
-```
-
-> Ayrıntılı Cloudflare Tunnel entegrasyonu, Prometheus metrikleri, rate limiting ve operasyon adımları için:  
-> 👉 **[Sunucu Kurulum ve Dağıtım Rehberi (docs/DEPLOYMENT.md)](docs/DEPLOYMENT.md)**
-
----
-
-## 💻 Geliştirme
-
-```bash
-make            # Tüm make hedeflerini listeler
-make build      # İstemci ve sunucuyu bin/ altına derler
-make test       # Yarış durumu (race detector) açık testleri koşar
-make test-relay # Yalıtılmış ağ isim uzaylarında relay fallback testini koşar
-make lint       # golangci-lint analizini çalıştırır
-make vuln       # govulncheck zafiyet taramasını çalıştırır
-make deb        # Debian/Ubuntu için .deb paketi üretir
-```
-
-Yerel test için 3 ayrı terminalde:
-```bash
-# 1. Sunucu
-go run ./cmd/server -ws-port 8080
-
-# 2. Gönderen ve 3. Alıcı (Peer ID'yi sunucu çıktısından alın)
-go run ./cmd/client -server /ip4/127.0.0.1/tcp/8080/ws/p2p/<PeerID>
-```
-
----
-
-## 📂 Proje Mimarisi
-
-| Klasör / Bileşen | Açıklama |
-|---|---|
-| **`cmd/client/`** | Masaüstü istemcisi (TUI, headless CLI, otomatik terminal başlatma) |
-| **`cmd/server/`** | Rendezvous ve Circuit Relay v2 sunucusu |
-| **`internal/p2p/`** | libp2p host yönetimi, çoklu sunucu ve dinamik `server.txt` desteği |
-| **`internal/transfer/`** | Dosya aktarımı, SPAKE2 kimlik doğrulama ve resume motoru |
-| **`internal/tui/`** | Bubble Tea & Lipgloss tabanlı terminal arayüzü |
-| **`internal/safetext/`** | Terminal kaçış dizileri ve bidi/RTLO güvenlik filtresi |
-| **`scripts/`** | Yerel `.deb` paketleme ve derleme betikleri |
-| **`packaging/`** | `.desktop` başlatıcı, SVG simge ve `.deb` paket tanımları |
-| **`deploy/`** | Cloudflare Tunnel yapılandırma şablonları |
-
----
-
-## 📚 Dokümantasyon
-
-- 🛡️ [Güvenlik Modeli ve Politikası](docs/SECURITY.md)
-- 🚀 [Sunucu Kurulum ve Dağıtım Rehberi](docs/DEPLOYMENT.md)
-- 📋 [Ürünleşme Yol Haritası](docs/ROADMAP.md)
-- 📝 [Değişiklik Günlüğü (Changelog)](docs/CHANGELOG.md)
-- 🤝 [Katkıda Bulunma Rehberi](docs/CONTRIBUTING.md)
-
----
-
-## 📄 Lisans
-
-Bu proje [GNU General Public License v3.0](LICENSE) altında lisanslanmıştır.
+* **Geliştirici:** Bakican Karaşoğlu
+* **E-posta:** [contact@madebybaki.com](mailto:contact@madebybaki.com)
+* **Web:** [https://puresend.madebybaki.com](https://puresend.madebybaki.com)

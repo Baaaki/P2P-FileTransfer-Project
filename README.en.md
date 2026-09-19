@@ -1,158 +1,146 @@
 # PureSend 📦
 
-> **End-to-end encrypted, direct peer-to-peer file and folder transfer tool.**  
-> Transfer files directly between devices without uploading to any intermediate server — even behind home routers (NAT).
+> **A production-grade, end-to-end encrypted (Zero-Trust) peer-to-peer (P2P) file transfer tool written in Go.**  
+> Stream files directly between devices across the internet without cloud storage intermediaries, accounts, or complex network configurations — even behind home routers (NAT) and strict firewalls.
 
-[![CI Status](https://github.com/Baaaki/PureSend/actions/workflows/ci.yml/badge.svg)](https://github.com/Baaaki/PureSend/actions)
+[![CI Pipeline](https://github.com/Baaaki/PureSend/actions/workflows/ci.yml/badge.svg)](https://github.com/Baaaki/PureSend/actions)
 [![Go Version](https://img.shields.io/github/go-mod/go-version/Baaaki/PureSend)](https://go.dev/)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
 [![Latest Release](https://img.shields.io/github/v/release/Baaaki/PureSend)](https://github.com/Baaaki/PureSend/releases/latest)
 
-🇹🇷 **[Türkçe Dokümantasyon](README.md)** | 🌐 **[Website & Live Demo](https://puresend.madebybaki.com)** | 📋 **[Roadmap](docs/ROADMAP.md)** | 🛡️ **[Security Policy](docs/SECURITY.md)**
+🌐 **[Live Website & Web Terminal](https://puresend.madebybaki.com)** | 🇹🇷 **[Türkçe Dokümantasyon (README.md)](README.md)** | 🛡️ **[Security Policy](docs/SECURITY.md)** | ✉️ **[Contact](mailto:contact@madebybaki.com)**
 
 ---
 
-## ✨ Features
+## 🎯 Executive Summary
 
-- 🚀 **Direct P2P Transfer:** Files never touch the cloud or rendezvous server; bytes flow directly between the two computers.
-- 🔑 **Zero Config, 3-Word Code:** No port forwarding, IP configuration, or user accounts. Read the generated code out to a friend.
-- 🛡️ **Cryptographic Security (PAKE/SPAKE2):** The room code acts as a password. The rendezvous server is untrusted and cannot decrypt or eavesdrop.
-- ⚡ **NAT Hole Punching & Bounded Relay:** Upgrades connections to direct routes via libp2p DCUtR and UPnP; bounded relay fallback if hole punching fails.
-- 📂 **Folders & Multi-File Support:** Retains directory trees seamlessly without archiving.
-- 🔄 **Resume Interrupted Transfers:** Broken transfers resume where they left off using SHA-256 verified `.part` files.
-- 💻 **TUI & Headless CLI:** Beautiful terminal interface (Bubble Tea) plus clean flags (`-send`, `-receive`) for scripts and CI.
-- 🐧 **Desktop Integration:** Debian/Ubuntu `.deb` packages, desktop launcher (`.desktop`), SVG icon, and auto-spawning terminal on Linux desktops.
+PureSend is built to solve the privacy, speed, and size-limit bottlenecks of modern file sharing. Instead of uploading sensitive archives to centralized third-party servers, peers establish an authenticated direct P2P data stream.
 
----
-
-## 🚀 Quick Start
-
-> [!TIP]
-> **🟢 Live and Ready to Use:**  
-> PureSend is **live right now**! You do not need to host or configure any servers. Our official shared rendezvous server (`rendezvous.madebybaki.com`) is running 24/7. Simply download the binary for your platform from the links below and start transferring immediately.
-
-### Download & Run
-
-Precompiled binaries are available directly in the repository's [`bin/`](bin/) folder. Click below to download:
-
-| Platform | Download Link (`bin/`) | How to Run |
-|---|---|---|
-| **Ubuntu / Debian / Mint** | [📥 `puresend_0.3.0_amd64.deb`](https://github.com/Baaaki/PureSend/raw/main/bin/puresend_0.3.0_amd64.deb) | `sudo apt install ./puresend_0.3.0_amd64.deb` *(Adds to app menu)* |
-| **Windows** | [📥 `puresend.exe`](https://github.com/Baaaki/PureSend/raw/main/bin/puresend.exe) | Download and double-click |
-| **Linux (Portable)** | [📥 `puresend`](https://github.com/Baaaki/PureSend/raw/main/bin/puresend) | `chmod +x puresend && ./puresend` *(Auto-spawns terminal)* |
-| **macOS (Apple Silicon · M1-M4)** | [📥 `puresend_mac_arm64`](https://github.com/Baaaki/PureSend/raw/main/bin/puresend_mac_arm64) | `chmod +x puresend_mac_arm64 && ./puresend_mac_arm64` |
-
-> 📦 Release archives and full release assets are also available on [**GitHub Releases**](https://github.com/Baaaki/PureSend/releases/latest).
-
-#### First-Launch Warnings
-Binaries are open-source and not code-signed:
-- **macOS:** **Right-click → Open** (or run `xattr -d com.apple.quarantine puresend`).
-- **Windows:** Click **More info → Run anyway** on the SmartScreen prompt.
-- **Linux:** Mark executable with `chmod +x puresend` if needed.
+* **Zero-Trust Security:** Uses Password-Authenticated Key Exchange (**SPAKE2 / PAKE**). The rendezvous server coordinates peer discovery but is cryptographically untrusted — it cannot inspect, tamper with, or decrypt transfers.
+* **Intelligent NAT Traversal:** Leverages **libp2p**, **DCUtR (Direct Connection Upgrade through Relay)**, and **UPnP** to punch holes through home and office firewalls; gracefully falls back to an encrypted, bounded relay if direct traversal fails.
+* **Resilience & Resumability:** Interrupted connections automatically resume via SHA-256 verified `.part` chunks without re-transmitting completed files.
+* **Bilingual Reactive TUI:** Powered by **Bubble Tea** (Elm Architecture), supporting automatic OS locale detection (Turkish/English) and runtime toggling via the `[L]` key.
+* **Headless & Automation Ready:** Native CLI flags (`-send`, `-receive`, `-yes`) facilitate scripted deployment on headless servers and CI/CD runners.
 
 ---
 
-## 💡 Usage
+## 🛠️ Tech Stack
 
-### 1. Interactive Terminal UI (TUI)
+| Area | Technologies |
+| :--- | :--- |
+| **Language & Runtime** | Go (Golang 1.24) — `CGO_ENABLED=0` (standalone static binary, zero runtime dependencies) |
+| **Networking & Protocols** | libp2p, WebSockets, TLS, DCUtR (Hole Punching), Circuit Relay v2, STUN/UPnP |
+| **Cryptography** | SPAKE2 (PAKE), AES-GCM, SHA-256 block verification, Unicode RTLO/bidi sanitization |
+| **Interface (TUI)** | Charmbracelet Bubble Tea (Elm Architecture), Lipgloss |
+| **DevOps & Packaging** | Docker, Docker Compose, GitHub Actions CI/CD, Debian (`.deb`), Arch Linux (`PKGBUILD`) |
 
-Simply run:
-```bash
-puresend
-```
-* **Sender:** Choose *"I want to send files"* → Select files/folders (`Enter` to pick, `f` for whole directory, `Backspace` for parent) → Press `s` → Share the 3-word code (`kiraz-liman-42`) with your friend.
-* **Receiver:** Choose *"Someone is sending me files"* → Enter the 3-word code → Confirm. Files are saved into your `Downloads/PureSend` folder (customizable via UI or `-out`).
+---
 
-### 2. Headless CLI Mode
+## ⚡ Quick Installation
 
-For headless servers, scripts, or automation:
+Run the one-line installer for your platform to install and keep PureSend continuously updated:
 
 ```bash
-# Send file or directory (prints code to stdout, waits for peer)
-puresend -send holiday/
+# Linux & macOS (Bash) — Auto-detects architecture & integrates into PATH
+curl -fsSL https://puresend.madebybaki.com/install.sh | sh
 
-# Receive code directly into a target folder
-puresend -receive kiraz-liman-42 -out /mnt/storage -yes
+# Windows (PowerShell) — Single copy, auto-update & PATH integration
+irm https://puresend.madebybaki.com/install.ps1 | iex
 
-# Version information
-puresend -version
+# Arch Linux (AUR)
+yay -S puresend-bin
 ```
+
+> **Portable Binaries:** Prebuilt standalone executables (`.exe`, `mac_arm64`, and `.deb`) are available directly from [GitHub Releases](https://github.com/Baaaki/PureSend/releases/latest) and the [Project Website](https://puresend.madebybaki.com/#indir).
 
 ---
 
-## 🔍 How It Works
+## 🧩 How It Works (Protocol Sequence)
 
 ```
-Sender (Istanbul)                Rendezvous Server                     Receiver (Izmir)
+Sender (Peer A)                  Rendezvous Server                     Receiver (Peer B)
       │                                  │                                    │
-      │ 1. Open room "kiraz-liman-42"    │                                    │
-      │─────────────────────────────────►│◄───────────────────────────────────│ 2. Who has "kiraz-liman-42"?
+      │ 1. Register room "apple-port-42" │                                    │
+      │─────────────────────────────────►│◄───────────────────────────────────│ 2. Query room "apple-port-42"
       │                                  │                                    │
       │◄══════════ 3. SPAKE2 Key Exchange & NAT Hole Punching (DCUtR) ════════►│
       │                                                                       │
       │═══════════ 4. Files Stream DIRECTLY Peer-to-Peer (SHA-256) ═══════════►│
 ```
 
-1. **Rendezvous:** Sender registers a random code with its addresses; receiver looks it up.
-2. **Authentication (PAKE):** Both ends derive a shared key via **SPAKE2** and bind their peer IDs. The code never crosses the wire in plaintext; a rogue server cannot intercept the transfer.
-3. **Hole Punching:** Circuit Relay v2 facilitates initial discovery; DCUtR upgrades to a direct connection.
-4. **Transfer:** Data streams block by block with per-file **SHA-256 verification**. Resumes automatically if interrupted.
+1. **Discovery:** Sender registers a short 3-word disposable code with the rendezvous server.
+2. **Key Exchange:** Both peers perform a **SPAKE2** handshake over an untrusted channel to prove shared knowledge of the room code and establish encrypted communications.
+3. **Direct P2P Upgrade:** **DCUtR** punches through NAT boundaries on both endpoints to establish a direct, low-latency socket.
+4. **Verified Transfer:** Chunks stream directly peer-to-peer, with SHA-256 validation applied to ensure end-to-end data integrity.
 
 ---
 
-## 🛠️ Self-Hosting
+## 💻 Usage
 
-Released clients connect to the community meeting point out of the box. To run your own rendezvous server:
-
+### 1. Interactive Terminal UI (TUI)
 ```bash
-PUBLIC_HOST=rendezvous.example.com docker compose up -d
+puresend
 ```
+* **Send:** Select files or directories $\rightarrow$ Share the generated 3-word code.
+* **Receive:** Enter the code $\rightarrow$ Confirm transfer (files save into `Downloads/PureSend`).
+* **Language:** Press `[L]` to switch between English and Turkish at any time.
 
-> For comprehensive Cloudflare Tunnel configuration, Prometheus queries, rate limiting, and operational guidance:  
-> 👉 **[Server Deployment Guide (docs/DEPLOYMENT.md)](docs/DEPLOYMENT.md)**
-
----
-
-## 💻 Development
-
+### 2. Headless CLI Mode
 ```bash
-make            # List all make targets
-make build      # Build client and server into bin/
-make test       # Run tests with race detector enabled
-make test-relay # Test relay fallback in isolated network namespaces
-make lint       # Run golangci-lint
-make vuln       # Run govulncheck for reachable vulnerabilities
-make deb        # Build Debian/Ubuntu .deb package
+# Send directory in the background
+puresend -send ./backups/
+
+# Receive code into a target directory non-interactively
+puresend -receive apple-port-42 -out /var/data -yes
+
+# In-place self-update to latest release
+puresend update
 ```
 
 ---
 
-## 📂 Project Architecture
+## 📂 Codebase Architecture
 
-| Directory / Component | Description |
-|---|---|
-| **`cmd/client/`** | Desktop client (TUI, headless CLI, terminal auto-spawner) |
-| **`cmd/server/`** | Rendezvous and Circuit Relay v2 server |
-| **`internal/p2p/`** | libp2p host lifecycle, multi-server dialing, dynamic fallback |
-| **`internal/transfer/`** | File transfer protocol, SPAKE2 auth, partial resume engine |
-| **`internal/tui/`** | Bubble Tea & Lipgloss terminal user interface |
-| **`internal/safetext/`** | ANSI escape sequence & Unicode bidi sanitization filter |
-| **`scripts/`** | Local `.deb` packaging and build helper scripts |
-| **`packaging/`** | Desktop launcher (`.desktop`), SVG app icon, packaging configs |
-| **`deploy/`** | Cloudflare Tunnel configuration templates |
-
----
-
-## 📚 Documentation
-
-- 🛡️ [Security Policy & Architecture](docs/SECURITY.md)
-- 🚀 [Server Deployment & Operations Guide](docs/DEPLOYMENT.md)
-- 📋 [Product Roadmap](docs/ROADMAP.md)
-- 📝 [Changelog](docs/CHANGELOG.md)
-- 🤝 [Contributing Guidelines](docs/CONTRIBUTING.md)
+```
+├── cmd/
+│   ├── client/          # Terminal application (TUI & Headless CLI entry point)
+│   └── server/          # Rendezvous & Circuit Relay v2 server daemon
+├── internal/
+│   ├── p2p/             # libp2p host lifecycle, multi-address listener, dynamic relay fallback
+│   ├── transfer/        # SPAKE2 handshake engine, chunk streaming & resumable transfers
+│   ├── tui/             # Bubble Tea models, formatters, and keyboard navigation
+│   ├── i18n/            # OS locale detection & localization dictionary (TR/EN)
+│   ├── update/          # In-place self-updater querying GitHub Releases
+│   └── safetext/        # Terminal escape sequence and bidirectional override sanitization
+├── packaging/           # Arch Linux PKGBUILD, .desktop files, and SVG branding
+└── scripts/             # Native .deb packaging and build automation scripts
+```
 
 ---
 
-## 📄 License
+## 🧪 Testing & Code Quality
 
-This project is licensed under the [GNU General Public License v3.0](LICENSE).
+Developed adhering to strict Go engineering standards with complete race-condition safety and continuous linting:
+
+```bash
+# Run unit tests with Go race detector
+make test
+# or
+go test -v -race ./...
+
+# Static analysis
+golangci-lint run
+
+# Vulnerability scan
+govulncheck ./...
+```
+
+---
+
+## 📄 License & Contact
+
+Distributed under the [GNU General Public License v3.0](LICENSE).
+
+* **Author:** Bakican Karaşoğlu
+* **Email:** [contact@madebybaki.com](mailto:contact@madebybaki.com)
+* **Website:** [https://puresend.madebybaki.com](https://puresend.madebybaki.com)
