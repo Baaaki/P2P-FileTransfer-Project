@@ -1,7 +1,7 @@
 # Compiled binaries
 /server
 /client
-/bin/
+/bin/puresend-server
 
 # Server identity key — must never be committed
 *.key

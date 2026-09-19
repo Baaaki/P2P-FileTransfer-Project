@@ -27,19 +27,23 @@
 
 ## 🚀 Hızlı Başlangıç
 
-### İndir ve Kur
+> [!TIP]
+> **🟢 Canlı ve Kullanıma Hazır:**  
+> PureSend şu an **canlı olarak çalışmaktadır**! Herhangi bir sunucu kurmanıza, port yönlendirmenize veya ayar yapmanıza gerek yoktur. Ortak ve resmi buluşturucu sunucumuz (`rendezvous.madebybaki.com`) 7/24 devrededir. Doğrudan aşağıdaki linklerden işletim sisteminize uygun olanı indirip hemen kullanmaya başlayabilirsiniz.
 
-[**Son Sürümü İndir (Releases)**](https://github.com/Baaaki/PureSend/releases/latest)
+### İndir ve Çalıştır
 
-| Platform | İndirilecek Paket | Kurulum / Çalıştırma |
+Tüm derlenmiş ikililer doğrudan deponun [`bin/`](bin/) klasöründe hazırdır. Aşağıdaki linklere tıklayarak doğrudan indirebilirsiniz:
+
+| Platform | İndirme Bağlantısı (`bin/`) | Kurulum & Çalıştırma |
 |---|---|---|
-| **Ubuntu / Debian / Mint** | `puresend_<sürüm>_amd64.deb` | `sudo apt install ./puresend_*.deb` *(Uygulama menüsüne eklenir)* |
-| **Linux (Taşınabilir)** | `puresend_<sürüm>_linux_x86_64.tar.gz` | Çift tıkla veya `chmod +x puresend && ./puresend` |
-| **Windows** | `puresend_<sürüm>_windows_x86_64.zip` | Arşivden çıkar ve `puresend.exe`'ye çift tıkla |
-| **macOS (Apple Silicon)** | `puresend_<sürüm>_macOS_arm64.tar.gz` | Çift tıkla *(Terminal penceresinde açılır)* |
-| **macOS (Intel)** | `puresend_<sürüm>_macOS_x86_64.tar.gz` | Çift tıkla *(Terminal penceresinde açılır)* |
+| **Ubuntu / Debian / Mint** | [📥 `puresend_0.2.0_amd64.deb`](https://github.com/Baaaki/PureSend/raw/main/bin/puresend_0.2.0_amd64.deb) | `sudo apt install ./puresend_0.2.0_amd64.deb` *(Menüye eklenir)* |
+| **Windows** | [📥 `puresend.exe`](https://github.com/Baaaki/PureSend/raw/main/bin/puresend.exe) | İndir ve çift tıkla |
+| **Linux (Taşınabilir)** | [📥 `puresend`](https://github.com/Baaaki/PureSend/raw/main/bin/puresend) | `chmod +x puresend && ./puresend` *(Çift tıkla da çalışır)* |
+| **macOS (Apple Silicon)** | [📥 `puresend_mac_arm64`](https://github.com/Baaaki/PureSend/raw/main/bin/puresend_mac_arm64) | `chmod +x puresend_mac_arm64 && ./puresend_mac_arm64` |
+| **macOS (Intel)** | [📥 `puresend_mac_amd64`](https://github.com/Baaaki/PureSend/raw/main/bin/puresend_mac_amd64) | `chmod +x puresend_mac_amd64 && ./puresend_mac_amd64` |
 
-> 💡 *ARM64 Linux ve Windows paketleri de Releases sayfasında mevcuttur.*
+> 📦 Alternatif olarak arşiv paketlerine ve kaynak kodlara [**GitHub Releases**](https://github.com/Baaaki/PureSend/releases/latest) sayfasından da ulaşabilirsiniz.
 
 #### İlk Açılış Uyarısı Hakkında
 Uygulama ikilileri açık kaynak olarak derlendiği ve ücretli imzalama sertifikası taşımadığı için işletim sisteminiz ilk açılışta izin isteyebilir:

@@ -27,19 +27,23 @@
 
 ## 🚀 Quick Start
 
-### Download & Install
+> [!TIP]
+> **🟢 Live and Ready to Use:**  
+> PureSend is **live right now**! You do not need to host or configure any servers. Our official shared rendezvous server (`rendezvous.madebybaki.com`) is running 24/7. Simply download the binary for your platform from the links below and start transferring immediately.
 
-[**Download Latest Release**](https://github.com/Baaaki/PureSend/releases/latest)
+### Download & Run
 
-| Platform | Package | How to Run |
+Precompiled binaries are available directly in the repository's [`bin/`](bin/) folder. Click below to download:
+
+| Platform | Download Link (`bin/`) | How to Run |
 |---|---|---|
-| **Ubuntu / Debian / Mint** | `puresend_<ver>_amd64.deb` | `sudo apt install ./puresend_*.deb` *(Adds to app menu)* |
-| **Linux (Portable)** | `puresend_<ver>_linux_x86_64.tar.gz` | Double-click or run `chmod +x puresend && ./puresend` |
-| **Windows** | `puresend_<ver>_windows_x86_64.zip` | Extract and double-click `puresend.exe` |
-| **macOS (Apple Silicon)** | `puresend_<ver>_macOS_arm64.tar.gz` | Extract and double-click *(Opens in Terminal)* |
-| **macOS (Intel)** | `puresend_<ver>_macOS_x86_64.tar.gz` | Extract and double-click *(Opens in Terminal)* |
+| **Ubuntu / Debian / Mint** | [📥 `puresend_0.2.0_amd64.deb`](https://github.com/Baaaki/PureSend/raw/main/bin/puresend_0.2.0_amd64.deb) | `sudo apt install ./puresend_0.2.0_amd64.deb` *(Adds to app menu)* |
+| **Windows** | [📥 `puresend.exe`](https://github.com/Baaaki/PureSend/raw/main/bin/puresend.exe) | Download and double-click |
+| **Linux (Portable)** | [📥 `puresend`](https://github.com/Baaaki/PureSend/raw/main/bin/puresend) | `chmod +x puresend && ./puresend` *(Auto-spawns terminal)* |
+| **macOS (Apple Silicon)** | [📥 `puresend_mac_arm64`](https://github.com/Baaaki/PureSend/raw/main/bin/puresend_mac_arm64) | `chmod +x puresend_mac_arm64 && ./puresend_mac_arm64` |
+| **macOS (Intel)** | [📥 `puresend_mac_amd64`](https://github.com/Baaaki/PureSend/raw/main/bin/puresend_mac_amd64) | `chmod +x puresend_mac_amd64 && ./puresend_mac_amd64` |
 
-> 💡 *ARM64 packages for Linux and Windows are also provided on the Releases page.*
+> 📦 Release archives and full release assets are also available on [**GitHub Releases**](https://github.com/Baaaki/PureSend/releases/latest).
 
 #### First-Launch Warnings
 Binaries are open-source and not code-signed:
