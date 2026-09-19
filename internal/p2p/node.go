@@ -8,6 +8,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -24,6 +25,7 @@ import (
 	relayclient "github.com/libp2p/go-libp2p/p2p/protocol/circuitv2/client"
 	"github.com/libp2p/go-libp2p/p2p/protocol/holepunch"
 	"github.com/multiformats/go-multiaddr"
+	manet "github.com/multiformats/go-multiaddr/net"
 )
 
 const (
@@ -161,6 +163,9 @@ type Node struct {
 	punch   *punchWatcher
 	events  chan Event
 
+	// publicIP holds the external WAN IPv4 address discovered via STUN.
+	publicIP atomic.Pointer[net.IP]
+
 	// claimed guards the one-transfer-per-room rule: it is set when a
 	// receiver that proved the code takes the room, and cleared again if
 	// that attempt fails.
@@ -180,11 +185,12 @@ type Node struct {
 	done      chan struct{}
 }
 
-// Option adjusts how New finds a meeting point.
+// Option adjusts how New finds a meeting point or discovers its network.
 type Option func(*options)
 
 type options struct {
-	listURL string
+	listURL     string
+	stunServers []string
 }
 
 // WithServerList names a URL listing more meeting point addresses, one per
@@ -192,6 +198,20 @@ type options struct {
 // answers. See fetchServerList.
 func WithServerList(url string) Option {
 	return func(o *options) { o.listURL = strings.TrimSpace(url) }
+}
+
+// WithSTUNServers configures custom STUN servers in order of priority.
+// If not specified, DefaultSTUNServers is used.
+func WithSTUNServers(servers []string) Option {
+	return func(o *options) {
+		var list []string
+		for _, s := range servers {
+			if s = strings.TrimSpace(s); s != "" {
+				list = append(list, s)
+			}
+		}
+		o.stunServers = list
+	}
 }
 
 // SplitServers parses a comma-separated list of meeting point addresses.
@@ -238,6 +258,38 @@ func New(ctx context.Context, serverAddrs []string, opts ...Option) (*Node, erro
 		return nil, err
 	}
 
+	var pubIP *net.IP
+	stunServers := o.stunServers
+	if len(stunServers) == 0 {
+		stunServers = DefaultSTUNServers
+	}
+	stunCtx, stunCancel := context.WithTimeout(ctx, 3500*time.Millisecond)
+	if ip, err := ResolvePublicIP(stunCtx, stunServers); err == nil && ip != nil {
+		pubIP = &ip
+	}
+	stunCancel()
+
+	addrsFactory := func(addrs []multiaddr.Multiaddr) []multiaddr.Multiaddr {
+		var result []multiaddr.Multiaddr
+		for _, a := range addrs {
+			// Skip Docker container bridge networks (172.16.0.0/12) which
+			// bloat the multiaddr list and push useful addrs past MaxAddrs.
+			if isDockerAddr(a) {
+				continue
+			}
+			result = append(result, a)
+
+			// If we have a STUN-discovered public IP, synthesize public multiaddrs
+			// from local LAN / interface bindings.
+			if pubIP != nil {
+				if pubMA, ok := injectPublicIP(a, *pubIP); ok {
+					result = append(result, pubMA)
+				}
+			}
+		}
+		return multiaddr.Unique(result)
+	}
+
 	punch := newPunchWatcher()
 	h, err := libp2p.New(
 		// DCUtR (hole punching): upgrades a relayed connection to a
@@ -247,6 +299,8 @@ func New(ctx context.Context, serverAddrs []string, opts ...Option) (*Node, erro
 		libp2p.EnableAutoNATv2(),
 		// Ask the router to forward a port if it speaks UPnP/NAT-PMP.
 		libp2p.NATPortMap(),
+		// Filter out useless virtual docker addresses and inject STUN-discovered public IP
+		libp2p.AddrsFactory(addrsFactory),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("could not start the network layer: %w", err)
@@ -263,6 +317,9 @@ func New(ctx context.Context, serverAddrs []string, opts ...Option) (*Node, erro
 		ctx:        nodeCtx,
 		cancel:     cancel,
 		done:       make(chan struct{}),
+	}
+	if pubIP != nil {
+		n.publicIP.Store(pubIP)
 	}
 
 	server, err := n.connectAny(ctx, infos)
@@ -343,6 +400,20 @@ func (n *Node) Done() <-chan struct{} { return n.done }
 
 // ID is this node's libp2p peer ID.
 func (n *Node) ID() peer.ID { return n.host.ID() }
+
+// PublicIP returns this node's external WAN IP discovered via STUN, or nil
+// if discovery failed or was not possible.
+func (n *Node) PublicIP() net.IP {
+	if ip := n.publicIP.Load(); ip != nil {
+		return *ip
+	}
+	return nil
+}
+
+// Addrs returns the multiaddrs this node is listening on and advertising.
+func (n *Node) Addrs() []multiaddr.Multiaddr {
+	return n.host.Addrs()
+}
 
 // Close shuts the host down. It is safe to call more than once.
 func (n *Node) Close() error {
@@ -446,18 +517,48 @@ func (n *Node) Host(ctx context.Context, paths []string) (string, error) {
 func (n *Node) announce(ctx context.Context, room string) error {
 	server := n.currentServer()
 
-	// Addresses to advertise: relay circuit addresses through the server
-	// first — those are what matter when both sides are behind NAT —
-	// then our own, which win when both peers are on the same network.
-	var addrs []multiaddr.Multiaddr
+	// Prioritize addresses to advertise:
+	// 1. Direct public addresses (STUN IPv4 + Global IPv6)
+	// 2. Relay circuit addresses (fallback if both peers are behind NAT)
+	// 3. Local LAN addresses (win when both peers are on the same local network)
+	// 4. Loopback (for local testing)
+	var (
+		publicAddrs   []multiaddr.Multiaddr
+		circuitAddrs  []multiaddr.Multiaddr
+		privateAddrs  []multiaddr.Multiaddr
+		loopbackAddrs []multiaddr.Multiaddr
+	)
+
 	for _, sa := range server.Addrs {
 		circuit, err := multiaddr.NewMultiaddr(
 			fmt.Sprintf("%s/p2p/%s/p2p-circuit", sa, server.ID))
 		if err == nil {
-			addrs = append(addrs, circuit)
+			circuitAddrs = append(circuitAddrs, circuit)
 		}
 	}
-	addrs = append(addrs, n.host.Addrs()...)
+
+	for _, a := range n.host.Addrs() {
+		if isDockerAddr(a) {
+			continue
+		}
+		switch {
+		case manet.IsPublicAddr(a):
+			publicAddrs = append(publicAddrs, a)
+		case manet.IsPrivateAddr(a):
+			privateAddrs = append(privateAddrs, a)
+		case manet.IsIPLoopback(a):
+			loopbackAddrs = append(loopbackAddrs, a)
+		default:
+			privateAddrs = append(privateAddrs, a)
+		}
+	}
+
+	var addrs []multiaddr.Multiaddr
+	addrs = append(addrs, publicAddrs...)
+	addrs = append(addrs, circuitAddrs...)
+	addrs = append(addrs, privateAddrs...)
+	addrs = append(addrs, loopbackAddrs...)
+	addrs = multiaddr.Unique(addrs)
 	if len(addrs) > rendezvous.MaxAddrs {
 		addrs = addrs[:rendezvous.MaxAddrs]
 	}

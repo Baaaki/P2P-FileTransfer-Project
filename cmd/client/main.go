@@ -60,6 +60,8 @@ func main() {
 		yes         = flag.Bool("yes", false, "headless: accept the incoming file list without asking")
 		showVersion = flag.Bool("version", false, "print version information and exit")
 		doUpdate    = flag.Bool("update", false, "check for updates and update puresend to the latest release")
+		stun        = flag.String("stun", envOr("FT_STUN", ""),
+			"comma-separated STUN servers used to discover WAN IP (default: Cloudflare and Google)")
 	)
 	flag.Parse()
 
@@ -106,15 +108,27 @@ func main() {
 		outDir = tui.DefaultOutDir()
 	}
 
+	var stunList []string
+	if *stun != "" {
+		stunList = splitList(*stun)
+	}
 	list := p2p.WithServerList(*serverList)
+	stunOpt := p2p.WithSTUNServers(stunList)
+
 	switch {
 	case *send != "":
-		run(headless.Send(servers, splitList(*send), list))
+		run(headless.Send(servers, splitList(*send), list, stunOpt))
 	case *receive != "":
-		run(headless.Receive(servers, *receive, outDir, *yes, list))
+		run(headless.Receive(servers, *receive, outDir, *yes, list, stunOpt))
 	default:
 		maybeSpawnTerminal()
-		run(tui.Run(tui.Config{Servers: servers, ServerList: *serverList, OutDir: *out, Version: version}))
+		run(tui.Run(tui.Config{
+			Servers:     servers,
+			ServerList:  *serverList,
+			STUNServers: stunList,
+			OutDir:      *out,
+			Version:     version,
+		}))
 	}
 }
 

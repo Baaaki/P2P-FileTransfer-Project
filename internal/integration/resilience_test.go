@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -97,16 +96,6 @@ func TestRoomSurvivesAServerRestart(t *testing.T) {
 	// The server goes away...
 	first.Close()
 	waitForEvent[p2p.ServerLostEvent](t, events, 10*time.Second)
-
-	// Wait briefly for the OS to release the listening port before binding it again
-	for i := 0; i < 50; i++ {
-		l, err := net.Listen("tcp4", "127.0.0.1:"+port)
-		if err == nil {
-			_ = l.Close()
-			break
-		}
-		time.Sleep(20 * time.Millisecond)
-	}
 
 	// ...and comes back with an empty room table.
 	_, registry, _ := startWSServer(t, priv, "/ip4/127.0.0.1/tcp/"+port+"/ws")

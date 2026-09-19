@@ -27,9 +27,9 @@ var (
 	// footerStyle lists the keys that work on this screen.
 	footerStyle = lipgloss.NewStyle().Foreground(colFaint)
 
-	okStyle   = lipgloss.NewStyle().Bold(true).Foreground(colOK)
-	warnStyle = lipgloss.NewStyle().Foreground(colWarn)
-	errStyle  = lipgloss.NewStyle().Bold(true).Foreground(colErr)
+	okStyle           = lipgloss.NewStyle().Bold(true).Foreground(colOK)
+	warnStyle         = lipgloss.NewStyle().Foreground(colWarn)
+	errStyle          = lipgloss.NewStyle().Bold(true).Foreground(colErr)
 	updateNoticeStyle = lipgloss.NewStyle().Foreground(colAccent).Bold(true)
 
 	// choiceStyle / choiceSelStyle render a menu entry.

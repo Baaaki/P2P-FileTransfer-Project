@@ -73,13 +73,16 @@ type Config struct {
 	OutDir string
 	// Version is the current version of the application.
 	Version string
+	// STUNServers overrides the default STUN servers used to discover WAN IP.
+	STUNServers []string
 }
 
 // Model is the whole application state.
 type Model struct {
-	servers    []string
-	serverList string
-	version    string
+	servers     []string
+	serverList  string
+	stunServers []string
+	version     string
 	screen     screen
 	mode       mode
 	width      int
@@ -166,16 +169,17 @@ func New(cfg Config) Model {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	return Model{
-		servers:    cfg.Servers,
-		serverList: cfg.ServerList,
-		version:    cfg.Version,
-		screen:     screenWelcome,
-		ctx:        ctx,
-		cancel:     cancel,
-		picker:     fp,
-		dirPicker:  dp,
-		codeInput:  ti,
-		outDir:     outDir,
+		servers:     cfg.Servers,
+		serverList:  cfg.ServerList,
+		stunServers: cfg.STUNServers,
+		version:     cfg.Version,
+		screen:      screenWelcome,
+		ctx:         ctx,
+		cancel:      cancel,
+		picker:      fp,
+		dirPicker:   dp,
+		codeInput:   ti,
+		outDir:      outDir,
 	}
 }
 
@@ -206,9 +210,9 @@ func tick() tea.Cmd {
 }
 
 // connectCmd starts the network layer and reaches the meeting point.
-func connectCmd(ctx context.Context, servers []string, serverList string) tea.Cmd {
+func connectCmd(ctx context.Context, servers []string, serverList string, stunServers []string) tea.Cmd {
 	return func() tea.Msg {
-		node, err := p2p.New(ctx, servers, p2p.WithServerList(serverList))
+		node, err := p2p.New(ctx, servers, p2p.WithServerList(serverList), p2p.WithSTUNServers(stunServers))
 		if err != nil {
 			return errMsg{err}
 		}
@@ -460,7 +464,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				return m, m.dirPicker.Init()
 			}
 			m.screen = screenConnecting
-			return m, connectCmd(m.ctx, m.servers, m.serverList)
+			return m, connectCmd(m.ctx, m.servers, m.serverList, m.stunServers)
 		case "q":
 			m.quitted = true
 			m.cancel()
