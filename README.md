@@ -105,7 +105,7 @@ PureSend, doğrudan P2P tünelleme ve yerel ISP rotalama/peering avantajları sa
 
 | Güzergâh | Mesafe | Dosya Boyutu | Ortalama Hız | Süre | Durum / Not |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| **İstanbul ➔ Tekirdağ** | ~140 km | **1.5 GB** (Video) | **~20 MB/sn** (~160 Mbps) | **~1 dk** | **Tamamlandı** (Servis sağlayıcı upload paketi 48 Mbps olmasına rağmen doğrudan P2P tünelleme ile 20 MB/sn hıza ulaşıldı) |
+| **İstanbul ➔ Tekirdağ** | ~140 km | **1.5 GB** (Video) | **~20 MB/sn** | **~1 dk** | **Tamamlandı** (Servis sağlayıcı upload paketi 48 Mbps olmasına rağmen doğrudan P2P tünelleme ile ~160–200 Mbps efektif hıza ulaşıldı) |
 | **İstanbul ➔ İstanbul** (Farklı İlçeler) | ~35 km | *1.5 GB+* | *Ölçülüyor* | *—* | ⏳ *Test aşamasında (Yakında)* |
 | **İstanbul ➔ İzmir** | ~480 km | *1.5 GB+* | *Ölçülüyor* | *—* | ⏳ *Test aşamasında (Yakında)* |
 

@@ -105,7 +105,7 @@ Thanks to direct peer-to-peer hole punching and local ISP peering, PureSend bypa
 
 | Route | Distance | File Size | Average Throughput | Transfer Time | Status / Notes |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| **Istanbul ➔ Tekirdağ** | ~140 km | **1.5 GB** (Video) | **~20 MB/s** (~160 Mbps) | **~1 min** | **Verified** (Exceeded subscriber's 48 Mbps nominal upload package via direct P2P socket and regional peering) |
+| **Istanbul ➔ Tekirdağ** | ~140 km | **1.5 GB** (Video) | **~20 MB/s** | **~1 min** | **Verified** (Nominal ISP upload package was 48 Mbps, but direct P2P socket achieved ~160–200 Mbps effective throughput) |
 | **Istanbul ➔ Istanbul** (Cross-District) | ~35 km | *1.5 GB+* | *Measuring* | *—* | ⏳ *In progress (Coming soon)* |
 | **Istanbul ➔ Izmir** | ~480 km | *1.5 GB+* | *Measuring* | *—* | ⏳ *In progress (Coming soon)* |
 
