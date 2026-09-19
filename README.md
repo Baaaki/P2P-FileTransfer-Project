@@ -13,7 +13,8 @@ Kod aynı zamanda **paroladır**: iki uç, kodu bildiklerini birbirine
 kanıtlamadan tek bir bayt bile akmaz. Buluşma sunucusu bu yüzden güvenilir
 bir taraf değildir — yalan söylerse transfer başlamaz.
 
-🇬🇧 English documentation: [README.en.md](README.en.md)
+🇬🇧 English documentation: [README.en.md](README.en.md)  
+🌐 Web sitesi & Canlı simülasyon: [puresend.madebybaki.com](https://puresend.madebybaki.com)  
 📋 Ürünleşme planı: [ROADMAP.md](docs/ROADMAP.md)
 
 ```
@@ -35,18 +36,20 @@ sayfasından işletim sistemine uygun dosyayı indir, arşivden çıkar, çalı�
 
 | İşletim sistemin | İndireceğin dosya |
 |---|---|
-| Windows | `puresend_<sürüm>_windows_x86_64.zip` |
+| Ubuntu / Debian / Mint (`.deb`) | `puresend_<sürüm>_amd64.deb` (ARM için `arm64.deb`) |
+| Linux (Taşınabilir ikili) | `puresend_<sürüm>_linux_x86_64.tar.gz` (ARM: `arm64.tar.gz`) |
+| Windows | `puresend_<sürüm>_windows_x86_64.zip` (ARM: `arm64.zip`) |
 | macOS (M1 / M2 / M3 / M4) | `puresend_<sürüm>_macOS_arm64.tar.gz` |
 | macOS (2020 öncesi, Intel) | `puresend_<sürüm>_macOS_x86_64.tar.gz` |
-| Linux | `puresend_<sürüm>_linux_x86_64.tar.gz` |
 
-Arşivin içinden `puresend` adında **tek bir dosya** çıkar.
-Başka hiçbir şeye ihtiyacın yok.
-
-- **Windows:** dosyaya çift tıkla, program açılır.
-- **macOS:** çift tıkla — Terminal penceresinde açılır.
-- **Linux:** masaüstü ortamları terminal programlarını çift tıklamayla
-  açmayabilir; en garantisi terminalden çalıştırmak:
+- **Ubuntu / Debian / Mint (`.deb`):** En pratik yöntem. İndirip çift tıklayarak ya da terminalden:
+  ```bash
+  sudo apt install ./puresend_<sürüm>_amd64.deb
+  ```
+  Program sisteminize kurulur, uygulama menüsüne logosuyla birlikte eklenir ve doğrudan menüden tıklanarak ya da terminalden `puresend` yazılarak açılabilir.
+- **Windows:** `.zip` içindeki dosyaya çift tıkla, program açılır.
+- **macOS:** `.tar.gz` içindeki dosyaya çift tıkla — Terminal penceresinde açılır.
+- **Linux (Taşınabilir):** Arşivden çıkan dosyaya dosya yöneticisinden çift tıkladığında sistemindeki terminal (GNOME Terminal, Konsole, XFCE Terminal vb.) otomatik olarak açılır. Alternatif olarak terminalden çalıştırmak için:
   `chmod +x puresend && ./puresend`
 
 ### İlk açılışta bir uyarı çıkarsa
@@ -97,11 +100,16 @@ Bu ayrımı karıştırmamak önemli:
 | Klasör | Nerede çalışır | Nasıl dağıtılır |
 |---|---|---|
 | **`cmd/server/`** | 🖥️ **Ubuntu sunucunda**, 7/24 açık | Docker + Cloudflare Tunnel |
-| **`cmd/client/`** | 💻 **Kullanıcının masaüstünde** | GitHub Releases'ten indirilen tek dosya |
-| `internal/rendezvous/` | ikisinde de | ortak protokol |
-| `internal/transfer/` | sadece istemci | sunucu bu kodu hiç çalıştırmaz |
-| `internal/p2p/`, `internal/tui/` | sadece istemci | ağ katmanı + arayüz |
+| **`cmd/client/`** | 💻 **Kullanıcının masaüstünde** | GitHub Releases (tek dosya veya `.deb`) |
+| `internal/rendezvous/` | ikisinde de | ortak protokol (`/puresend/rendezvous/1.1.0`) |
+| `internal/transfer/` | sadece istemci | dosya aktarımı, PAKE doğrulaması, resume |
+| `internal/p2p/`, `internal/tui/` | sadece istemci | ağ katmanı + Bubble Tea terminal arayüzü |
+| `internal/safetext/` | sadece istemci | ANSI kaçış dizileri ve bidi enjeksiyon koruması |
+| `internal/headless/` | sadece istemci | terminal arayüzsüz CLI modu (`-send`, `-receive`) |
+| **`LandingPage/`** | 🌐 **Web'de (Vercel/CDN)** | React + Vite + Tailwind v4 (tanıtım & TUI simülasyonu) |
+| `packaging/` | Linux masaüstü | `.desktop` başlatıcı, SVG logo ve `.deb` paket dosyaları |
 | `deploy/` | 🖥️ sunucu | cloudflared ayarları (compose kökte) |
+| `scripts/` | derleme / paketleme | yerel `.deb` üretim betiği (`build-deb.sh`) |
 
 **Kısaca:** sunucuda `cmd/server` çalışır ve dosyalara asla dokunmaz;
 dosyalar kullanıcının çalıştırdığı `cmd/client`'tan çıkar.
@@ -115,7 +123,7 @@ dosyalar kullanıcının çalıştırdığı `cmd/client`'tan çıkar.
 1. Programı açar → *"Dosya göndereceğim"*
 2. Dosya gezgininden dosyaları seçer → `Enter`
    (bulunduğu **klasörün tamamını** göndermek için `f`, son seçimi silmek
-   için `x`)
+   için `x`, üst klasöre çıkmak için `Backspace`)
 3. `s` ile başlatır, ekranda kod çıkar: **`kiraz-liman-42`**
 4. Kodu arkadaşına WhatsApp'tan yazar → *"✓ Arkadaşıma ilettim"*
 5. Arkadaşı kodu girince gönderme kendiliğinden başlar
@@ -131,7 +139,8 @@ dosyalar kullanıcının çalıştırdığı `cmd/client`'tan çıkar.
 3. Gelen dosya listesini görür → *"Evet, indir"*
 4. Dosyalar `İndirilenler/PureSend` klasörüne iner —
    başka bir yere inmesini isterse ana menüden **"İndirme klasörünü
-   değiştir"**, ya da `-out /mnt/disk`
+   değiştir"** (klasör gezgininde `Backspace` veya `←` ile üst klasöre çıkılabilir),
+   ya da `-out /mnt/disk`
 
 Transfer sırasında **hız ve kalan süre** görünür. Bağlantı koparsa aynı
 kodla tekrar denendiğinde **kaldığı yerden devam eder** — önceki denemede
@@ -209,7 +218,7 @@ Tünel yalnızca **buluşma** ve **delme koordinasyonu** için kullanılır
 
 ---
 
-## Sunucu kurulumu (Ubuntu + Cloudflare Tunnel + OpenShip)
+## Sunucu kurulumu (Ubuntu + Docker Compose + Cloudflare Tunnel)
 
 ### 1. Sunucuyu başlat
 
@@ -340,66 +349,20 @@ curl -sI https://rendezvous.madebybaki.com \
      -H "Connection: Upgrade" -H "Upgrade: websocket"
 ```
 
-### OpenShip ile
+### Konteyner Güvenliği ve Kimlik Yedeği
 
-OpenShip compose dosyasını **kısmen** uyguluyor. Gerçekte gözlenen
-davranış (v0.4.8):
+Docker Compose dosyası (`docker-compose.yml`) sunucuyu en sıkı güvenlik sınırlarıyla çalıştıracak şekilde yapılandırılmıştır:
+- **Salt-okunur dosya sistemi (`read_only: true`):** Konteyner yalnızca `/data` (anahtar) ve `/tmp` alanına yazabilir.
+- **Tüm yetkiler düşürülmüştür (`cap_drop: ALL`, `no-new-privileges: true`):** Konteyner içinde yetki yükseltilemez.
+- **Kaynak sınırları (`mem_limit: 512m`, `pids_limit: 256`):** Olası bellek ve süreç tükenmesi saldırılarına karşı host'u korur.
+- **Port İzolasyonu:** `8080` (WebSocket) ve `8081` (Health/Metrics) yalnızca `127.0.0.1` üzerinden dinlenir; internete yalnızca tünel üzerinden kontrollü açılır.
 
-| Compose bloğu | Ne oluyor |
-|---|---|
-| `build`, `image` | ✅ uygulanıyor — context repo köküne sabitleniyor |
-| `command:` | ❌ **yok sayılıyor** — Dockerfile'ın `CMD`'si çalışıyor |
-| `volumes:` | ❌ **yok sayılıyor** — Dockerfile'daki `VOLUME` için anonim volume açılıyor |
-| `ports:` | ⚠️ yeniden eşleniyor — `127.0.0.1:<sabitlenmiş>` (örn. `20001`) |
-| `environment:` | ✅ uygulanıyor |
-
-Bunun iki sonucu var ve ikisi de sessizce vurur:
-
-**1. `command:` düştüğü için `-announce` kaybolur.** Sunucu kendini
-konteynerin iç adresleriyle (`172.17.x.x`) tanıtır.
-
-**2. Anonim volume yeniden deploy'da kaybolur** — `server.key` gider,
-**Peer ID değişir** ve dağıttığın bütün istemciler ölür.
-
-İkisinin de çözümü ortam değişkeni, çünkü OpenShip onları uyguluyor:
-
-```bash
-# Mevcut anahtarı konteynerden al (deploy'dan ÖNCE!)
-docker exec <konteyner> base64 -w0 /data/server.key
-```
-
-OpenShip → servis → *Ortam değişkenleri*:
-
-| Değişken | Değer |
-|---|---|
-| `FT_IDENTITY_KEY` | yukarıdaki base64 çıktısı (**gizli tut**) |
-| `FT_ANNOUNCE` | `/dns4/rendezvous.madebybaki.com/tcp/443/tls/ws` |
-
-Böylece kimlik diskten tamamen bağımsız olur. Açılışta
-`Identity from: FT_IDENTITY_KEY` satırını görürsen doğru çalışıyordur.
-
-Sağlık uç noktasının adresi Dockerfile'ın `CMD`'sinde (`-health-addr
-0.0.0.0:8081`) zaten doğru; imaj kendi `HEALTHCHECK`'ini de taşıdığı için
-OpenShip compose'daki `healthcheck:` bloğunu uygulamasa bile konteynerin
-sağlığı görünür. Compose'daki sertleştirme (`read_only`, `cap_drop`,
-bellek sınırı, log rotasyonu) OpenShip tarafından uygulanmayabilir;
-`docker inspect` ile kontrol et.
-
-**cloudflared hedefi**, `8080` değil OpenShip'in sabitlediği port:
-
-```bash
-docker ps --format '{{.Names}}\t{{.Ports}}' | grep filetransfer
-# ... 127.0.0.1:20001->8080/tcp   →  ingress: http://localhost:20001
-```
-
-> ⚠️ Bu port yeniden deploy'da değişebilir. Değişirse tünel sessizce
-> kırılır — "bir gün çalışmıyor" olursa ilk buraya bak.
-
-`8081` host'a çıkmaz, sağlık kontrolü konteyner içinden:
-
-```bash
-docker exec <konteyner> wget -qO- http://127.0.0.1:8081/health
-```
+> 💡 **Kimlik Anahtarını Yedekleme:**  
+> Sunucunun Peer ID'si `/data/server.key` dosyasında kalıcı `rendezvous-key` volume'ünde saklanır. Sunucuyu farklı bir makineye taşımak veya yedeklemek istersen:
+> ```bash
+> docker compose exec rendezvous base64 -w0 /data/server.key
+> ```
+> Bu çıktıyı güvenli bir yerde (örneğin parola yöneticisinde) saklayabilirsin. İhtiyaç halinde başka bir sunucuda `FT_IDENTITY_KEY` ortam değişkeniyle vererek aynı Peer ID'yi diske ihtiyaç duymadan ayağa kaldırabilirsin.
 
 ---
 
@@ -461,6 +424,7 @@ make lint       # golangci-lint (CI ile aynı sürüm)
 make vuln       # govulncheck — kodun gerçekten eriştiği açıklar
 make cover      # kapsama raporu
 make test-relay # delik açılamayan iki ağ arasında relay yedeği (aşağıda)
+make deb        # Debian/Ubuntu için .deb paketi üretir
 ```
 
 Tek makinede denemek için üç terminal:
@@ -512,15 +476,19 @@ metriklerinin transferi gördüğünü de doğrular.
 derleyerek çalıştırır: eski bir Go ile derlenmiş `golangci-lint` ya da
 `govulncheck` yeni standart kütüphanede anlamsız hatalar verir.
 
-## Teknolojiler
+## Teknolojiler ve Mekanizmalar
 
-- **Go 1.26+** (`go.mod`, Dockerfile ve CI aynı sürümü kullanır),
-  **go-libp2p v0.49** — TCP + QUIC + WebSocket transport,
-  Circuit Relay v2, DCUtR hole punching, AutoNAT v2, UPnP, Noise/TLS
-- **Bubble Tea + Lipgloss** — terminal arayüzü
-- **schollz/pake** — oda kodundan anahtar türetme (P-256 üzerinde PAKE2)
-- **Prometheus client_golang** — sunucu metrikleri
-- İki özel protokol: `/puresend/rendezvous/1.1.0` ve
+- **Go 1.26+**, **go-libp2p v0.49** — TCP + QUIC + WebSocket transport,
+  Circuit Relay v2 (ACL ve kota korumalı), DCUtR hole punching (NAT delme),
+  AutoNAT v2, UPnP port açma, Noise/TLS şifreleme ve Resource Manager
+- **Bubble Tea + Lipgloss + Bubbles** — Terminal kullanıcı arayüzü (TUI), dinamik hız ve kalan süre hesaplama
+- **schollz/pake/v3** — Oda kodundan anahtar türetme (P-256 üzerinde SPAKE2), HMAC kanıtı ve Peer ID bağlama (MITM ve sahte sunucu koruması)
+- **Prometheus client_golang v1.24.1** — Sunucu `/metrics` (relay trafiği, aktif odalar, limitler) ve `/health` JSON uç noktası
+- **Landing Page** — React 19, Vite, Tailwind CSS v4, TypeScript, Oxlint; tarayıcıda çalışan canlı TUI simülatörü ve Release API entegrasyonu
+- **Paketleme & Sistem Entegrasyonu** — GoReleaser v2, Syft (SBOM), Debian/Ubuntu `.deb` üretimi (`dpkg-deb` / `nfpm`), FreeDesktop Desktop Entry (`.desktop`) ve SVG uygulama ikonu
+- **Güvenlik & Dezenfeksiyon (`internal/safetext`)** — Terminal enjeksiyonlarına karşı ANSI kaçış kodları ve Unicode bidi (RTLO) temizliği, Windows aygıt adı ve dizin dışına taşma (Path Traversal) engelleme
+- **Kalıcı Aktarım (Resume)** — SHA-256 doğrulamalı parça (`.part`) dosyaları ile kesilen transferleri kaldığı yerden sürdürme
+- **İki özel protokol**: `/puresend/rendezvous/1.1.0` ve
   `/puresend/transfer/2.0.0`
 
 ## Sınırlamalar
