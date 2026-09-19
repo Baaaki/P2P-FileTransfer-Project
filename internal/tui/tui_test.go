@@ -570,8 +570,8 @@ func TestLanguageToggle(t *testing.T) {
 	if !strings.Contains(m.View(), "Dosyalarını arkadaşına doğrudan gönderirsin.") {
 		t.Errorf("expected Turkish welcome text, got:\n%s", m.View())
 	}
-	if !strings.Contains(m.View(), "L English") {
-		t.Errorf("expected footer to show 'L English' shortcut, got:\n%s", m.View())
+	if !strings.Contains(m.View(), "[L]") || !strings.Contains(m.View(), "English") {
+		t.Errorf("expected footer to show '[L] Dil: English' shortcut, got:\n%s", m.View())
 	}
 
 	// Press "l" to switch to English
@@ -586,8 +586,8 @@ func TestLanguageToggle(t *testing.T) {
 	if !strings.Contains(enView, "I want to send files") {
 		t.Errorf("expected English menu option, got:\n%s", enView)
 	}
-	if !strings.Contains(enView, "L Türkçe") {
-		t.Errorf("expected footer to show 'L Türkçe' shortcut, got:\n%s", enView)
+	if !strings.Contains(enView, "[L]") || !strings.Contains(enView, "Türkçe") {
+		t.Errorf("expected footer to show '[L] Language: Türkçe' shortcut, got:\n%s", enView)
 	}
 
 	// Press uppercase "L" to switch back to Turkish

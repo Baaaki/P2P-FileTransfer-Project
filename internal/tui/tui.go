@@ -814,7 +814,7 @@ func (m Model) viewWelcome() string {
 	if m.updateNotice != "" {
 		b.WriteString("\n" + updateNoticeStyle.Render("✨ "+m.updateNotice) + "\n")
 	}
-	b.WriteString("\n" + footerStyle.Render(t.WelcomeFooter))
+	b.WriteString("\n" + formatFooter(t.WelcomeFooter))
 	return b.String()
 }
 
@@ -826,7 +826,7 @@ func (m Model) viewConnecting() string {
 	b.WriteString(helpStyle.Render(t.ConnectingHelp1) + "\n")
 	b.WriteString(helpStyle.Render(t.ConnectingHelp2) + "\n")
 	b.WriteString(helpStyle.Render(t.ConnectingHelp3) + "\n\n")
-	b.WriteString(footerStyle.Render(t.ConnectingFooter))
+	b.WriteString(formatFooter(t.ConnectingFooter))
 	return b.String()
 }
 
@@ -854,10 +854,10 @@ func (m Model) viewPickFiles() string {
 		}
 		b.WriteString(sizeStyle.Render(t.PickTotal(formatBytes(total))) + "\n\n")
 		b.WriteString(buttonSelStyle.Render(t.PickStartBtn) + "\n\n")
-		b.WriteString(footerStyle.Render(t.PickFooterSelected))
+		b.WriteString(formatFooter(t.PickFooterSelected))
 	} else {
 		b.WriteString("\n" + helpStyle.Render(t.PickEmpty) + "\n\n")
-		b.WriteString(footerStyle.Render(t.PickFooterEmpty))
+		b.WriteString(formatFooter(t.PickFooterEmpty))
 	}
 	return b.String()
 }
@@ -873,7 +873,7 @@ func (m Model) viewOutDir() string {
 	b.WriteString(fileStyle.Render(m.dirPicker.CurrentDirectory) + "\n\n")
 	b.WriteString(m.dirPicker.View() + "\n")
 	b.WriteString(buttonSelStyle.Render(t.OutDirSelectBtn(filepath.Base(m.dirPicker.CurrentDirectory))) + "\n\n")
-	b.WriteString(footerStyle.Render(t.OutDirFooter))
+	b.WriteString(formatFooter(t.OutDirFooter))
 	return b.String()
 }
 
@@ -889,7 +889,7 @@ func (m Model) viewRoomCode() string {
 	b.WriteString(helpStyle.Render(t.RoomSingleUse) + "\n\n")
 	b.WriteString(m.hostingNotes())
 	b.WriteString(buttonSelStyle.Render(t.RoomSentBtn) + "\n\n")
-	b.WriteString(footerStyle.Render(t.RoomFooter))
+	b.WriteString(formatFooter(t.RoomFooter))
 	return b.String()
 }
 
@@ -906,7 +906,7 @@ func (m Model) viewWaiting() string {
 	b.WriteString(helpStyle.Render(t.WaitingHelp1) + "\n")
 	b.WriteString(helpStyle.Render(t.WaitingHelp2) + "\n\n")
 	b.WriteString(helpStyle.Render(t.WaitingHelp3) + "\n\n")
-	b.WriteString(footerStyle.Render(t.WaitingFooter))
+	b.WriteString(formatFooter(t.WaitingFooter))
 	return b.String()
 }
 
@@ -945,7 +945,7 @@ func (m Model) viewEnterCode() string {
 	}
 	b.WriteString(helpStyle.Render(t.EnterSavingTo) + "\n")
 	b.WriteString(fileStyle.Render(m.outDir) + "\n\n")
-	b.WriteString(footerStyle.Render(t.EnterFooter))
+	b.WriteString(formatFooter(t.EnterFooter))
 	return b.String()
 }
 
@@ -956,7 +956,7 @@ func (m Model) viewFinding() string {
 	b.WriteString(m.spinner() + " " + bodyStyle.Render(m.statusText()) + "\n\n")
 	b.WriteString(helpStyle.Render(t.FindingHelp1) + "\n")
 	b.WriteString(helpStyle.Render(t.FindingHelp2) + "\n\n")
-	b.WriteString(footerStyle.Render(t.FindingFooter))
+	b.WriteString(formatFooter(t.FindingFooter))
 	return b.String()
 }
 
@@ -1011,7 +1011,7 @@ func (m Model) viewConfirm() string {
 		no = buttonSelStyle.Render(t.ConfirmNo)
 	}
 	b.WriteString(lipgloss.JoinHorizontal(lipgloss.Top, yes, no) + "\n\n")
-	b.WriteString(footerStyle.Render(t.ConfirmFooter))
+	b.WriteString(formatFooter(t.ConfirmFooter))
 	return b.String()
 }
 
@@ -1060,7 +1060,7 @@ func (m Model) viewTransfer() string {
 	default:
 		b.WriteString(m.spinner() + " " + helpStyle.Render(t.TransferPreparing) + "\n\n")
 	}
-	b.WriteString(footerStyle.Render(t.TransferFooter))
+	b.WriteString(formatFooter(t.TransferFooter))
 	return b.String()
 }
 
@@ -1119,7 +1119,7 @@ func (m Model) viewDone() string {
 		}
 		b.WriteString("\n" + helpStyle.Render(t.DoneVerified) + "\n\n")
 	}
-	b.WriteString(footerStyle.Render(t.DoneFooter))
+	b.WriteString(formatFooter(t.DoneFooter))
 	return b.String()
 }
 
@@ -1137,7 +1137,7 @@ func (m Model) viewError() string {
 		}
 		b.WriteString("\n")
 	}
-	b.WriteString(footerStyle.Render(t.ErrorFooter))
+	b.WriteString(formatFooter(t.ErrorFooter))
 	return b.String()
 }
 

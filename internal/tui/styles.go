@@ -1,6 +1,10 @@
 package tui
 
-import "github.com/charmbracelet/lipgloss"
+import (
+	"strings"
+
+	"github.com/charmbracelet/lipgloss"
+)
 
 // Adaptive colours so the app is readable on both light and dark
 // terminal themes.
@@ -26,6 +30,9 @@ var (
 
 	// footerStyle lists the keys that work on this screen.
 	footerStyle = lipgloss.NewStyle().Foreground(colFaint)
+
+	// keyBadgeStyle highlights key shortcuts like [Enter] or [L].
+	keyBadgeStyle = lipgloss.NewStyle().Foreground(colDefault).Bold(true)
 
 	okStyle           = lipgloss.NewStyle().Bold(true).Foreground(colOK)
 	warnStyle         = lipgloss.NewStyle().Foreground(colWarn)
@@ -96,3 +103,32 @@ func repeat(s string, n int) string {
 	}
 	return string(out)
 }
+
+// formatFooter highlights key brackets [Key] within the footer text so that
+// shortcuts clearly stand out from descriptions.
+func formatFooter(s string) string {
+	if !strings.Contains(s, "[") {
+		return footerStyle.Render(s)
+	}
+	var b strings.Builder
+	for {
+		start := strings.IndexByte(s, '[')
+		if start == -1 {
+			b.WriteString(footerStyle.Render(s))
+			break
+		}
+		end := strings.IndexByte(s[start:], ']')
+		if end == -1 {
+			b.WriteString(footerStyle.Render(s))
+			break
+		}
+		end += start
+		if start > 0 {
+			b.WriteString(footerStyle.Render(s[:start]))
+		}
+		b.WriteString(keyBadgeStyle.Render(s[start : end+1]))
+		s = s[end+1:]
+	}
+	return b.String()
+}
+

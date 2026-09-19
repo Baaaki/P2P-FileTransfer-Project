@@ -183,19 +183,19 @@ var trMessages = &Messages{
 	WelcomeRecv:      "📥  Bana dosya gönderilecek",
 	WelcomeChangeDir: "📁  İndirme klasörünü değiştir",
 	WelcomeSavingTo:  "İnenler şuraya kaydediliyor:",
-	WelcomeFooter:    "↑ ↓ ile seç  ·  Enter ile onayla  ·  L English  ·  q ile çık",
+	WelcomeFooter:    "[↑/↓] Gezin  ·  [Enter] Onayla  ·  [L] Dil: English  ·  [q] Çıkış",
 
 	ConnectingTitle:  "Bağlanılıyor",
 	ConnectingStatus: "Buluşma noktasına bağlanılıyor...",
 	ConnectingHelp1:  "Bu, iki bilgisayarın birbirini bulmasını sağlayan küçük bir",
 	ConnectingHelp2:  "adres defteri. Dosyaların oraya gitmiyor, sadece",
 	ConnectingHelp3:  "\"buradayım\" diyorsun.",
-	ConnectingFooter: "Ctrl+C ile çık",
+	ConnectingFooter: "[Ctrl+C] İptal",
 
 	PickTitle: "📤  Ne göndereceksin?",
-	PickHelp1: "Klasörlerin içine girmek için Enter'a bas. Göndermek",
-	PickHelp2: "istediğin dosyanın üzerinde Enter'a basınca listeye eklenir.",
-	PickHelp3: "İçinde olduğun klasörün tamamını göndermek için f'ye bas.",
+	PickHelp1: "Klasörlerin içine girmek için [Enter]'a bas. Göndermek",
+	PickHelp2: "istediğin dosyanın üzerinde [Enter]'a basınca listeye eklenir.",
+	PickHelp3: "İçinde olduğun klasörün tamamını eklemek için [f]'ye bas.",
 	PickSelected: func(n int) string {
 		return fmt.Sprintf("Seçtiklerin (%d):", n)
 	},
@@ -205,20 +205,20 @@ var trMessages = &Messages{
 	PickTotal: func(size string) string {
 		return "  Toplam: " + size
 	},
-	PickStartBtn:       "s  ·  Göndermeye başla",
+	PickStartBtn:       "[s]  ·  Göndermeye başla",
 	PickEmpty:          "Henüz bir şey seçmedin.",
-	PickFooterSelected: "↑ ↓ gez  ·  Enter aç/seç  ·  f klasörü ekle  ·  x son seçimi sil  ·  Ctrl+C çık",
-	PickFooterEmpty:    "↑ ↓ gez  ·  Enter aç/seç  ·  f klasörü ekle  ·  Ctrl+C çık",
+	PickFooterSelected: "[↑/↓] Gezin  ·  [Enter] Aç/Seç  ·  [f] Klasör Ekle  ·  [x] Çıkar  ·  [s] Başlat  ·  [Ctrl+C] Çıkış",
+	PickFooterEmpty:    "[↑/↓] Gezin  ·  [Enter] Aç/Seç  ·  [f] Klasör Ekle  ·  [Ctrl+C] Çıkış",
 
 	OutDirTitle:   "📁  İnen dosyalar nereye kaydedilsin?",
-	OutDirHelp1:   "• Enter : Seçili klasörün içine gir",
-	OutDirHelp2:   "• Backspace veya ← : Bir üst klasöre çık",
-	OutDirHelp3:   "• s : Aşağıda 'Şu an burası' yazan klasörü seç",
+	OutDirHelp1:   "• [Enter] : Seçili klasörün içine gir",
+	OutDirHelp2:   "• [Backspace] veya [←] : Bir üst klasöre çık",
+	OutDirHelp3:   "• [s] : Aşağıda gösterilen klasörü hedef seç",
 	OutDirCurrent: "Şu an burası: ",
 	OutDirSelectBtn: func(dir string) string {
-		return "s  ·  Burayı seç (" + dir + ")"
+		return "[s]  ·  Burayı seç (" + dir + ")"
 	},
-	OutDirFooter: "↑ ↓ gez  ·  Enter aç  ·  Backspace/← yukarı çık  ·  s seç  ·  Esc vazgeç",
+	OutDirFooter: "[↑/↓] Gezin  ·  [Enter] Gir  ·  [Backspace/←] Üst Klasör  ·  [s] Seç  ·  [Esc] Vazgeç",
 
 	RoomTitle:     "🔑  Oda kodun hazır!",
 	RoomBody:      "Şimdi arkadaşına bu kodu ilet.",
@@ -227,7 +227,7 @@ var trMessages = &Messages{
 	RoomHelp3:     "seçecek ve bu kodu yazacak.",
 	RoomSingleUse: "Kod tek kullanımlık: dosyalar gittiği anda geçersiz olur.",
 	RoomSentBtn:   "✓  Arkadaşıma ilettim",
-	RoomFooter:    "Enter ile devam et  ·  Ctrl+C ile çık",
+	RoomFooter:    "[Enter] Devam Et  ·  [L] Dil: English  ·  [Ctrl+C] Çıkış",
 
 	WaitingTitle:     "Bekleniyor",
 	WaitingStatus:    "Arkadaşının kodu girmesi bekleniyor...",
@@ -235,7 +235,7 @@ var trMessages = &Messages{
 	WaitingHelp1:     "Bu pencereyi kapatma. Arkadaşın kodu girdiği anda",
 	WaitingHelp2:     "gönderme kendiliğinden başlayacak.",
 	WaitingHelp3:     "Kod en fazla 1 saat geçerli.",
-	WaitingFooter:    "Ctrl+C ile vazgeç",
+	WaitingFooter:    "[L] Dil: English  ·  [Ctrl+C] İptal Et",
 
 	HostReady: "✓ Dosyalar gönderilmeye hazır",
 	HostPreparing: func(cur, total int) string {
@@ -250,12 +250,12 @@ var trMessages = &Messages{
 	EnterHelp2:       "Şuna benziyor: kiraz-liman-42",
 	EnterPlaceholder: "kiraz-liman-42",
 	EnterSavingTo:    "İnenler şuraya kaydedilecek:",
-	EnterFooter:      "Enter ile devam et  ·  Ctrl+O ile klasörü değiştir  ·  Ctrl+C ile çık",
+	EnterFooter:      "[Enter] Onayla & Bağlan  ·  [Ctrl+O] Klasör Değiştir  ·  [Ctrl+C] Çıkış",
 
 	FindingTitle:     "Aranıyor",
 	FindingHelp1:     "İki bilgisayar arasında doğrudan bir yol açılmaya",
 	FindingHelp2:     "çalışılıyor. Bu birkaç saniye sürebilir.",
-	FindingFooter:    "Ctrl+C ile vazgeç",
+	FindingFooter:    "[Ctrl+C] İptal Et",
 	StatusLookingUp:  "Kod kontrol ediliyor...",
 	StatusConnecting: "Arkadaşının bilgisayarına bağlanılıyor...",
 	StatusDirect:     "Doğrudan yol açılıyor...",
@@ -272,7 +272,7 @@ var trMessages = &Messages{
 	ConfirmQuestion: "Bu dosyaları almak istiyor musun?",
 	ConfirmYes:      "Evet, indir",
 	ConfirmNo:       "Hayır, iptal",
-	ConfirmFooter:   "← → ile seç  ·  Enter ile onayla  ·  y / n kısayolları",
+	ConfirmFooter:   "[←/→] Seçim  ·  [Enter] Onayla  ·  [y] Evet, İndir  ·  [n] İptal  ·  [Ctrl+C] Çıkış",
 	RelayWarning: func(limit string) string {
 		return "! Bu kadarı yedek yoldan geçemez.\n" +
 			"  Doğrudan yol açılamadı ve yedek yolun " + limit + " sınırı var;\n" +
@@ -301,7 +301,7 @@ var trMessages = &Messages{
 	TransferEta: func(eta string) string {
 		return "kalan süre " + eta
 	},
-	TransferFooter: "Ctrl+C ile vazgeç",
+	TransferFooter: "[Ctrl+C] Aktarımı Durdur",
 
 	DoneSendTitle: "✓  Gönderildi!",
 	DoneSendBody:  "Dosyaların arkadaşına ulaştı ve eksiksiz indiği doğrulandı.",
@@ -312,11 +312,11 @@ var trMessages = &Messages{
 		return fmt.Sprintf("  ... ve %d dosya daha", n)
 	},
 	DoneVerified: "Her dosyanın eksiksiz indiği doğrulandı.",
-	DoneFooter:   "Enter ile ana menüye dön  ·  q ile çık",
+	DoneFooter:   "[Enter] Ana Menü  ·  [L] Dil: English  ·  [q] Çıkış",
 
 	ErrorTitle:   "✗  Bir sorun çıktı",
 	ErrorWhatCan: "Ne yapabilirsin:",
-	ErrorFooter:  "Enter ile ana menüye dön  ·  q ile çık",
+	ErrorFooter:  "[Enter] Ana Menü  ·  [L] Dil: English  ·  [q] Çıkış",
 }
 
 var enMessages = &Messages{
@@ -328,19 +328,19 @@ var enMessages = &Messages{
 	WelcomeRecv:      "📥  I want to receive files",
 	WelcomeChangeDir: "📁  Change download folder",
 	WelcomeSavingTo:  "Downloads are saved to:",
-	WelcomeFooter:    "↑ ↓ select  ·  Enter confirm  ·  L Türkçe  ·  q quit",
+	WelcomeFooter:    "[↑/↓] Navigate  ·  [Enter] Confirm  ·  [L] Language: Türkçe  ·  [q] Quit",
 
 	ConnectingTitle:  "Connecting",
 	ConnectingStatus: "Connecting to rendezvous server...",
 	ConnectingHelp1:  "This is a lightweight signaling registry connecting peers.",
 	ConnectingHelp2:  "Your files do not go through it; you only register your",
 	ConnectingHelp3:  "address to find each other.",
-	ConnectingFooter: "Ctrl+C to quit",
+	ConnectingFooter: "[Ctrl+C] Cancel",
 
 	PickTitle: "📤  What do you want to send?",
-	PickHelp1: "Press Enter to open folders. Highlight a file and press Enter",
+	PickHelp1: "Press [Enter] to open folders. Highlight a file and press [Enter]",
 	PickHelp2: "to add it to the transfer list.",
-	PickHelp3: "Press 'f' to add the entire current folder.",
+	PickHelp3: "Press [f] to add the entire current folder.",
 	PickSelected: func(n int) string {
 		return fmt.Sprintf("Selected (%d):", n)
 	},
@@ -350,20 +350,20 @@ var enMessages = &Messages{
 	PickTotal: func(size string) string {
 		return "  Total: " + size
 	},
-	PickStartBtn:       "s  ·  Start sending",
+	PickStartBtn:       "[s]  ·  Start sending",
 	PickEmpty:          "Nothing selected yet.",
-	PickFooterSelected: "↑ ↓ browse  ·  Enter open/pick  ·  f add folder  ·  x remove last  ·  Ctrl+C quit",
-	PickFooterEmpty:    "↑ ↓ browse  ·  Enter open/pick  ·  f add folder  ·  Ctrl+C quit",
+	PickFooterSelected: "[↑/↓] Navigate  ·  [Enter] Open/Pick  ·  [f] Add Folder  ·  [x] Remove  ·  [s] Start  ·  [Ctrl+C] Quit",
+	PickFooterEmpty:    "[↑/↓] Navigate  ·  [Enter] Open/Pick  ·  [f] Add Folder  ·  [Ctrl+C] Quit",
 
 	OutDirTitle:   "📁  Where should incoming files be saved?",
-	OutDirHelp1:   "• Enter : Open selected folder",
-	OutDirHelp2:   "• Backspace or ← : Go to parent directory",
-	OutDirHelp3:   "• s : Select the current directory shown below",
+	OutDirHelp1:   "• [Enter] : Open selected folder",
+	OutDirHelp2:   "• [Backspace] or [←] : Go to parent directory",
+	OutDirHelp3:   "• [s] : Select the current directory shown below",
 	OutDirCurrent: "Current directory: ",
 	OutDirSelectBtn: func(dir string) string {
-		return "s  ·  Select here (" + dir + ")"
+		return "[s]  ·  Select here (" + dir + ")"
 	},
-	OutDirFooter: "↑ ↓ browse  ·  Enter open  ·  Backspace/← up  ·  s select  ·  Esc cancel",
+	OutDirFooter: "[↑/↓] Navigate  ·  [Enter] Open Folder  ·  [Backspace/←] Parent Dir  ·  [s] Select Dir  ·  [Esc] Cancel",
 
 	RoomTitle:     "🔑  Your room code is ready!",
 	RoomBody:      "Now share this room code with your friend.",
@@ -372,7 +372,7 @@ var enMessages = &Messages{
 	RoomHelp3:     "and enter this room code.",
 	RoomSingleUse: "Single-use: code expires as soon as transfer finishes.",
 	RoomSentBtn:   "✓  I shared the code",
-	RoomFooter:    "Enter to continue  ·  Ctrl+C to quit",
+	RoomFooter:    "[Enter] Continue  ·  [L] Language: Türkçe  ·  [Ctrl+C] Quit",
 
 	WaitingTitle:     "Waiting",
 	WaitingStatus:    "Waiting for your friend to enter the code...",
@@ -380,7 +380,7 @@ var enMessages = &Messages{
 	WaitingHelp1:     "Keep this window open. As soon as your friend enters the code,",
 	WaitingHelp2:     "the transfer will begin automatically.",
 	WaitingHelp3:     "Code is valid for up to 1 hour.",
-	WaitingFooter:    "Ctrl+C to cancel",
+	WaitingFooter:    "[L] Language: Türkçe  ·  [Ctrl+C] Cancel",
 
 	HostReady: "✓ Files are ready to send",
 	HostPreparing: func(cur, total int) string {
@@ -395,12 +395,12 @@ var enMessages = &Messages{
 	EnterHelp2:       "It looks like: cherry-harbor-42",
 	EnterPlaceholder: "cherry-harbor-42",
 	EnterSavingTo:    "Incoming files will be saved to:",
-	EnterFooter:      "Enter to continue  ·  Ctrl+O to change folder  ·  Ctrl+C to quit",
+	EnterFooter:      "[Enter] Confirm & Connect  ·  [Ctrl+O] Change Folder  ·  [Ctrl+C] Quit",
 
 	FindingTitle:     "Connecting",
 	FindingHelp1:     "Attempting direct peer-to-peer connection between both computers.",
 	FindingHelp2:     "This usually takes a few seconds.",
-	FindingFooter:    "Ctrl+C to cancel",
+	FindingFooter:    "[Ctrl+C] Cancel",
 	StatusLookingUp:  "Looking up room code...",
 	StatusConnecting: "Connecting to your friend's computer...",
 	StatusDirect:     "Establishing direct P2P route...",
@@ -417,7 +417,7 @@ var enMessages = &Messages{
 	ConfirmQuestion: "Do you want to accept these files?",
 	ConfirmYes:      "Yes, download",
 	ConfirmNo:       "No, cancel",
-	ConfirmFooter:   "← → select  ·  Enter confirm  ·  y / n shortcuts",
+	ConfirmFooter:   "[←/→] Select  ·  [Enter] Confirm  ·  [y] Yes, Download  ·  [n] Cancel  ·  [Ctrl+C] Quit",
 	RelayWarning: func(limit string) string {
 		return "! Transfer size exceeds relay fallback limit.\n" +
 			"  Direct P2P could not be opened and relay route has a " + limit + " limit;\n" +
@@ -445,7 +445,7 @@ var enMessages = &Messages{
 	TransferEta: func(eta string) string {
 		return "remaining " + eta
 	},
-	TransferFooter: "Ctrl+C to cancel",
+	TransferFooter: "[Ctrl+C] Stop Transfer",
 
 	DoneSendTitle: "✓  Sent!",
 	DoneSendBody:  "Your files reached your friend and are verified intact.",
@@ -456,11 +456,11 @@ var enMessages = &Messages{
 		return fmt.Sprintf("  ... and %d more files", n)
 	},
 	DoneVerified: "Every file has been verified intact with SHA-256.",
-	DoneFooter:   "Enter to return to main menu  ·  q to quit",
+	DoneFooter:   "[Enter] Main Menu  ·  [L] Language: Türkçe  ·  [q] Quit",
 
 	ErrorTitle:   "✗  Something went wrong",
 	ErrorWhatCan: "What you can do:",
-	ErrorFooter:  "Enter to return to main menu  ·  q to quit",
+	ErrorFooter:  "[Enter] Main Menu  ·  [L] Language: Türkçe  ·  [q] Quit",
 }
 
 // Get returns the localized messages for the given language.
