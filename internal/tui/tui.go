@@ -83,10 +83,10 @@ type Model struct {
 	serverList  string
 	stunServers []string
 	version     string
-	screen     screen
-	mode       mode
-	width      int
-	height     int
+	screen      screen
+	mode        mode
+	width       int
+	height      int
 
 	ctx    context.Context
 	cancel context.CancelFunc

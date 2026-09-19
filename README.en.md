@@ -37,7 +37,7 @@ Precompiled binaries are available directly in the repository's [`bin/`](bin/) f
 
 | Platform | Download Link (`bin/`) | How to Run |
 |---|---|---|
-| **Ubuntu / Debian / Mint** | [📥 `puresend_0.2.0_amd64.deb`](https://github.com/Baaaki/PureSend/raw/main/bin/puresend_0.2.0_amd64.deb) | `sudo apt install ./puresend_0.2.0_amd64.deb` *(Adds to app menu)* |
+| **Ubuntu / Debian / Mint** | [📥 `puresend_0.3.0_amd64.deb`](https://github.com/Baaaki/PureSend/raw/main/bin/puresend_0.3.0_amd64.deb) | `sudo apt install ./puresend_0.3.0_amd64.deb` *(Adds to app menu)* |
 | **Windows** | [📥 `puresend.exe`](https://github.com/Baaaki/PureSend/raw/main/bin/puresend.exe) | Download and double-click |
 | **Linux (Portable)** | [📥 `puresend`](https://github.com/Baaaki/PureSend/raw/main/bin/puresend) | `chmod +x puresend && ./puresend` *(Auto-spawns terminal)* |
 | **macOS (Apple Silicon)** | [📥 `puresend_mac_arm64`](https://github.com/Baaaki/PureSend/raw/main/bin/puresend_mac_arm64) | `chmod +x puresend_mac_arm64 && ./puresend_mac_arm64` |

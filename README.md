@@ -37,7 +37,7 @@ Tüm derlenmiş ikililer doğrudan deponun [`bin/`](bin/) klasöründe hazırdı
 
 | Platform | İndirme Bağlantısı (`bin/`) | Kurulum & Çalıştırma |
 |---|---|---|
-| **Ubuntu / Debian / Mint** | [📥 `puresend_0.2.0_amd64.deb`](https://github.com/Baaaki/PureSend/raw/main/bin/puresend_0.2.0_amd64.deb) | `sudo apt install ./puresend_0.2.0_amd64.deb` *(Menüye eklenir)* |
+| **Ubuntu / Debian / Mint** | [📥 `puresend_0.3.0_amd64.deb`](https://github.com/Baaaki/PureSend/raw/main/bin/puresend_0.3.0_amd64.deb) | `sudo apt install ./puresend_0.3.0_amd64.deb` *(Menüye eklenir)* |
 | **Windows** | [📥 `puresend.exe`](https://github.com/Baaaki/PureSend/raw/main/bin/puresend.exe) | İndir ve çift tıkla |
 | **Linux (Taşınabilir)** | [📥 `puresend`](https://github.com/Baaaki/PureSend/raw/main/bin/puresend) | `chmod +x puresend && ./puresend` *(Çift tıkla da çalışır)* |
 | **macOS (Apple Silicon)** | [📥 `puresend_mac_arm64`](https://github.com/Baaaki/PureSend/raw/main/bin/puresend_mac_arm64) | `chmod +x puresend_mac_arm64 && ./puresend_mac_arm64` |

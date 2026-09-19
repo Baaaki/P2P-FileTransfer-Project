@@ -1,6 +1,10 @@
 package update
 
 import (
+	"archive/tar"
+	"archive/zip"
+	"bytes"
+	"compress/gzip"
 	"context"
 	"encoding/json"
 	"errors"
@@ -137,17 +141,108 @@ func FindAsset(assets []Asset, targetOS, targetArch string) *Asset {
 	osLower := strings.ToLower(targetOS)
 	archLower := strings.ToLower(targetArch)
 
+	osAliases := []string{osLower}
+	if osLower == "darwin" {
+		osAliases = append(osAliases, "macos", "osx", "mac")
+	} else if osLower == "windows" {
+		osAliases = append(osAliases, "win")
+	}
+
+	archAliases := []string{archLower}
+	if archLower == "amd64" {
+		archAliases = append(archAliases, "x86_64", "x64", "64bit")
+	} else if archLower == "arm64" {
+		archAliases = append(archAliases, "aarch64")
+	}
+
+	matchOS := func(name string) bool {
+		for _, alias := range osAliases {
+			if strings.Contains(name, alias) {
+				return true
+			}
+		}
+		return false
+	}
+
+	matchArch := func(name string) bool {
+		for _, alias := range archAliases {
+			if strings.Contains(name, alias) {
+				return true
+			}
+		}
+		return false
+	}
+
 	for i := range assets {
 		name := strings.ToLower(assets[i].Name)
-		// Avoid source tarballs or checksum files
-		if strings.HasSuffix(name, ".sha256") || strings.HasSuffix(name, ".md5") || strings.Contains(name, "source") {
+		// Avoid source tarballs, checksum files, and deb packages
+		if strings.HasSuffix(name, ".sha256") || strings.HasSuffix(name, ".md5") || strings.Contains(name, "source") || strings.HasSuffix(name, ".deb") {
 			continue
 		}
-		if strings.Contains(name, osLower) && strings.Contains(name, archLower) {
+		if matchOS(name) && matchArch(name) {
 			return &assets[i]
 		}
 	}
 	return nil
+}
+
+// extractBinary writes the target binary to dst. If assetName is a tar.gz or zip, it extracts the binary entry.
+func extractBinary(assetName string, r io.Reader, dst io.Writer) error {
+	lower := strings.ToLower(assetName)
+	if strings.HasSuffix(lower, ".tar.gz") || strings.HasSuffix(lower, ".tgz") {
+		gr, err := gzip.NewReader(r)
+		if err != nil {
+			return fmt.Errorf("gzip arşivi okunamadı: %w", err)
+		}
+		defer gr.Close()
+
+		tr := tar.NewReader(gr)
+		for {
+			hdr, err := tr.Next()
+			if err == io.EOF {
+				break
+			}
+			if err != nil {
+				return fmt.Errorf("tar arşivi okunamadı: %w", err)
+			}
+			if hdr.Typeflag == tar.TypeReg {
+				base := filepath.Base(hdr.Name)
+				if base == "puresend" || base == "puresend.exe" {
+					_, err := io.Copy(dst, tr)
+					return err
+				}
+			}
+		}
+		return errors.New("arşiv içinde puresend çalıştırılabilir dosyası bulunamadı")
+	}
+
+	if strings.HasSuffix(lower, ".zip") {
+		buf, err := io.ReadAll(r)
+		if err != nil {
+			return fmt.Errorf("zip indirilemedi: %w", err)
+		}
+		zr, err := zip.NewReader(bytes.NewReader(buf), int64(len(buf)))
+		if err != nil {
+			return fmt.Errorf("zip arşivi okunamadı: %w", err)
+		}
+		for _, f := range zr.File {
+			base := filepath.Base(f.Name)
+			if base == "puresend" || base == "puresend.exe" {
+				rc, err := f.Open()
+				if err != nil {
+					return err
+				}
+				defer rc.Close()
+				_, err = io.Copy(dst, rc)
+				return err
+			}
+		}
+		return errors.New("zip arşivi içinde puresend çalıştırılabilir dosyası bulunamadı")
+	}
+
+	// Plain binary
+	_, err := io.Copy(dst, r)
+	return err
 }
 
 // Apply checks for updates and replaces the running executable if a newer release exists.
@@ -215,7 +310,7 @@ func Apply(currentVersion string, stdout io.Writer) error {
 		return fmt.Errorf("indirme sunucusu hata kodu döndürdü: %d", resp.StatusCode)
 	}
 
-	if _, err := io.Copy(tmpFile, resp.Body); err != nil {
+	if err := extractBinary(asset.Name, resp.Body, tmpFile); err != nil {
 		tmpFile.Close()
 		return fmt.Errorf("dosya yazılamadı: %w", err)
 	}
