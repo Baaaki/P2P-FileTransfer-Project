@@ -100,8 +100,8 @@ func TestIsDockerAddr(t *testing.T) {
 		{"/ip4/172.28.0.1/udp/5000/quic-v1", true},
 		{"/ip4/172.16.0.1/tcp/80", true},
 		{"/ip4/172.31.255.254/tcp/80", true},
-		{"/ip4/172.15.0.1/tcp/80", false},  // outside 172.16-31
-		{"/ip4/172.32.0.1/tcp/80", false},  // outside 172.16-31
+		{"/ip4/172.15.0.1/tcp/80", false}, // outside 172.16-31
+		{"/ip4/172.32.0.1/tcp/80", false}, // outside 172.16-31
 		{"/ip4/192.168.1.104/tcp/4001", false},
 		{"/ip4/10.0.0.5/tcp/4001", false},
 		{"/ip4/127.0.0.1/tcp/4001", false},

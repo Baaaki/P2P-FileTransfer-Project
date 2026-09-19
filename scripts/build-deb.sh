@@ -5,7 +5,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
-VERSION="${1:-0.2.0}"
+VERSION="${1:-0.3.0}"
 ARCH="${2:-amd64}"
 DEB_NAME="filetransferilla_${VERSION}_${ARCH}.deb"
 OUTPUT_DIR="${ROOT_DIR}/bin"

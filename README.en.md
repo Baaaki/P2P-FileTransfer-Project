@@ -37,7 +37,7 @@ Precompiled binaries are available directly in the repository's [`bin/`](bin/) f
 
 | Platform | Download Link (`bin/`) | How to Run |
 |---|---|---|
-| **Ubuntu / Debian / Mint** | [📥 `filetransferilla_0.2.0_amd64.deb`](https://github.com/Baaaki/P2P-FileTransfer-Project/raw/main/bin/filetransferilla_0.2.0_amd64.deb) | `sudo apt install ./filetransferilla_0.2.0_amd64.deb` *(Adds to app menu)* |
+| **Ubuntu / Debian / Mint** | [📥 `filetransferilla_0.3.0_amd64.deb`](https://github.com/Baaaki/P2P-FileTransfer-Project/raw/main/bin/filetransferilla_0.3.0_amd64.deb) | `sudo apt install ./filetransferilla_0.3.0_amd64.deb` *(Adds to app menu)* |
 | **Windows** | [📥 `filetransferilla.exe`](https://github.com/Baaaki/P2P-FileTransfer-Project/raw/main/bin/filetransferilla.exe) | Download and double-click |
 | **Linux (Portable)** | [📥 `filetransferilla`](https://github.com/Baaaki/P2P-FileTransfer-Project/raw/main/bin/filetransferilla) | `chmod +x filetransferilla && ./filetransferilla` *(Auto-spawns terminal)* |
 | **macOS (Apple Silicon)** | [📥 `filetransferilla_mac_arm64`](https://github.com/Baaaki/P2P-FileTransfer-Project/raw/main/bin/filetransferilla_mac_arm64) | `chmod +x filetransferilla_mac_arm64 && ./filetransferilla_mac_arm64` |

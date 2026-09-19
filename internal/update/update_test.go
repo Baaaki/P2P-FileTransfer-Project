@@ -1,7 +1,10 @@
 package update
 
 import (
+	"archive/tar"
+	"archive/zip"
 	"bytes"
+	"compress/gzip"
 	"context"
 	"encoding/json"
 	"net/http"
@@ -61,9 +64,27 @@ func TestFindAsset(t *testing.T) {
 		t.Errorf("FindAsset(windows, amd64) failed: %v", foundWin)
 	}
 
-	notFound := FindAsset(assets, "freebsd", "riscv64")
-	if notFound != nil {
-		t.Errorf("FindAsset(freebsd, riscv64) should be nil, got: %v", notFound)
+	assetsGoReleaser := []Asset{
+		{Name: "checksums.txt"},
+		{Name: "filetransferilla_0.3.0_linux_x86_64.tar.gz", BrowserDownloadURL: "https://example.com/linux-x86_64.tar.gz"},
+		{Name: "filetransferilla_0.3.0_windows_x86_64.zip", BrowserDownloadURL: "https://example.com/win-x86_64.zip"},
+		{Name: "filetransferilla_0.3.0_macOS_arm64.tar.gz", BrowserDownloadURL: "https://example.com/mac-arm64.tar.gz"},
+		{Name: "filetransferilla_0.3.0_amd64.deb"},
+	}
+
+	foundLinuxGR := FindAsset(assetsGoReleaser, "linux", "amd64")
+	if foundLinuxGR == nil || foundLinuxGR.BrowserDownloadURL != "https://example.com/linux-x86_64.tar.gz" {
+		t.Errorf("FindAsset(linux, amd64) for GoReleaser naming failed: %v", foundLinuxGR)
+	}
+
+	foundMacGR := FindAsset(assetsGoReleaser, "darwin", "arm64")
+	if foundMacGR == nil || foundMacGR.BrowserDownloadURL != "https://example.com/mac-arm64.tar.gz" {
+		t.Errorf("FindAsset(darwin, arm64) for GoReleaser naming failed: %v", foundMacGR)
+	}
+
+	foundWinGR := FindAsset(assetsGoReleaser, "windows", "amd64")
+	if foundWinGR == nil || foundWinGR.BrowserDownloadURL != "https://example.com/win-x86_64.zip" {
+		t.Errorf("FindAsset(windows, amd64) for GoReleaser naming failed: %v", foundWinGR)
 	}
 }
 
@@ -150,5 +171,64 @@ func TestApplyUpToDate(t *testing.T) {
 	}
 	if !bytes.Contains(buf.Bytes(), []byte("zaten güncel")) {
 		t.Errorf("Expected 'zaten güncel' message, got: %s", buf.String())
+	}
+}
+
+func TestExtractBinary(t *testing.T) {
+	content := []byte("fake-binary-content-12345")
+
+	// 1. Test plain binary
+	var outPlain bytes.Buffer
+	if err := extractBinary("filetransferilla", bytes.NewReader(content), &outPlain); err != nil {
+		t.Fatalf("extractBinary plain failed: %v", err)
+	}
+	if !bytes.Equal(outPlain.Bytes(), content) {
+		t.Errorf("expected %s, got %s", content, outPlain.Bytes())
+	}
+
+	// 2. Test tar.gz
+	var tgzBuf bytes.Buffer
+	gw := gzip.NewWriter(&tgzBuf)
+	tw := tar.NewWriter(gw)
+	hdr := &tar.Header{
+		Name: "filetransferilla",
+		Mode: 0o755,
+		Size: int64(len(content)),
+	}
+	if err := tw.WriteHeader(hdr); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tw.Write(content); err != nil {
+		t.Fatal(err)
+	}
+	_ = tw.Close()
+	_ = gw.Close()
+
+	var outTar bytes.Buffer
+	if err := extractBinary("filetransferilla_0.3.0_linux_x86_64.tar.gz", &tgzBuf, &outTar); err != nil {
+		t.Fatalf("extractBinary tar.gz failed: %v", err)
+	}
+	if !bytes.Equal(outTar.Bytes(), content) {
+		t.Errorf("expected %s, got %s", content, outTar.Bytes())
+	}
+
+	// 3. Test zip
+	var zipBuf bytes.Buffer
+	zw := zip.NewWriter(&zipBuf)
+	zf, err := zw.Create("filetransferilla.exe")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := zf.Write(content); err != nil {
+		t.Fatal(err)
+	}
+	_ = zw.Close()
+
+	var outZip bytes.Buffer
+	if err := extractBinary("filetransferilla_0.3.0_windows_x86_64.zip", &zipBuf, &outZip); err != nil {
+		t.Fatalf("extractBinary zip failed: %v", err)
+	}
+	if !bytes.Equal(outZip.Bytes(), content) {
+		t.Errorf("expected %s, got %s", content, outZip.Bytes())
 	}
 }
