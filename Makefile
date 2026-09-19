@@ -45,11 +45,11 @@ help:
 ## build: build the client and the server into ./bin
 build: $(BIN)/filetransferilla $(BIN)/filetransferilla-server
 
-$(BIN)/filetransferilla: $(shell find . -name '*.go' -not -path './LandingPage/*')
+$(BIN)/filetransferilla: $(shell find . -name '*.go')
 	@mkdir -p $(BIN)
 	$(GO) build -trimpath -ldflags "$(CLIENT_LDFLAGS)" -o $@ ./cmd/client
 
-$(BIN)/filetransferilla-server: $(shell find . -name '*.go' -not -path './LandingPage/*')
+$(BIN)/filetransferilla-server: $(shell find . -name '*.go')
 	@mkdir -p $(BIN)
 	$(GO) build -trimpath -ldflags "$(LDFLAGS)" -o $@ ./cmd/server
 
@@ -88,7 +88,7 @@ vuln:
 
 ## fmt: gofmt the tree
 fmt:
-	gofmt -w $$(find . -name '*.go' -not -path './LandingPage/*')
+	gofmt -w $$(find . -name '*.go')
 
 ## tidy: go mod tidy
 tidy:

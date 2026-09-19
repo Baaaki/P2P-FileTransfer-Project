@@ -263,9 +263,9 @@ curl -sI https://rendezvous.madebybaki.com \
      -H "Connection: Upgrade" -H "Upgrade: websocket"
 ```
 
-**5. Adresi sunucu listesine ekle.** `LandingPage/public/server.txt`
-dosyasına sunucunun açılışta bastığı istemci adresini yaz ve landing
-page'i yayınla. Yayınlanan istemciler gömülü adres cevap vermezse bu
+**5. Adresi sunucu listesine ekle.** Tanıtım sayfasındaki (veya web sunucundaki) `server.txt`
+dosyasına (`https://p2p-filetransfer.madebybaki.com/server.txt`) sunucunun açılışta bastığı istemci adresini yaz ve
+yayınla. Yayınlanan istemciler gömülü adres cevap vermezse bu
 dosyaya bakar; Peer ID bir gün değişirse eski sürümleri bu kurtarır.
 Anahtarın base64 yedeğini de (`base64 -w0 /data/server.key`) sunucunun
 dışında bir yerde sakla.

@@ -1,11 +1,6 @@
 # Keep these out of the image.
-#
-# Openship uses the repo root as the build context for every service, so
-# this is the only .dockerignore that counts. The image needs go.mod,
-# go.sum, cmd/ and internal/; everything else only makes the context
-# bigger. The landing page is the one that matters: after an `npm
-# install` its node_modules alone is hundreds of megabytes, sent to the
-# daemon on every build.
+# The image only needs go.mod, go.sum, cmd/ and internal/;
+# everything else only makes the build context bigger.
 *.key
 received/
 *.md
@@ -13,8 +8,6 @@ received/
 .github/
 docs/
 test/
-LandingPage/
-**/node_modules/
 
 # Compiled binaries and test output (see .gitignore — never committed,
 # but present locally)
