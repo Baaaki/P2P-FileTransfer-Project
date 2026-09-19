@@ -8,7 +8,8 @@ when both sides sit behind home routers (NAT).
 The user never sees anything technical: open the app, pick a file, read
 the **three-word code** out to a friend. That's it.
 
-🇹🇷 Türkçe dokümantasyon: [README.md](README.md)
+🇹🇷 Türkçe dokümantasyon: [README.md](README.md)  
+🌐 Website & Live Simulation: [p2p-filetransfer.madebybaki.com](https://p2p-filetransfer.madebybaki.com)  
 📋 Productisation plan: [ROADMAP.md](docs/ROADMAP.md)
 
 ```
@@ -30,18 +31,20 @@ unpack it, run it.
 
 | Your system | File to download |
 |---|---|
-| Windows | `filetransferilla_<version>_windows_x86_64.zip` |
+| Ubuntu / Debian / Mint (`.deb`) | `filetransferilla_<version>_amd64.deb` (ARM: `arm64.deb`) |
+| Linux (Portable binary) | `filetransferilla_<version>_linux_x86_64.tar.gz` (ARM: `arm64.tar.gz`) |
+| Windows | `filetransferilla_<version>_windows_x86_64.zip` (ARM: `arm64.zip`) |
 | macOS (M1 / M2 / M3 / M4) | `filetransferilla_<version>_macOS_arm64.tar.gz` |
 | macOS (pre-2020, Intel) | `filetransferilla_<version>_macOS_x86_64.tar.gz` |
-| Linux | `filetransferilla_<version>_linux_x86_64.tar.gz` |
 
-The archive holds a **single file** called `filetransferilla`. That is
-the whole program.
-
-- **Windows:** double-click it.
-- **macOS:** double-click it — it opens in a Terminal window.
-- **Linux:** desktop environments often refuse to double-click a terminal
-  program, so run it from a shell:
+- **Ubuntu / Debian / Mint (`.deb`):** The easiest setup. Install via double-click or terminal:
+  ```bash
+  sudo apt install ./filetransferilla_<version>_amd64.deb
+  ```
+  Adds FileTransferilla to your application menu with its launcher icon, and installs `/usr/bin/filetransferilla` to your system path.
+- **Windows:** double-click the executable inside the `.zip`.
+- **macOS:** double-click the binary inside `.tar.gz` — it opens in a Terminal window.
+- **Linux (Portable):** double-clicking the binary from your file manager automatically launches a terminal window (GNOME Terminal, Konsole, XFCE Terminal, etc.). Alternatively, run it from a shell:
   `chmod +x filetransferilla && ./filetransferilla`
 
 ### If your system warns you on first launch
@@ -87,11 +90,16 @@ Get-FileHash .\filetransferilla_*_windows_x86_64.zip -Algorithm SHA256
 | Directory | Runs on | Shipped as |
 |---|---|---|
 | **`cmd/server/`** | 🖥️ your Ubuntu box, 24/7 | Docker behind Cloudflare Tunnel |
-| **`cmd/client/`** | 💻 the user's desktop | single binary from GitHub Releases |
-| `internal/rendezvous/` | both | shared protocol |
-| `internal/transfer/` | client only | the server never runs this code |
-| `internal/p2p/`, `internal/tui/` | client only | network layer + interface |
+| **`cmd/client/`** | 💻 the user's desktop | GitHub Releases (single binary or `.deb`) |
+| `internal/rendezvous/` | both | shared protocol (`/filetransferilla/rendezvous/1.1.0`) |
+| `internal/transfer/` | client only | file transfer, PAKE auth, resume |
+| `internal/p2p/`, `internal/tui/` | client only | network layer + Bubble Tea interface |
+| `internal/safetext/` | client only | ANSI escape sequence & bidi injection sanitizer |
+| `internal/headless/` | client only | headless CLI mode (`-send`, `-receive`) |
+| **`LandingPage/`** | 🌐 web (Vercel/CDN) | React + Vite + Tailwind v4 (showcase & live TUI) |
+| `packaging/` | Linux desktop | `.desktop` launcher, SVG icon, `.deb` package specs |
 | `deploy/` | 🖥️ server | cloudflared config (compose lives at the root) |
+| `scripts/` | build / packaging | local `.deb` builder script (`build-deb.sh`) |
 
 ## What the user actually does
 
@@ -206,8 +214,13 @@ Windows × x86_64 / arm64).
 ## Development
 
 ```bash
-go build ./...
-go test ./...   # unit tests + real end-to-end tests over libp2p
+make            # list targets
+make test       # full test suite with race detector
+make lint       # golangci-lint (same version as CI)
+make vuln       # govulncheck for reachable vulnerabilities
+make cover      # coverage report
+make test-relay # test relay fallback between isolated namespaces
+make deb        # build Debian/Ubuntu .deb package
 ```
 
 Three terminals on one machine:
@@ -216,12 +229,6 @@ Three terminals on one machine:
 go run ./cmd/server -ws-port 8080
 go run ./cmd/client -server /ip4/127.0.0.1/tcp/8080/ws/p2p/<PeerID>
 ```
-
-`make` lists everything else: `make test` runs the suite with the race
-detector, `make lint` runs golangci-lint and `make vuln` govulncheck (both
-through `go run`, at the versions CI uses, so they are always built by
-your own Go), and `make test-relay` proves the relay fallback still works
-between two networks that cannot see each other.
 
 ### Headless mode
 
@@ -234,14 +241,18 @@ filetransferilla -receive kiraz-liman-42 -out /mnt/disk -yes
 filetransferilla -version
 ```
 
-## Technology
+## Technology and Mechanisms
 
-- **Go 1.26+** (go.mod, the Dockerfile and CI agree), **go-libp2p v0.49** —
-  TCP + QUIC + WebSocket transports,
-  Circuit Relay v2, DCUtR hole punching, AutoNAT v2, UPnP, Noise/TLS
-- **Bubble Tea + Lipgloss** — terminal interface
-- **schollz/pake** — turning the room code into a shared key (PAKE2 over P-256)
-- **Prometheus client_golang** — server metrics at `/metrics`
+- **Go 1.26+**, **go-libp2p v0.49** — TCP + QUIC + WebSocket transports,
+  Circuit Relay v2 (ACL and quota protected), DCUtR hole punching (NAT traversal),
+  AutoNAT v2, UPnP port mapping, Noise/TLS encryption, and Resource Manager
+- **Bubble Tea + Lipgloss + Bubbles** — Terminal user interface (TUI) with smooth transfer speed and ETA calculation
+- **schollz/pake/v3** — Room code key exchange (SPAKE2 over P-256), HMAC proof and mutual Peer ID binding (MITM and rogue server immunity)
+- **Prometheus client_golang v1.24.1** — Server `/metrics` (relay bytes, active rooms, rate limits) and `/health` JSON endpoint
+- **Landing Page** — React 19, Vite, Tailwind CSS v4, TypeScript, Oxlint; in-browser live TUI simulation and GitHub Release API integration
+- **Packaging & Desktop Integration** — GoReleaser v2, Syft (SBOM), Debian/Ubuntu `.deb` generation (`dpkg-deb` / `nfpm`), FreeDesktop desktop launcher (`.desktop`), and SVG application icon
+- **Sanitization & Security (`internal/safetext`)** — Neutralising terminal injection attacks (ANSI escape sequences, control characters, and Unicode bidi overrides), plus strict Path Traversal and illegal Windows filename enforcement
+- **Partial Resumption (Resume)** — Seamless recovery of interrupted downloads via `.part` files verified by per-file SHA-256 digests
 - Two custom protocols: `/filetransferilla/rendezvous/1.1.0` and
   `/filetransferilla/transfer/2.0.0`
 
