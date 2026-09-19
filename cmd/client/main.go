@@ -29,6 +29,7 @@ import (
 	"strings"
 
 	"filetransferilla/internal/headless"
+	"filetransferilla/internal/i18n"
 	"filetransferilla/internal/p2p"
 	"filetransferilla/internal/tui"
 	"filetransferilla/internal/update"
@@ -62,6 +63,8 @@ func main() {
 		doUpdate    = flag.Bool("update", false, "check for updates and update filetransferilla to the latest release")
 		stun        = flag.String("stun", envOr("FT_STUN", ""),
 			"comma-separated STUN servers used to discover WAN IP (default: Cloudflare and Google)")
+		flagLang = flag.String("lang", envOr("FT_LANG", ""),
+			"display language: tr, en, or auto (default: auto-detected OS language)")
 	)
 	flag.Parse()
 
@@ -87,19 +90,37 @@ func main() {
 		return
 	}
 
+	userLang := *flagLang
+	if userLang == "" || userLang == "auto" {
+		userLang = string(i18n.DetectOS())
+	}
+
 	servers := p2p.SplitServers(*server)
 	if len(servers) == 0 && *serverList == "" {
-		fmt.Fprintln(os.Stderr, "Buluşma noktası adresi ayarlanmamış.")
-		fmt.Fprintln(os.Stderr)
-		fmt.Fprintln(os.Stderr, "Bu ikili, sunucu adresi gömülmeden derlenmiş.")
-		fmt.Fprintln(os.Stderr, "Adresi elle vererek çalıştırabilirsin:")
-		fmt.Fprintln(os.Stderr)
-		fmt.Fprintln(os.Stderr, "  filetransferilla -server /dns4/<alan-adi>/tcp/443/tls/ws/p2p/<PeerID>")
+		if i18n.Normalize(userLang) == i18n.EN {
+			fmt.Fprintln(os.Stderr, "Meeting point server address is not configured.")
+			fmt.Fprintln(os.Stderr)
+			fmt.Fprintln(os.Stderr, "This binary was compiled without an embedded server address.")
+			fmt.Fprintln(os.Stderr, "You can specify an address manually:")
+			fmt.Fprintln(os.Stderr)
+			fmt.Fprintln(os.Stderr, "  filetransferilla -server /dns4/<domain>/tcp/443/tls/ws/p2p/<PeerID>")
+		} else {
+			fmt.Fprintln(os.Stderr, "Buluşma noktası adresi ayarlanmamış.")
+			fmt.Fprintln(os.Stderr)
+			fmt.Fprintln(os.Stderr, "Bu ikili, sunucu adresi gömülmeden derlenmiş.")
+			fmt.Fprintln(os.Stderr, "Adresi elle vererek çalıştırabilirsin:")
+			fmt.Fprintln(os.Stderr)
+			fmt.Fprintln(os.Stderr, "  filetransferilla -server /dns4/<alan-adi>/tcp/443/tls/ws/p2p/<PeerID>")
+		}
 		os.Exit(1)
 	}
 
 	if *send != "" && *receive != "" {
-		fmt.Fprintln(os.Stderr, "-send ve -receive aynı anda kullanılamaz.")
+		if i18n.Normalize(userLang) == i18n.EN {
+			fmt.Fprintln(os.Stderr, "-send and -receive cannot be used together.")
+		} else {
+			fmt.Fprintln(os.Stderr, "-send ve -receive aynı anda kullanılamaz.")
+		}
 		os.Exit(1)
 	}
 
@@ -117,9 +138,9 @@ func main() {
 
 	switch {
 	case *send != "":
-		run(headless.Send(servers, splitList(*send), list, stunOpt))
+		run(headless.Send(servers, splitList(*send), list, stunOpt), userLang)
 	case *receive != "":
-		run(headless.Receive(servers, *receive, outDir, *yes, list, stunOpt))
+		run(headless.Receive(servers, *receive, outDir, *yes, list, stunOpt), userLang)
 	default:
 		maybeSpawnTerminal()
 		run(tui.Run(tui.Config{
@@ -128,7 +149,8 @@ func main() {
 			STUNServers: stunList,
 			OutDir:      *out,
 			Version:     version,
-		}))
+			Lang:        userLang,
+		}), userLang)
 	}
 }
 
@@ -188,9 +210,13 @@ func maybeSpawnTerminal() {
 	}
 }
 
-func run(err error) {
+func run(err error, lang string) {
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "Hata:", err)
+		if i18n.Normalize(lang) == i18n.EN {
+			fmt.Fprintln(os.Stderr, "Error:", err)
+		} else {
+			fmt.Fprintln(os.Stderr, "Hata:", err)
+		}
 		os.Exit(1)
 	}
 }
