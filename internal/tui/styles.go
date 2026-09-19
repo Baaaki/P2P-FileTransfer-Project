@@ -131,4 +131,3 @@ func formatFooter(s string) string {
 	}
 	return b.String()
 }
-

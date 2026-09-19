@@ -1,0 +1,28 @@
+# Maintainer: Baki <karasoglu.bakican@gmail.com>
+# Contributor: PureSend Contributors
+
+pkgname=puresend-bin
+pkgver=0.3.0
+pkgrel=1
+pkgdesc="Fast, secure, p2p terminal file transfer tool (WebRTC/P2P, End-to-End Encrypted)"
+arch=('x86_64')
+url="https://puresend.madebybaki.com"
+license=('GPL-3.0-only')
+provides=('puresend')
+conflicts=('puresend')
+source_x86_64=("https://puresend.madebybaki.com/downloads/puresend"
+               "puresend.desktop"
+               "puresend.svg")
+sha256sums_x86_64=('7804a22e7a2b859829df132996d2ad4d6dabb07509d25170920b4978784827e2'
+                   'SKIP'
+                   'SKIP')
+
+package() {
+    install -Dm755 "${srcdir}/puresend" "${pkgdir}/usr/bin/puresend"
+    if [ -f "${srcdir}/puresend.desktop" ]; then
+        install -Dm644 "${srcdir}/puresend.desktop" "${pkgdir}/usr/share/applications/puresend.desktop"
+    fi
+    if [ -f "${srcdir}/puresend.svg" ]; then
+        install -Dm644 "${srcdir}/puresend.svg" "${pkgdir}/usr/share/icons/hicolor/scalable/apps/puresend.svg"
+    fi
+}
