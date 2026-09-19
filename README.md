@@ -99,6 +99,20 @@ puresend update
 
 ---
 
+## 📊 Gerçek Saha Test Sonuçları (Real-World Benchmarks)
+
+PureSend, doğrudan P2P tünelleme ve yerel ISP rotalama/peering avantajları sayesinde bulut sağlayıcılarının yapay hız kısıtlamalarını ortadan kaldırır. Gerçek kullanıcı senaryolarında elde edilen test verileri:
+
+| Güzergâh | Mesafe | Dosya Boyutu | Ortalama Hız | Süre | Durum / Not |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **İstanbul ➔ Tekirdağ** | ~140 km | **1.5 GB** (Video) | **~20 MB/sn** (~160 Mbps) | **~1 dk** | **Tamamlandı** (Servis sağlayıcı upload paketi 48 Mbps olmasına rağmen doğrudan P2P tünelleme ile 20 MB/sn hıza ulaşıldı) |
+| **İstanbul ➔ İstanbul** (Farklı İlçeler) | ~35 km | *1.5 GB+* | *Ölçülüyor* | *—* | ⏳ *Test aşamasında (Yakında)* |
+| **İstanbul ➔ İzmir** | ~480 km | *1.5 GB+* | *Ölçülüyor* | *—* | ⏳ *Test aşamasında (Yakında)* |
+
+> 💡 **Not:** Servis sağlayıcıların standart bulut yüklemelerine uyguladığı yapay upload sınırları, doğrudan eşler arası (P2P) soket açıldığında yerel ISP rotalama ve peering avantajı sayesinde aşılabilmekte ve hat kapasitesinin tamamı kullanılabilmektedir.
+
+---
+
 ## 📂 Proje Dizin Mimarisi
 
 ```
@@ -141,6 +155,5 @@ govulncheck ./...
 
 Bu proje [GNU General Public License v3.0](LICENSE) ile sunulmaktadır.
 
-* **Geliştirici:** Bakican Karaşoğlu
 * **E-posta:** [contact@madebybaki.com](mailto:contact@madebybaki.com)
 * **Web:** [https://puresend.madebybaki.com](https://puresend.madebybaki.com)

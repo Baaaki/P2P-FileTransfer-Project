@@ -298,6 +298,37 @@ func TestRelayLimitWarning(t *testing.T) {
 	}
 }
 
+// TestDynamicConnectionUpgrade ensures that if a connection begins over a relay
+// and subsequently upgrades to direct P2P, the UI updates dynamically to show
+// the direct connection status and clear relay limits.
+func TestDynamicConnectionUpgrade(t *testing.T) {
+	m := New(Config{Servers: []string{"x"}})
+	m.screen = screenTransfer
+	m.haveConn = true
+	m.direct = false
+	m.relayLimit = 256 << 20
+
+	if !strings.Contains(m.View(), "Yedek yol kullanılıyor") {
+		t.Fatalf("expected initial view to mention relay route: %s", m.View())
+	}
+
+	updated, _ := m.handleEvent(p2p.ConnectedEvent{Direct: true})
+	upgraded := updated.(Model)
+
+	if !upgraded.direct {
+		t.Error("expected model.direct to be true after upgrade event")
+	}
+	if upgraded.relayLimit != 0 {
+		t.Errorf("expected relayLimit to be reset to 0, got %d", upgraded.relayLimit)
+	}
+	if !strings.Contains(upgraded.View(), "Doğrudan bağlantı kuruldu") {
+		t.Errorf("expected view to reflect direct P2P connection after upgrade: %s", upgraded.View())
+	}
+	if strings.Contains(upgraded.View(), "Yedek yol") {
+		t.Errorf("view still mentions relay route after upgrade: %s", upgraded.View())
+	}
+}
+
 // TestEveryScreenRenders is a guard against a panic or an empty screen in
 // any state — a TUI that crashes mid-transfer is worse than a CLI.
 func TestEveryScreenRenders(t *testing.T) {

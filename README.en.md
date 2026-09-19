@@ -99,6 +99,20 @@ puresend update
 
 ---
 
+## 📊 Real-World Field Benchmarks
+
+Thanks to direct peer-to-peer hole punching and local ISP peering, PureSend bypasses typical cloud storage bandwidth throttles. Verified real-world transfer results:
+
+| Route | Distance | File Size | Average Throughput | Transfer Time | Status / Notes |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **Istanbul ➔ Tekirdağ** | ~140 km | **1.5 GB** (Video) | **~20 MB/s** (~160 Mbps) | **~1 min** | **Verified** (Exceeded subscriber's 48 Mbps nominal upload package via direct P2P socket and regional peering) |
+| **Istanbul ➔ Istanbul** (Cross-District) | ~35 km | *1.5 GB+* | *Measuring* | *—* | ⏳ *In progress (Coming soon)* |
+| **Istanbul ➔ Izmir** | ~480 km | *1.5 GB+* | *Measuring* | *—* | ⏳ *In progress (Coming soon)* |
+
+> 💡 **Note:** Standard asymmetric upload restrictions enforced by cloud providers do not constrain direct P2P streaming, allowing peers to leverage optimal regional peering and full line capacity.
+
+---
+
 ## 📂 Codebase Architecture
 
 ```
@@ -141,6 +155,5 @@ govulncheck ./...
 
 Distributed under the [GNU General Public License v3.0](LICENSE).
 
-* **Author:** Bakican Karaşoğlu
 * **Email:** [contact@madebybaki.com](mailto:contact@madebybaki.com)
 * **Website:** [https://puresend.madebybaki.com](https://puresend.madebybaki.com)

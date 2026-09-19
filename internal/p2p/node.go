@@ -597,11 +597,15 @@ func (n *Node) serve(room string, offer *transfer.Offer) network.StreamHandler {
 		}
 		defer release()
 
+		remotePeer := s.Conn().RemotePeer()
 		claimed := false
+		transferCtx, cancelTransfer := context.WithCancel(context.Background())
+		defer cancelTransfer()
+
 		err := transfer.Send(s, offer, transfer.Credentials{
 			Code:     room,
 			Sender:   n.host.ID().String(),
-			Receiver: s.Conn().RemotePeer().String(),
+			Receiver: remotePeer.String(),
 		}, transfer.SendOptions{
 			Hooks: n.hooks(),
 			// One room, one transfer — but the room is only taken by a
@@ -613,7 +617,11 @@ func (n *Node) serve(room string, offer *transfer.Offer) network.StreamHandler {
 					return false
 				}
 				claimed = true
-				n.emit(ConnectedEvent{Direct: !s.Conn().Stat().Limited})
+				direct := !s.Conn().Stat().Limited || n.isDirect(remotePeer)
+				n.emit(ConnectedEvent{Direct: direct})
+				if !direct {
+					go n.watchDirectUpgrade(transferCtx, remotePeer)
+				}
 				return true
 			},
 		})
@@ -855,6 +863,9 @@ func (n *Node) fetch(ctx context.Context, typed, outDir string) ([]string, error
 	n.emit(StatusEvent{Text: "opening a direct route"})
 	direct := n.waitForDirect(ctx, sender.ID, directWait)
 	n.emit(ConnectedEvent{Direct: direct, RelayLimit: relayLimit})
+	if !direct {
+		go n.watchDirectUpgrade(ctx, sender.ID)
+	}
 
 	streamCtx := ctx
 	if !direct {
@@ -927,6 +938,27 @@ func (n *Node) isDirect(p peer.ID) bool {
 		}
 	}
 	return false
+}
+
+// watchDirectUpgrade polls in the background while a transfer is running.
+// If DCUtR or a direct route succeeds after initial connection, it emits
+// a ConnectedEvent{Direct: true} so the UI dynamically upgrades to direct P2P.
+func (n *Node) watchDirectUpgrade(ctx context.Context, p peer.ID) {
+	ticker := time.NewTicker(250 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ticker.C:
+			if n.isDirect(p) {
+				n.emit(ConnectedEvent{Direct: true})
+				return
+			}
+		case <-ctx.Done():
+			return
+		case <-n.done:
+			return
+		}
+	}
 }
 
 // ---------------------------------------------------------------------------

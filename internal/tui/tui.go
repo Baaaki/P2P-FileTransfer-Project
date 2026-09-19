@@ -374,10 +374,16 @@ func (m Model) handleEvent(ev p2p.Event) (tea.Model, tea.Cmd) {
 
 	case p2p.ConnectedEvent:
 		m.direct = e.Direct
-		m.relayLimit = e.RelayLimit
+		if e.Direct {
+			m.relayLimit = 0
+		} else {
+			m.relayLimit = e.RelayLimit
+		}
 		m.haveConn = true
 		m.warn = ""
-		m.screen = screenTransfer
+		if m.screen != screenConfirm && m.screen != screenDone {
+			m.screen = screenTransfer
+		}
 		return m, waitEvent(m.node)
 
 	case p2p.PreparingEvent:
