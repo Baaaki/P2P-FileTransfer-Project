@@ -27,19 +27,23 @@
 
 ## 🚀 Quick Start
 
-### Download & Install
+> [!TIP]
+> **🟢 Live and Ready to Use:**  
+> FileTransferilla is **live right now**! You do not need to host or configure any servers. Our official shared rendezvous server (`rendezvous.madebybaki.com`) is running 24/7. Simply download the binary for your platform from the links below and start transferring immediately.
 
-[**Download Latest Release**](https://github.com/Baaaki/P2P-FileTransfer-Project/releases/latest)
+### Download & Run
 
-| Platform | Package | How to Run |
+Precompiled binaries are available directly in the repository's [`bin/`](bin/) folder. Click below to download:
+
+| Platform | Download Link (`bin/`) | How to Run |
 |---|---|---|
-| **Ubuntu / Debian / Mint** | `filetransferilla_<ver>_amd64.deb` | `sudo apt install ./filetransferilla_*.deb` *(Adds to app menu)* |
-| **Linux (Portable)** | `filetransferilla_<ver>_linux_x86_64.tar.gz` | Double-click or run `chmod +x filetransferilla && ./filetransferilla` |
-| **Windows** | `filetransferilla_<ver>_windows_x86_64.zip` | Extract and double-click `filetransferilla.exe` |
-| **macOS (Apple Silicon)** | `filetransferilla_<ver>_macOS_arm64.tar.gz` | Extract and double-click *(Opens in Terminal)* |
-| **macOS (Intel)** | `filetransferilla_<ver>_macOS_x86_64.tar.gz` | Extract and double-click *(Opens in Terminal)* |
+| **Ubuntu / Debian / Mint** | [📥 `filetransferilla_0.2.0_amd64.deb`](https://github.com/Baaaki/P2P-FileTransfer-Project/raw/main/bin/filetransferilla_0.2.0_amd64.deb) | `sudo apt install ./filetransferilla_0.2.0_amd64.deb` *(Adds to app menu)* |
+| **Windows** | [📥 `filetransferilla.exe`](https://github.com/Baaaki/P2P-FileTransfer-Project/raw/main/bin/filetransferilla.exe) | Download and double-click |
+| **Linux (Portable)** | [📥 `filetransferilla`](https://github.com/Baaaki/P2P-FileTransfer-Project/raw/main/bin/filetransferilla) | `chmod +x filetransferilla && ./filetransferilla` *(Auto-spawns terminal)* |
+| **macOS (Apple Silicon)** | [📥 `filetransferilla_mac_arm64`](https://github.com/Baaaki/P2P-FileTransfer-Project/raw/main/bin/filetransferilla_mac_arm64) | `chmod +x filetransferilla_mac_arm64 && ./filetransferilla_mac_arm64` |
+| **macOS (Intel)** | [📥 `filetransferilla_mac_amd64`](https://github.com/Baaaki/P2P-FileTransfer-Project/raw/main/bin/filetransferilla_mac_amd64) | `chmod +x filetransferilla_mac_amd64 && ./filetransferilla_mac_amd64` |
 
-> 💡 *ARM64 packages for Linux and Windows are also provided on the Releases page.*
+> 📦 Release archives and full release assets are also available on [**GitHub Releases**](https://github.com/Baaaki/P2P-FileTransfer-Project/releases/latest).
 
 #### First-Launch Warnings
 Binaries are open-source and not code-signed:

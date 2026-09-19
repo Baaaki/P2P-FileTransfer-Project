@@ -27,19 +27,23 @@
 
 ## 🚀 Hızlı Başlangıç
 
-### İndir ve Kur
+> [!TIP]
+> **🟢 Canlı ve Kullanıma Hazır:**  
+> FileTransferilla şu an **canlı olarak çalışmaktadır**! Herhangi bir sunucu kurmanıza, port yönlendirmenize veya ayar yapmanıza gerek yoktur. Ortak ve resmi buluşturucu sunucumuz (`rendezvous.madebybaki.com`) 7/24 devrededir. Doğrudan aşağıdaki linklerden işletim sisteminize uygun olanı indirip hemen kullanmaya başlayabilirsiniz.
 
-[**Son Sürümü İndir (Releases)**](https://github.com/Baaaki/P2P-FileTransfer-Project/releases/latest)
+### İndir ve Çalıştır
 
-| Platform | İndirilecek Paket | Kurulum / Çalıştırma |
+Tüm derlenmiş ikililer doğrudan deponun [`bin/`](bin/) klasöründe hazırdır. Aşağıdaki linklere tıklayarak doğrudan indirebilirsiniz:
+
+| Platform | İndirme Bağlantısı (`bin/`) | Kurulum & Çalıştırma |
 |---|---|---|
-| **Ubuntu / Debian / Mint** | `filetransferilla_<sürüm>_amd64.deb` | `sudo apt install ./filetransferilla_*.deb` *(Uygulama menüsüne eklenir)* |
-| **Linux (Taşınabilir)** | `filetransferilla_<sürüm>_linux_x86_64.tar.gz` | Çift tıkla veya `chmod +x filetransferilla && ./filetransferilla` |
-| **Windows** | `filetransferilla_<sürüm>_windows_x86_64.zip` | Arşivden çıkar ve `filetransferilla.exe`'ye çift tıkla |
-| **macOS (Apple Silicon)** | `filetransferilla_<sürüm>_macOS_arm64.tar.gz` | Çift tıkla *(Terminal penceresinde açılır)* |
-| **macOS (Intel)** | `filetransferilla_<sürüm>_macOS_x86_64.tar.gz` | Çift tıkla *(Terminal penceresinde açılır)* |
+| **Ubuntu / Debian / Mint** | [📥 `filetransferilla_0.2.0_amd64.deb`](https://github.com/Baaaki/P2P-FileTransfer-Project/raw/main/bin/filetransferilla_0.2.0_amd64.deb) | `sudo apt install ./filetransferilla_0.2.0_amd64.deb` *(Menüye eklenir)* |
+| **Windows** | [📥 `filetransferilla.exe`](https://github.com/Baaaki/P2P-FileTransfer-Project/raw/main/bin/filetransferilla.exe) | İndir ve çift tıkla |
+| **Linux (Taşınabilir)** | [📥 `filetransferilla`](https://github.com/Baaaki/P2P-FileTransfer-Project/raw/main/bin/filetransferilla) | `chmod +x filetransferilla && ./filetransferilla` *(Çift tıkla da çalışır)* |
+| **macOS (Apple Silicon)** | [📥 `filetransferilla_mac_arm64`](https://github.com/Baaaki/P2P-FileTransfer-Project/raw/main/bin/filetransferilla_mac_arm64) | `chmod +x filetransferilla_mac_arm64 && ./filetransferilla_mac_arm64` |
+| **macOS (Intel)** | [📥 `filetransferilla_mac_amd64`](https://github.com/Baaaki/P2P-FileTransfer-Project/raw/main/bin/filetransferilla_mac_amd64) | `chmod +x filetransferilla_mac_amd64 && ./filetransferilla_mac_amd64` |
 
-> 💡 *ARM64 Linux ve Windows paketleri de Releases sayfasında mevcuttur.*
+> 📦 Alternatif olarak arşiv paketlerine ve kaynak kodlara [**GitHub Releases**](https://github.com/Baaaki/P2P-FileTransfer-Project/releases/latest) sayfasından da ulaşabilirsiniz.
 
 #### İlk Açılış Uyarısı Hakkında
 Uygulama ikilileri açık kaynak olarak derlendiği ve ücretli imzalama sertifikası taşımadığı için işletim sisteminiz ilk açılışta izin isteyebilir:
