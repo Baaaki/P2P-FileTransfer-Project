@@ -40,8 +40,7 @@ Tüm derlenmiş ikililer doğrudan deponun [`bin/`](bin/) klasöründe hazırdı
 | **Ubuntu / Debian / Mint** | [📥 `filetransferilla_0.3.0_amd64.deb`](https://github.com/Baaaki/P2P-FileTransfer-Project/raw/main/bin/filetransferilla_0.3.0_amd64.deb) | `sudo apt install ./filetransferilla_0.3.0_amd64.deb` *(Menüye eklenir)* |
 | **Windows** | [📥 `filetransferilla.exe`](https://github.com/Baaaki/P2P-FileTransfer-Project/raw/main/bin/filetransferilla.exe) | İndir ve çift tıkla |
 | **Linux (Taşınabilir)** | [📥 `filetransferilla`](https://github.com/Baaaki/P2P-FileTransfer-Project/raw/main/bin/filetransferilla) | `chmod +x filetransferilla && ./filetransferilla` *(Çift tıkla da çalışır)* |
-| **macOS (Apple Silicon)** | [📥 `filetransferilla_mac_arm64`](https://github.com/Baaaki/P2P-FileTransfer-Project/raw/main/bin/filetransferilla_mac_arm64) | `chmod +x filetransferilla_mac_arm64 && ./filetransferilla_mac_arm64` |
-| **macOS (Intel)** | [📥 `filetransferilla_mac_amd64`](https://github.com/Baaaki/P2P-FileTransfer-Project/raw/main/bin/filetransferilla_mac_amd64) | `chmod +x filetransferilla_mac_amd64 && ./filetransferilla_mac_amd64` |
+| **macOS (Apple Silicon · M1-M4)** | [📥 `filetransferilla_mac_arm64`](https://github.com/Baaaki/P2P-FileTransfer-Project/raw/main/bin/filetransferilla_mac_arm64) | `chmod +x filetransferilla_mac_arm64 && ./filetransferilla_mac_arm64` |
 
 > 📦 Alternatif olarak arşiv paketlerine ve kaynak kodlara [**GitHub Releases**](https://github.com/Baaaki/P2P-FileTransfer-Project/releases/latest) sayfasından da ulaşabilirsiniz.
 
