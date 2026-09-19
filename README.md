@@ -40,8 +40,7 @@ Tüm derlenmiş ikililer doğrudan deponun [`bin/`](bin/) klasöründe hazırdı
 | **Ubuntu / Debian / Mint** | [📥 `puresend_0.3.0_amd64.deb`](https://github.com/Baaaki/PureSend/raw/main/bin/puresend_0.3.0_amd64.deb) | `sudo apt install ./puresend_0.3.0_amd64.deb` *(Menüye eklenir)* |
 | **Windows** | [📥 `puresend.exe`](https://github.com/Baaaki/PureSend/raw/main/bin/puresend.exe) | İndir ve çift tıkla |
 | **Linux (Taşınabilir)** | [📥 `puresend`](https://github.com/Baaaki/PureSend/raw/main/bin/puresend) | `chmod +x puresend && ./puresend` *(Çift tıkla da çalışır)* |
-| **macOS (Apple Silicon)** | [📥 `puresend_mac_arm64`](https://github.com/Baaaki/PureSend/raw/main/bin/puresend_mac_arm64) | `chmod +x puresend_mac_arm64 && ./puresend_mac_arm64` |
-| **macOS (Intel)** | [📥 `puresend_mac_amd64`](https://github.com/Baaaki/PureSend/raw/main/bin/puresend_mac_amd64) | `chmod +x puresend_mac_amd64 && ./puresend_mac_amd64` |
+| **macOS (Apple Silicon · M1-M4)** | [📥 `puresend_mac_arm64`](https://github.com/Baaaki/PureSend/raw/main/bin/puresend_mac_arm64) | `chmod +x puresend_mac_arm64 && ./puresend_mac_arm64` |
 
 > 📦 Alternatif olarak arşiv paketlerine ve kaynak kodlara [**GitHub Releases**](https://github.com/Baaaki/PureSend/releases/latest) sayfasından da ulaşabilirsiniz.
 
