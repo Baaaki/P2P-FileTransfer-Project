@@ -19,6 +19,7 @@ import (
 	"filetransferilla/internal/p2p"
 	"filetransferilla/internal/safetext"
 	"filetransferilla/internal/transfer"
+	"filetransferilla/internal/update"
 
 	"github.com/charmbracelet/bubbles/filepicker"
 	"github.com/charmbracelet/bubbles/textinput"
@@ -70,12 +71,15 @@ type Config struct {
 	// OutDir overrides where incoming files are saved. Empty picks the
 	// friendliest default.
 	OutDir string
+	// Version is the current version of the application.
+	Version string
 }
 
 // Model is the whole application state.
 type Model struct {
 	servers    []string
 	serverList string
+	version    string
 	screen     screen
 	mode       mode
 	width      int
@@ -90,12 +94,13 @@ type Model struct {
 	confirmIndex int
 
 	// sending
-	picker     filepicker.Model
-	picked     []pickedFile
-	room       string
-	prepared   bool   // every file has been read and the offer is ready
-	serverLost bool   // the meeting point dropped; the room is being put back
-	notice     string // something worth knowing that needs no action
+	picker       filepicker.Model
+	picked       []pickedFile
+	room         string
+	prepared     bool   // every file has been read and the offer is ready
+	serverLost   bool   // the meeting point dropped; the room is being put back
+	notice       string // something worth knowing that needs no action
+	updateNotice string // notice about an available software update
 
 	// receiving
 	codeErr     string // what is wrong with the code as typed
@@ -163,6 +168,7 @@ func New(cfg Config) Model {
 	return Model{
 		servers:    cfg.Servers,
 		serverList: cfg.ServerList,
+		version:    cfg.Version,
 		screen:     screenWelcome,
 		ctx:        ctx,
 		cancel:     cancel,
@@ -257,12 +263,30 @@ func waitEvent(node *p2p.Node) tea.Cmd {
 // Bubble Tea plumbing
 // ---------------------------------------------------------------------------
 
+type updateAvailableMsg struct{ tag string }
+
+func checkUpdateCmd(version string) tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
+		defer cancel()
+		info, err := update.CheckLatest(ctx, version)
+		if err != nil || info == nil || !info.HasUpdate {
+			return nil
+		}
+		return updateAvailableMsg{tag: info.TagName}
+	}
+}
+
 func (m Model) Init() tea.Cmd {
-	return tea.Batch(m.picker.Init(), tick())
+	return tea.Batch(m.picker.Init(), tick(), checkUpdateCmd(m.version))
 }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+
+	case updateAvailableMsg:
+		m.updateNotice = fmt.Sprintf("Yeni bir sürüm mevcut (%s)! Güncellemek için: filetransferilla -update", msg.tag)
+		return m, nil
 
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
@@ -728,6 +752,9 @@ func (m Model) viewWelcome() string {
 	}
 	b.WriteString("\n" + helpStyle.Render("İnenler şuraya kaydediliyor:") + "\n")
 	b.WriteString(fileStyle.Render(m.outDir) + "\n")
+	if m.updateNotice != "" {
+		b.WriteString("\n" + updateNoticeStyle.Render("✨ "+m.updateNotice) + "\n")
+	}
 	b.WriteString("\n" + footerStyle.Render("↑ ↓ ile seç  ·  Enter ile onayla  ·  q ile çık"))
 	return b.String()
 }

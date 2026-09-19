@@ -31,6 +31,7 @@ import (
 	"filetransferilla/internal/headless"
 	"filetransferilla/internal/p2p"
 	"filetransferilla/internal/tui"
+	"filetransferilla/internal/update"
 
 	"github.com/charmbracelet/x/term"
 )
@@ -58,8 +59,17 @@ func main() {
 		receive     = flag.String("receive", "", "headless: download the given room code and exit")
 		yes         = flag.Bool("yes", false, "headless: accept the incoming file list without asking")
 		showVersion = flag.Bool("version", false, "print version information and exit")
+		doUpdate    = flag.Bool("update", false, "check for updates and update filetransferilla to the latest release")
 	)
 	flag.Parse()
+
+	if *doUpdate {
+		if err := update.Apply(version, os.Stdout); err != nil {
+			fmt.Fprintf(os.Stderr, "Güncelleme hatası: %v\n", err)
+			os.Exit(1)
+		}
+		return
+	}
 
 	if *showVersion {
 		fmt.Printf("filetransferilla %s\n", version)
@@ -104,7 +114,7 @@ func main() {
 		run(headless.Receive(servers, *receive, outDir, *yes, list))
 	default:
 		maybeSpawnTerminal()
-		run(tui.Run(tui.Config{Servers: servers, ServerList: *serverList, OutDir: *out}))
+		run(tui.Run(tui.Config{Servers: servers, ServerList: *serverList, OutDir: *out, Version: version}))
 	}
 }
 

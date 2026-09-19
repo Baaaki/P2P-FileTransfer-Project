@@ -581,6 +581,7 @@ func (n *Node) keepRoom() {
 			continue // already back, by some other path
 		}
 
+		_ = n.host.Network().ClosePeer(n.currentServer().ID)
 		n.emit(ServerLostEvent{})
 		if err := n.restore(); err != nil {
 			if n.ctx.Err() == nil && n.currentRoom() != "" {

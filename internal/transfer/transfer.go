@@ -23,6 +23,7 @@ import (
 	"bufio"
 	"context"
 	"crypto/sha256"
+	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -63,6 +64,12 @@ const (
 
 	// chunkSize is how much is read and written at a time.
 	chunkSize = 32 * 1024
+
+	// maxChunkWireSize bounds any chunk read off the wire during compressed transfer.
+	maxChunkWireSize = 256 * 1024
+
+	// compressionFlag is set on the 4-byte chunk header to indicate the chunk is compressed.
+	compressionFlag uint32 = 0x80000000
 
 	// maxRemoteText bounds a message from the other side before it is
 	// shown to anyone.
@@ -134,7 +141,8 @@ func (f FileInfo) Name() string { return path.Base(f.Path) }
 
 // Manifest lists the files about to be sent.
 type Manifest struct {
-	Files []FileInfo `json:"files"`
+	Files      []FileInfo `json:"files"`
+	Compressed bool       `json:"compressed,omitempty"`
 }
 
 // TotalSize is how many bytes the transfer will move.
@@ -171,6 +179,10 @@ type ack struct {
 	// saying how many leading bytes the receiver already holds from an
 	// earlier attempt. All zeroes for a fresh transfer.
 	Offsets []int64 `json:"offsets,omitempty"`
+
+	// Compressed confirms that the receiver supports and enables on-the-fly
+	// stream compression.
+	Compressed bool `json:"compressed,omitempty"`
 }
 
 // Progress describes where a transfer has got to. Overall totals are
@@ -272,6 +284,7 @@ func Send(s io.ReadWriteCloser, offer *Offer, creds Credentials, opts SendOption
 		_ = enc.Encode(offerMsg{Error: "could not read the files being sent"})
 		return err
 	}
+	manifest.Compressed = true
 	dl.write(timeouts.idle)
 	if err := enc.Encode(offerMsg{Manifest: &manifest}); err != nil {
 		return fmt.Errorf("could not send manifest: %w", describe(err))
@@ -291,14 +304,15 @@ func Send(s io.ReadWriteCloser, offer *Offer, creds Credentials, opts SendOption
 	if err != nil {
 		return err
 	}
+	useCompression := manifest.Compressed && goAhead.Compressed
 
-	// Send the raw bytes of each file, in manifest order.
+	// Send the bytes of each file, in manifest order.
 	w := bufio.NewWriter(s)
 	total := manifest.TotalSize()
 	var base int64
 	for i, info := range manifest.Files {
 		report := progressReporter(hooks, i, len(manifest.Files), base, total)
-		if err := sendFile(w, dl, offer.entries[i].Local, info, offsets[i], report); err != nil {
+		if err := sendFile(w, dl, offer.entries[i].Local, info, offsets[i], report, useCompression); err != nil {
 			return err
 		}
 		base += info.Size
@@ -396,8 +410,9 @@ func progressReporter(hooks Hooks, index, files int, base, overallTotal int64) f
 }
 
 // sendFile writes a single file's bytes in chunks, starting at offset,
-// reporting progress after each chunk.
-func sendFile(w io.Writer, dl deadlines, local string, info FileInfo, offset int64, onProgress func(string, int64, int64)) error {
+// reporting progress after each chunk. When compressed is true, chunks
+// are framed and compressed on-the-fly using Huffman coding.
+func sendFile(w io.Writer, dl deadlines, local string, info FileInfo, offset int64, onProgress func(string, int64, int64), compressed bool) error {
 	if onProgress != nil {
 		onProgress(info.Path, offset, info.Size)
 	}
@@ -418,13 +433,36 @@ func sendFile(w io.Writer, dl deadlines, local string, info FileInfo, offset int
 	}
 
 	buf := make([]byte, chunkSize)
+	var compBuf []byte
+	var hdr [4]byte
 	sent := offset
 	for sent < info.Size {
 		n, err := f.Read(buf)
 		if n > 0 {
 			dl.write(timeouts.idle)
-			if _, werr := w.Write(buf[:n]); werr != nil {
-				return fmt.Errorf("connection lost while sending %s: %w", info.Name(), describe(werr))
+			if compressed {
+				compBuf = CompressChunk(compBuf, buf[:n])
+				if len(compBuf) < n {
+					binary.BigEndian.PutUint32(hdr[:], uint32(len(compBuf))|compressionFlag)
+					if _, werr := w.Write(hdr[:]); werr != nil {
+						return fmt.Errorf("connection lost while sending %s: %w", info.Name(), describe(werr))
+					}
+					if _, werr := w.Write(compBuf); werr != nil {
+						return fmt.Errorf("connection lost while sending %s: %w", info.Name(), describe(werr))
+					}
+				} else {
+					binary.BigEndian.PutUint32(hdr[:], uint32(n))
+					if _, werr := w.Write(hdr[:]); werr != nil {
+						return fmt.Errorf("connection lost while sending %s: %w", info.Name(), describe(werr))
+					}
+					if _, werr := w.Write(buf[:n]); werr != nil {
+						return fmt.Errorf("connection lost while sending %s: %w", info.Name(), describe(werr))
+					}
+				}
+			} else {
+				if _, werr := w.Write(buf[:n]); werr != nil {
+					return fmt.Errorf("connection lost while sending %s: %w", info.Name(), describe(werr))
+				}
 			}
 			sent += int64(n)
 			if onProgress != nil {
@@ -509,8 +547,9 @@ func Receive(s io.ReadWriteCloser, outDir string, creds Credentials, confirm fun
 	for i, p := range partials {
 		offsets[i] = p.offset
 	}
+	useCompression := manifest.Compressed
 	dl.write(timeouts.idle)
-	if err := enc.Encode(ack{OK: true, Offsets: offsets}); err != nil {
+	if err := enc.Encode(ack{OK: true, Offsets: offsets, Compressed: useCompression}); err != nil {
 		return nil, fmt.Errorf("could not answer the sender: %w", describe(err))
 	}
 
@@ -519,7 +558,7 @@ func Receive(s io.ReadWriteCloser, outDir string, creds Credentials, confirm fun
 	var base int64
 	for i, f := range manifest.Files {
 		final, err := receiveFile(r, dl, targets[i], f, partials[i],
-			progressReporter(hooks, i, len(manifest.Files), base, total))
+			progressReporter(hooks, i, len(manifest.Files), base, total), useCompression)
 		if err != nil {
 			// Let the sender know, then propagate the error.
 			return saved, refuse(err)
@@ -692,7 +731,7 @@ func sweepPartials(outDir string) {
 // digest matches, so an interrupted transfer can never leave a corrupt file
 // that looks complete — and what it does leave behind is exactly what the
 // next attempt resumes from.
-func receiveFile(r io.Reader, dl deadlines, target string, info FileInfo, p partial, onProgress func(string, int64, int64)) (string, error) {
+func receiveFile(r io.Reader, dl deadlines, target string, info FileInfo, p partial, onProgress func(string, int64, int64), compressed bool) (string, error) {
 	if p.complete != "" {
 		if onProgress != nil {
 			onProgress(info.Path, info.Size, info.Size)
@@ -715,31 +754,79 @@ func receiveFile(r io.Reader, dl deadlines, target string, info FileInfo, p part
 	}
 
 	buf := make([]byte, chunkSize)
+	var wireBuf []byte
+	var decompBuf []byte
+	var hdr [4]byte
 	received := p.offset
 	if onProgress != nil {
 		onProgress(info.Path, received, info.Size)
 	}
 	for received < info.Size {
-		chunk := min(int64(len(buf)), info.Size-received)
-		// io.ReadFull tolerates a Read that returns the final bytes
-		// together with io.EOF; a bare Read loop would misreport that as a
-		// lost connection.
-		dl.read(timeouts.idle)
-		n, err := io.ReadFull(r, buf[:chunk])
-		if n > 0 {
-			if _, werr := f.Write(buf[:n]); werr != nil {
+		if compressed {
+			dl.read(timeouts.idle)
+			if _, err := io.ReadFull(r, hdr[:]); err != nil {
+				return "", fmt.Errorf("connection lost while receiving %s: %w", info.Name(), describe(err))
+			}
+			hdrVal := binary.BigEndian.Uint32(hdr[:])
+			isComp := (hdrVal & compressionFlag) != 0
+			wireLen := int(hdrVal & ^compressionFlag)
+			if wireLen <= 0 || wireLen > maxChunkWireSize {
+				return "", fmt.Errorf("invalid chunk length (%d) for %s", wireLen, info.Name())
+			}
+
+			if cap(wireBuf) < wireLen {
+				wireBuf = make([]byte, wireLen)
+			} else {
+				wireBuf = wireBuf[:wireLen]
+			}
+
+			dl.read(timeouts.idle)
+			if _, err := io.ReadFull(r, wireBuf); err != nil {
+				return "", fmt.Errorf("connection lost while receiving %s: %w", info.Name(), describe(err))
+			}
+
+			var plain []byte
+			if isComp {
+				var err error
+				plain, err = DecompressChunk(decompBuf, wireBuf, chunkSize*2)
+				if err != nil {
+					return "", fmt.Errorf("decompression error for %s: %w", info.Name(), err)
+				}
+				decompBuf = plain
+			} else {
+				plain = wireBuf
+			}
+
+			if _, werr := f.Write(plain); werr != nil {
 				return "", fmt.Errorf("could not write to disk: %w", werr)
 			}
-			p.hasher.Write(buf[:n])
-			received += int64(n)
+			p.hasher.Write(plain)
+			received += int64(len(plain))
 			if onProgress != nil {
 				onProgress(info.Path, received, info.Size)
 			}
-		}
-		if err != nil {
-			// Keep the .part file: this is precisely the case resume exists
-			// for, and the next attempt will continue from here.
-			return "", fmt.Errorf("connection lost while receiving %s: %w", info.Name(), describe(err))
+		} else {
+			chunk := min(int64(len(buf)), info.Size-received)
+			// io.ReadFull tolerates a Read that returns the final bytes
+			// together with io.EOF; a bare Read loop would misreport that as a
+			// lost connection.
+			dl.read(timeouts.idle)
+			n, err := io.ReadFull(r, buf[:chunk])
+			if n > 0 {
+				if _, werr := f.Write(buf[:n]); werr != nil {
+					return "", fmt.Errorf("could not write to disk: %w", werr)
+				}
+				p.hasher.Write(buf[:n])
+				received += int64(n)
+				if onProgress != nil {
+					onProgress(info.Path, received, info.Size)
+				}
+			}
+			if err != nil {
+				// Keep the .part file: this is precisely the case resume exists
+				// for, and the next attempt will continue from here.
+				return "", fmt.Errorf("connection lost while receiving %s: %w", info.Name(), describe(err))
+			}
 		}
 	}
 

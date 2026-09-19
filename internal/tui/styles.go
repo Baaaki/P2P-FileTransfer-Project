@@ -30,6 +30,7 @@ var (
 	okStyle   = lipgloss.NewStyle().Bold(true).Foreground(colOK)
 	warnStyle = lipgloss.NewStyle().Foreground(colWarn)
 	errStyle  = lipgloss.NewStyle().Bold(true).Foreground(colErr)
+	updateNoticeStyle = lipgloss.NewStyle().Foreground(colAccent).Bold(true)
 
 	// choiceStyle / choiceSelStyle render a menu entry.
 	choiceStyle    = lipgloss.NewStyle().Foreground(colDefault).PaddingLeft(2)
