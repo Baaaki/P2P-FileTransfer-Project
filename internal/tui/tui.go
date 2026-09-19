@@ -16,8 +16,8 @@ import (
 	"strings"
 	"time"
 
+	"puresend/internal/i18n"
 	"puresend/internal/p2p"
-	"puresend/internal/safetext"
 	"puresend/internal/transfer"
 	"puresend/internal/update"
 
@@ -44,6 +44,7 @@ const (
 	screenOutDir
 )
 
+// mode is what the client was asked to do on the welcome screen.
 type mode int
 
 const (
@@ -52,16 +53,15 @@ const (
 	modeReceive
 )
 
-// pickedFile is one thing the sender chose: a file, or a whole folder.
 type pickedFile struct {
 	path  string
 	name  string
 	size  int64
 	isDir bool
-	files int // number of files inside, for a folder
+	files int
 }
 
-// Config is what the program knows before the user does anything.
+// Config starts the interface with baked-in defaults.
 type Config struct {
 	// Servers are the meeting point addresses, tried in order.
 	Servers []string
@@ -75,6 +75,8 @@ type Config struct {
 	Version string
 	// STUNServers overrides the default STUN servers used to discover WAN IP.
 	STUNServers []string
+	// Lang sets the initial interface language ("tr" or "en"). If empty, defaults to Turkish for compatibility or FT_LANG.
+	Lang string
 }
 
 // Model is the whole application state.
@@ -83,6 +85,7 @@ type Model struct {
 	serverList  string
 	stunServers []string
 	version     string
+	lang        i18n.Lang
 	screen      screen
 	mode        mode
 	width       int
@@ -104,6 +107,7 @@ type Model struct {
 	serverLost   bool   // the meeting point dropped; the room is being put back
 	notice       string // something worth knowing that needs no action
 	updateNotice string // notice about an available software update
+	updateTag    string // release tag of available update
 
 	// receiving
 	codeErr     string // what is wrong with the code as typed
@@ -156,8 +160,17 @@ func New(cfg Config) Model {
 	dp.ShowSize = false
 	dp.SetHeight(10)
 
+	l := i18n.Normalize(cfg.Lang)
+	if cfg.Lang == "" {
+		if env := os.Getenv("FT_LANG"); env != "" {
+			l = i18n.Normalize(env)
+		} else {
+			l = i18n.TR
+		}
+	}
+
 	ti := textinput.New()
-	ti.Placeholder = "kiraz-liman-42"
+	ti.Placeholder = i18n.Get(l).EnterPlaceholder
 	ti.CharLimit = 64
 	ti.Prompt = "  ➜  "
 
@@ -173,6 +186,7 @@ func New(cfg Config) Model {
 		serverList:  cfg.ServerList,
 		stunServers: cfg.STUNServers,
 		version:     cfg.Version,
+		lang:        l,
 		screen:      screenWelcome,
 		ctx:         ctx,
 		cancel:      cancel,
@@ -289,7 +303,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 
 	case updateAvailableMsg:
-		m.updateNotice = fmt.Sprintf("Yeni bir sürüm mevcut (%s)! Güncellemek için: puresend -update", msg.tag)
+		m.updateTag = msg.tag
+		if m.lang == i18n.EN {
+			m.updateNotice = fmt.Sprintf("A new version is available (%s)! To update: puresend -update", msg.tag)
+		} else {
+			m.updateNotice = fmt.Sprintf("Yeni bir sürüm mevcut (%s)! Güncellemek için: puresend -update", msg.tag)
+		}
 		return m, nil
 
 	case tea.WindowSizeMsg:
@@ -380,7 +399,11 @@ func (m Model) handleEvent(ev p2p.Event) (tea.Model, tea.Cmd) {
 		return m, waitEvent(m.node)
 
 	case p2p.RejectedEvent:
-		m.notice = "Birisi yanlış bir kodla bağlanmayı denedi. Ona hiçbir şey gösterilmedi."
+		if m.lang == i18n.EN {
+			m.notice = "Someone tried to connect with an invalid code. Nothing was shared with them."
+		} else {
+			m.notice = "Birisi yanlış bir kodla bağlanmayı denedi. Ona hiçbir şey gösterilmedi."
+		}
 		return m, waitEvent(m.node)
 
 	case p2p.ServerLostEvent:
@@ -421,7 +444,11 @@ func (m Model) handleEvent(ev p2p.Event) (tea.Model, tea.Cmd) {
 			// still registered, so go back to waiting and let the
 			// receiver try the same code again.
 			if m.mode == modeSend && m.room != "" {
-				m.warn = "Bir deneme yarıda kaldı. Arkadaşın aynı kodla tekrar deneyebilir."
+				if m.lang == i18n.EN {
+					m.warn = "An attempt was interrupted. Your friend can retry with the same code."
+				} else {
+					m.warn = "Bir deneme yarıda kaldı. Arkadaşın aynı kodla tekrar deneyebilir."
+				}
 				m.haveConn = false
 				m.prog = transfer.Progress{}
 				m.meter = rateMeter{}
@@ -450,6 +477,17 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.menuIndex = max(m.menuIndex-1, 0)
 		case "down", "j":
 			m.menuIndex = min(m.menuIndex+1, 2)
+		case "l", "L":
+			m.lang = i18n.Toggle(m.lang)
+			m.codeInput.Placeholder = i18n.Get(m.lang).EnterPlaceholder
+			if m.updateTag != "" {
+				if m.lang == i18n.EN {
+					m.updateNotice = fmt.Sprintf("A new version is available (%s)! To update: puresend -update", m.updateTag)
+				} else {
+					m.updateNotice = fmt.Sprintf("Yeni bir sürüm mevcut (%s)! Güncellemek için: puresend -update", m.updateTag)
+				}
+			}
+			return m, nil
 		case "enter":
 			switch m.menuIndex {
 			case 0:
@@ -519,8 +557,18 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, cmd
 
 	case screenRoomCode:
-		if msg.String() == "enter" {
+		switch msg.String() {
+		case "enter":
 			m.screen = screenWaiting
+		case "l", "L":
+			m.lang = i18n.Toggle(m.lang)
+		}
+		return m, nil
+
+	case screenWaiting:
+		switch msg.String() {
+		case "l", "L":
+			m.lang = i18n.Toggle(m.lang)
 		}
 		return m, nil
 
@@ -535,7 +583,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			// few tries it allows.
 			code, err := p2p.CheckCode(m.codeInput.Value())
 			if err != nil {
-				m.codeErr = codeProblem(err)
+				m.codeErr = codeProblem(err, m.lang)
 				return m, nil
 			}
 			m.codeInput.SetValue(code)
@@ -570,10 +618,13 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case screenDone, screenError:
-		if msg.String() == "enter" {
+		switch msg.String() {
+		case "enter":
 			return m.reset(), nil
-		}
-		if msg.String() == "q" {
+		case "l", "L":
+			m.lang = i18n.Toggle(m.lang)
+			return m, nil
+		case "q":
 			m.quitted = true
 			m.cancel()
 			return m, tea.Quit
@@ -697,6 +748,9 @@ func (m Model) reset() Model {
 
 func (m Model) View() string {
 	if m.quitted {
+		if m.lang == i18n.EN {
+			return "Goodbye!\n"
+		}
 		return "Görüşürüz!\n"
 	}
 	var body string
@@ -735,17 +789,18 @@ func (m Model) spinner() string {
 }
 
 func (m Model) viewWelcome() string {
+	t := i18n.Get(m.lang)
 	var b strings.Builder
 	b.WriteString(titleStyle.Render("📦  PureSend") + "\n\n")
-	b.WriteString(bodyStyle.Render("Dosyalarını arkadaşına doğrudan gönderirsin.") + "\n")
-	b.WriteString(helpStyle.Render("Dosyaların hiçbir siteye yüklenmez — senin bilgisayarından") + "\n")
-	b.WriteString(helpStyle.Render("çıkar, arkadaşının bilgisayarına iner.") + "\n\n")
-	b.WriteString(bodyStyle.Render("Ne yapmak istiyorsun?") + "\n\n")
+	b.WriteString(bodyStyle.Render(t.WelcomeHeadline) + "\n")
+	b.WriteString(helpStyle.Render(t.WelcomeHelp1) + "\n")
+	b.WriteString(helpStyle.Render(t.WelcomeHelp2) + "\n\n")
+	b.WriteString(bodyStyle.Render(t.WelcomeQuestion) + "\n\n")
 
 	opts := []string{
-		"📤  Dosya göndereceğim",
-		"📥  Bana dosya gönderilecek",
-		"📁  İndirme klasörünü değiştir",
+		t.WelcomeSend,
+		t.WelcomeRecv,
+		t.WelcomeChangeDir,
 	}
 	for i, o := range opts {
 		if i == m.menuIndex {
@@ -754,99 +809,104 @@ func (m Model) viewWelcome() string {
 			b.WriteString(choiceStyle.Render(o) + "\n")
 		}
 	}
-	b.WriteString("\n" + helpStyle.Render("İnenler şuraya kaydediliyor:") + "\n")
+	b.WriteString("\n" + helpStyle.Render(t.WelcomeSavingTo) + "\n")
 	b.WriteString(fileStyle.Render(m.outDir) + "\n")
 	if m.updateNotice != "" {
 		b.WriteString("\n" + updateNoticeStyle.Render("✨ "+m.updateNotice) + "\n")
 	}
-	b.WriteString("\n" + footerStyle.Render("↑ ↓ ile seç  ·  Enter ile onayla  ·  q ile çık"))
+	b.WriteString("\n" + footerStyle.Render(t.WelcomeFooter))
 	return b.String()
 }
 
 func (m Model) viewConnecting() string {
+	t := i18n.Get(m.lang)
 	var b strings.Builder
-	b.WriteString(titleStyle.Render("Bağlanılıyor") + "\n\n")
-	b.WriteString(m.spinner() + " " + bodyStyle.Render("Buluşma noktasına bağlanılıyor...") + "\n\n")
-	b.WriteString(helpStyle.Render("Bu, iki bilgisayarın birbirini bulmasını sağlayan küçük bir") + "\n")
-	b.WriteString(helpStyle.Render("adres defteri. Dosyaların oraya gitmiyor, sadece") + "\n")
-	b.WriteString(helpStyle.Render("\"buradayım\" diyorsun.") + "\n\n")
-	b.WriteString(footerStyle.Render("Ctrl+C ile çık"))
+	b.WriteString(titleStyle.Render(t.ConnectingTitle) + "\n\n")
+	b.WriteString(m.spinner() + " " + bodyStyle.Render(t.ConnectingStatus) + "\n\n")
+	b.WriteString(helpStyle.Render(t.ConnectingHelp1) + "\n")
+	b.WriteString(helpStyle.Render(t.ConnectingHelp2) + "\n")
+	b.WriteString(helpStyle.Render(t.ConnectingHelp3) + "\n\n")
+	b.WriteString(footerStyle.Render(t.ConnectingFooter))
 	return b.String()
 }
 
 func (m Model) viewPickFiles() string {
+	t := i18n.Get(m.lang)
 	var b strings.Builder
-	b.WriteString(titleStyle.Render("📤  Ne göndereceksin?") + "\n\n")
-	b.WriteString(helpStyle.Render("Klasörlerin içine girmek için Enter'a bas. Göndermek") + "\n")
-	b.WriteString(helpStyle.Render("istediğin dosyanın üzerinde Enter'a basınca listeye eklenir.") + "\n")
-	b.WriteString(helpStyle.Render("İçinde olduğun klasörün tamamını göndermek için f'ye bas.") + "\n\n")
+	b.WriteString(titleStyle.Render(t.PickTitle) + "\n\n")
+	b.WriteString(helpStyle.Render(t.PickHelp1) + "\n")
+	b.WriteString(helpStyle.Render(t.PickHelp2) + "\n")
+	b.WriteString(helpStyle.Render(t.PickHelp3) + "\n\n")
 	b.WriteString(m.picker.View() + "\n")
 
 	if len(m.picked) > 0 {
 		var total int64
-		b.WriteString(okStyle.Render(fmt.Sprintf("Seçtiklerin (%d):", len(m.picked))) + "\n")
+		b.WriteString(okStyle.Render(t.PickSelected(len(m.picked))) + "\n")
 		for _, f := range m.picked {
 			label := "• " + f.name
 			detail := formatBytes(f.size)
 			if f.isDir {
 				label = "• 📁 " + f.name
-				detail = fmt.Sprintf("%d dosya, %s", f.files, formatBytes(f.size))
+				detail = t.PickFolderFiles(f.files, formatBytes(f.size))
 			}
 			b.WriteString(fileStyle.Render(label) + " " + sizeStyle.Render("("+detail+")") + "\n")
 			total += f.size
 		}
-		b.WriteString(sizeStyle.Render("  Toplam: "+formatBytes(total)) + "\n\n")
-		b.WriteString(buttonSelStyle.Render("s  ·  Göndermeye başla") + "\n\n")
-		b.WriteString(footerStyle.Render("↑ ↓ gez  ·  Enter aç/seç  ·  f klasörü ekle  ·  x son seçimi sil  ·  Ctrl+C çık"))
+		b.WriteString(sizeStyle.Render(t.PickTotal(formatBytes(total))) + "\n\n")
+		b.WriteString(buttonSelStyle.Render(t.PickStartBtn) + "\n\n")
+		b.WriteString(footerStyle.Render(t.PickFooterSelected))
 	} else {
-		b.WriteString("\n" + helpStyle.Render("Henüz bir şey seçmedin.") + "\n\n")
-		b.WriteString(footerStyle.Render("↑ ↓ gez  ·  Enter aç/seç  ·  f klasörü ekle  ·  Ctrl+C çık"))
+		b.WriteString("\n" + helpStyle.Render(t.PickEmpty) + "\n\n")
+		b.WriteString(footerStyle.Render(t.PickFooterEmpty))
 	}
 	return b.String()
 }
 
 func (m Model) viewOutDir() string {
+	t := i18n.Get(m.lang)
 	var b strings.Builder
-	b.WriteString(titleStyle.Render("📁  İnen dosyalar nereye kaydedilsin?") + "\n\n")
-	b.WriteString(helpStyle.Render("• Enter : Seçili klasörün içine gir") + "\n")
-	b.WriteString(helpStyle.Render("• Backspace veya ← : Bir üst klasöre çık") + "\n")
-	b.WriteString(helpStyle.Render("• s : Aşağıda 'Şu an burası' yazan klasörü seç") + "\n\n")
-	b.WriteString(bodyStyle.Render("Şu an burası: ") + "\n")
+	b.WriteString(titleStyle.Render(t.OutDirTitle) + "\n\n")
+	b.WriteString(helpStyle.Render(t.OutDirHelp1) + "\n")
+	b.WriteString(helpStyle.Render(t.OutDirHelp2) + "\n")
+	b.WriteString(helpStyle.Render(t.OutDirHelp3) + "\n\n")
+	b.WriteString(bodyStyle.Render(t.OutDirCurrent) + "\n")
 	b.WriteString(fileStyle.Render(m.dirPicker.CurrentDirectory) + "\n\n")
 	b.WriteString(m.dirPicker.View() + "\n")
-	b.WriteString(buttonSelStyle.Render("s  ·  Burayı seç ("+filepath.Base(m.dirPicker.CurrentDirectory)+")") + "\n\n")
-	b.WriteString(footerStyle.Render("↑ ↓ gez  ·  Enter aç  ·  Backspace/← yukarı çık  ·  s seç  ·  Esc vazgeç"))
+	b.WriteString(buttonSelStyle.Render(t.OutDirSelectBtn(filepath.Base(m.dirPicker.CurrentDirectory))) + "\n\n")
+	b.WriteString(footerStyle.Render(t.OutDirFooter))
 	return b.String()
 }
 
 func (m Model) viewRoomCode() string {
+	t := i18n.Get(m.lang)
 	var b strings.Builder
-	b.WriteString(titleStyle.Render("🔑  Oda kodun hazır!") + "\n\n")
+	b.WriteString(titleStyle.Render(t.RoomTitle) + "\n\n")
 	b.WriteString(codeStyle.Render(m.room) + "\n\n")
-	b.WriteString(bodyStyle.Render("Şimdi arkadaşına bu kodu ilet.") + "\n")
-	b.WriteString(helpStyle.Render("WhatsApp'tan yaz, SMS at ya da telefonda söyle — fark etmez.") + "\n\n")
-	b.WriteString(helpStyle.Render("Arkadaşın programı açacak, \"Bana dosya gönderilecek\"i") + "\n")
-	b.WriteString(helpStyle.Render("seçecek ve bu kodu yazacak.") + "\n\n")
-	b.WriteString(helpStyle.Render("Kod tek kullanımlık: dosyalar gittiği anda geçersiz olur.") + "\n\n")
+	b.WriteString(bodyStyle.Render(t.RoomBody) + "\n")
+	b.WriteString(helpStyle.Render(t.RoomHelp1) + "\n\n")
+	b.WriteString(helpStyle.Render(t.RoomHelp2) + "\n")
+	b.WriteString(helpStyle.Render(t.RoomHelp3) + "\n\n")
+	b.WriteString(helpStyle.Render(t.RoomSingleUse) + "\n\n")
 	b.WriteString(m.hostingNotes())
-	b.WriteString(buttonSelStyle.Render("✓  Arkadaşıma ilettim") + "\n\n")
-	b.WriteString(footerStyle.Render("Enter ile devam et  ·  Ctrl+C ile çık"))
+	b.WriteString(buttonSelStyle.Render(t.RoomSentBtn) + "\n\n")
+	b.WriteString(footerStyle.Render(t.RoomFooter))
 	return b.String()
 }
 
 func (m Model) viewWaiting() string {
+	t := i18n.Get(m.lang)
 	var b strings.Builder
-	b.WriteString(titleStyle.Render("Bekleniyor") + "\n\n")
-	b.WriteString(m.spinner() + " " + bodyStyle.Render("Arkadaşının kodu girmesi bekleniyor...") + "\n\n")
+	b.WriteString(titleStyle.Render(t.WaitingTitle) + "\n\n")
+	b.WriteString(m.spinner() + " " + bodyStyle.Render(t.WaitingStatus) + "\n\n")
 	if m.warn != "" {
 		b.WriteString(warnStyle.Render("! "+m.warn) + "\n\n")
 	}
-	b.WriteString(bodyStyle.Render("Kod: ") + codeStyle.Render(m.room) + "\n\n")
+	b.WriteString(bodyStyle.Render(t.WaitingCodeLabel) + codeStyle.Render(m.room) + "\n\n")
 	b.WriteString(m.hostingNotes())
-	b.WriteString(helpStyle.Render("Bu pencereyi kapatma. Arkadaşın kodu girdiği anda") + "\n")
-	b.WriteString(helpStyle.Render("gönderme kendiliğinden başlayacak.") + "\n\n")
-	b.WriteString(helpStyle.Render("Kod en fazla 1 saat geçerli.") + "\n\n")
-	b.WriteString(footerStyle.Render("Ctrl+C ile vazgeç"))
+	b.WriteString(helpStyle.Render(t.WaitingHelp1) + "\n")
+	b.WriteString(helpStyle.Render(t.WaitingHelp2) + "\n\n")
+	b.WriteString(helpStyle.Render(t.WaitingHelp3) + "\n\n")
+	b.WriteString(footerStyle.Render(t.WaitingFooter))
 	return b.String()
 }
 
@@ -854,18 +914,18 @@ func (m Model) viewWaiting() string {
 // how far along reading the files is, whether the meeting point is
 // reachable, and whether anyone tried a wrong code.
 func (m Model) hostingNotes() string {
+	t := i18n.Get(m.lang)
 	var b strings.Builder
 	switch {
 	case m.prepared:
-		b.WriteString(okStyle.Render("✓ Dosyalar gönderilmeye hazır") + "\n\n")
+		b.WriteString(okStyle.Render(t.HostReady) + "\n\n")
 	case m.prepFiles > 0:
-		b.WriteString(m.spinner() + " " + helpStyle.Render(fmt.Sprintf(
-			"Dosyalar hazırlanıyor (%d/%d)...", m.prepIndex, m.prepFiles)) + "\n\n")
+		b.WriteString(m.spinner() + " " + helpStyle.Render(t.HostPreparing(m.prepIndex, m.prepFiles)) + "\n\n")
 	}
 	if m.serverLost {
-		b.WriteString(warnStyle.Render("! Buluşma noktasıyla bağlantı koptu, yeniden bağlanılıyor...") + "\n")
-		b.WriteString(helpStyle.Render("  Kodun geçerliliğini koruyor. Arkadaşın bu arada denerse") + "\n")
-		b.WriteString(helpStyle.Render("  birkaç saniye sonra tekrar denesin.") + "\n\n")
+		b.WriteString(warnStyle.Render(t.HostLost) + "\n")
+		b.WriteString(helpStyle.Render(t.HostLostHelp1) + "\n")
+		b.WriteString(helpStyle.Render(t.HostLostHelp2) + "\n\n")
 	}
 	if m.notice != "" {
 		b.WriteString(helpStyle.Render("• "+m.notice) + "\n\n")
@@ -874,47 +934,51 @@ func (m Model) hostingNotes() string {
 }
 
 func (m Model) viewEnterCode() string {
+	t := i18n.Get(m.lang)
 	var b strings.Builder
-	b.WriteString(titleStyle.Render("📥  Arkadaşının verdiği kodu yaz") + "\n\n")
-	b.WriteString(helpStyle.Render("Arkadaşın sana 3 parçalı bir kod verdi.") + "\n")
-	b.WriteString(helpStyle.Render("Şuna benziyor: kiraz-liman-42") + "\n\n")
+	b.WriteString(titleStyle.Render(t.EnterTitle) + "\n\n")
+	b.WriteString(helpStyle.Render(t.EnterHelp1) + "\n")
+	b.WriteString(helpStyle.Render(t.EnterHelp2) + "\n\n")
 	b.WriteString(m.codeInput.View() + "\n\n")
 	if m.codeErr != "" {
 		b.WriteString(warnStyle.Render("! "+m.codeErr) + "\n\n")
 	}
-	b.WriteString(helpStyle.Render("İnenler şuraya kaydedilecek:") + "\n")
+	b.WriteString(helpStyle.Render(t.EnterSavingTo) + "\n")
 	b.WriteString(fileStyle.Render(m.outDir) + "\n\n")
-	b.WriteString(footerStyle.Render("Enter ile devam et  ·  Ctrl+O ile klasörü değiştir  ·  Ctrl+C ile çık"))
+	b.WriteString(footerStyle.Render(t.EnterFooter))
 	return b.String()
 }
 
 func (m Model) viewFinding() string {
+	t := i18n.Get(m.lang)
 	var b strings.Builder
-	b.WriteString(titleStyle.Render("Aranıyor") + "\n\n")
+	b.WriteString(titleStyle.Render(t.FindingTitle) + "\n\n")
 	b.WriteString(m.spinner() + " " + bodyStyle.Render(m.statusText()) + "\n\n")
-	b.WriteString(helpStyle.Render("İki bilgisayar arasında doğrudan bir yol açılmaya") + "\n")
-	b.WriteString(helpStyle.Render("çalışılıyor. Bu birkaç saniye sürebilir.") + "\n\n")
-	b.WriteString(footerStyle.Render("Ctrl+C ile vazgeç"))
+	b.WriteString(helpStyle.Render(t.FindingHelp1) + "\n")
+	b.WriteString(helpStyle.Render(t.FindingHelp2) + "\n\n")
+	b.WriteString(footerStyle.Render(t.FindingFooter))
 	return b.String()
 }
 
 // statusText turns the internal status into a friendly sentence.
 func (m Model) statusText() string {
+	t := i18n.Get(m.lang)
 	switch m.status {
 	case "looking up the code":
-		return "Kod kontrol ediliyor..."
+		return t.StatusLookingUp
 	case "connecting to the other computer":
-		return "Arkadaşının bilgisayarına bağlanılıyor..."
+		return t.StatusConnecting
 	case "opening a direct route":
-		return "Doğrudan yol açılıyor..."
+		return t.StatusDirect
 	default:
-		return "Arkadaşın aranıyor..."
+		return t.StatusDefault
 	}
 }
 
 func (m Model) viewConfirm() string {
+	t := i18n.Get(m.lang)
 	var b strings.Builder
-	b.WriteString(titleStyle.Render("📥  Sana dosya gönderilmek isteniyor") + "\n\n")
+	b.WriteString(titleStyle.Render(t.ConfirmTitle) + "\n\n")
 
 	// A folder of a thousand files would bury the question, so show the
 	// first few and count the rest.
@@ -922,7 +986,7 @@ func (m Model) viewConfirm() string {
 	files := m.manifest.Files
 	for i, f := range files {
 		if i == maxListed {
-			b.WriteString(helpStyle.Render(fmt.Sprintf("  ... ve %d dosya daha", len(files)-maxListed)) + "\n")
+			b.WriteString(helpStyle.Render(t.ConfirmMoreFiles(len(files)-maxListed)) + "\n")
 			break
 		}
 		b.WriteString(fileStyle.Render("• "+f.Path) + " " +
@@ -930,25 +994,24 @@ func (m Model) viewConfirm() string {
 	}
 
 	total := m.manifest.TotalSize()
-	b.WriteString("\n" + sizeStyle.Render(fmt.Sprintf("  Toplam: %d dosya, %s",
-		len(files), formatBytes(total))) + "\n\n")
+	b.WriteString("\n" + sizeStyle.Render(t.ConfirmTotal(len(files), formatBytes(total))) + "\n\n")
 
 	if warning := m.relayWarning(total); warning != "" {
 		b.WriteString(warnStyle.Render(warning) + "\n\n")
 	}
 
-	b.WriteString(helpStyle.Render("Kaydedilecek yer:") + "\n")
+	b.WriteString(helpStyle.Render(t.ConfirmDest) + "\n")
 	b.WriteString(fileStyle.Render(m.outDir) + "\n\n")
-	b.WriteString(bodyStyle.Render("Bu dosyaları almak istiyor musun?") + "\n\n")
+	b.WriteString(bodyStyle.Render(t.ConfirmQuestion) + "\n\n")
 
-	yes, no := buttonStyle.Render("Evet, indir"), buttonStyle.Render("Hayır, iptal")
+	yes, no := buttonStyle.Render(t.ConfirmYes), buttonStyle.Render(t.ConfirmNo)
 	if m.confirmIndex == 0 {
-		yes = buttonSelStyle.Render("Evet, indir")
+		yes = buttonSelStyle.Render(t.ConfirmYes)
 	} else {
-		no = buttonSelStyle.Render("Hayır, iptal")
+		no = buttonSelStyle.Render(t.ConfirmNo)
 	}
 	b.WriteString(lipgloss.JoinHorizontal(lipgloss.Top, yes, no) + "\n\n")
-	b.WriteString(footerStyle.Render("← → ile seç  ·  Enter ile onayla  ·  y / n kısayolları"))
+	b.WriteString(footerStyle.Render(t.ConfirmFooter))
 	return b.String()
 }
 
@@ -959,29 +1022,27 @@ func (m Model) relayWarning(total int64) string {
 	if m.direct || !m.haveConn || m.relayLimit <= 0 || total <= m.relayLimit {
 		return ""
 	}
-	return "! Bu kadarı yedek yoldan geçemez.\n" +
-		"  Doğrudan yol açılamadı ve yedek yolun " + formatBytes(m.relayLimit) + " sınırı var;\n" +
-		"  transfer büyük ihtimalle yarıda kesilecek. Yarım kalırsa kaldığı\n" +
-		"  yerden devam eder — ama önce ikinizin de başka bir ağ denemesi\n" +
-		"  (mesela wifi yerine mobil veri) daha hızlı sonuç verir."
+	t := i18n.Get(m.lang)
+	return t.RelayWarning(formatBytes(m.relayLimit))
 }
 
 func (m Model) viewTransfer() string {
+	t := i18n.Get(m.lang)
 	var b strings.Builder
 	if m.mode == modeSend {
-		b.WriteString(titleStyle.Render("📤  Gönderiliyor") + "\n\n")
+		b.WriteString(titleStyle.Render(t.TransferSendTitle) + "\n\n")
 	} else {
-		b.WriteString(titleStyle.Render("📥  İndiriliyor") + "\n\n")
+		b.WriteString(titleStyle.Render(t.TransferRecvTitle) + "\n\n")
 	}
 
 	if m.haveConn {
 		if m.direct {
-			b.WriteString(okStyle.Render("✓ Doğrudan bağlantı kuruldu") + "\n")
-			b.WriteString(helpStyle.Render("  Dosyalar iki bilgisayar arasında akıyor, kimse aradan geçmiyor.") + "\n\n")
+			b.WriteString(okStyle.Render(t.TransferDirectOk) + "\n")
+			b.WriteString(helpStyle.Render(t.TransferDirectHelp) + "\n\n")
 		} else {
-			b.WriteString(warnStyle.Render("! Yedek yol kullanılıyor") + "\n")
-			b.WriteString(helpStyle.Render("  Doğrudan yol açılamadı (bazı internet bağlantıları buna izin") + "\n")
-			b.WriteString(helpStyle.Render("  vermiyor). Transfer yine de şifreli, sadece biraz daha yavaş.") + "\n\n")
+			b.WriteString(warnStyle.Render(t.TransferRelayWarn) + "\n")
+			b.WriteString(helpStyle.Render(t.TransferRelayHelp1) + "\n")
+			b.WriteString(helpStyle.Render(t.TransferRelayHelp2) + "\n\n")
 		}
 	}
 
@@ -989,30 +1050,29 @@ func (m Model) viewTransfer() string {
 	case m.prog.Total > 0 || m.prog.OverallTotal > 0:
 		b.WriteString(m.viewProgress())
 	case m.prep != "":
-		b.WriteString(m.spinner() + " " + helpStyle.Render(fmt.Sprintf(
-			"Dosyalar kontrol ediliyor (%d/%d)...", m.prepIndex, m.prepFiles)) + "\n")
+		b.WriteString(m.spinner() + " " + helpStyle.Render(t.TransferPrepFiles(m.prepIndex, m.prepFiles)) + "\n")
 		b.WriteString(fileStyle.Render(truncate(m.prep, 46)) + "\n\n")
 	case m.mode == modeReceive && m.remoteTotal > 0:
 		// A large folder takes the sender a while to read; say so, with
 		// numbers, rather than an open-ended "preparing".
-		b.WriteString(m.spinner() + " " + helpStyle.Render(fmt.Sprintf(
-			"Arkadaşının bilgisayarı dosyaları hazırlıyor (%d/%d)...",
+		b.WriteString(m.spinner() + " " + helpStyle.Render(t.TransferRemotePrep(
 			min(m.remoteDone, m.remoteTotal), m.remoteTotal)) + "\n\n")
 	default:
-		b.WriteString(m.spinner() + " " + helpStyle.Render("Hazırlanıyor...") + "\n\n")
+		b.WriteString(m.spinner() + " " + helpStyle.Render(t.TransferPreparing) + "\n\n")
 	}
-	b.WriteString(footerStyle.Render("Ctrl+C ile vazgeç"))
+	b.WriteString(footerStyle.Render(t.TransferFooter))
 	return b.String()
 }
 
 // viewProgress draws the bar, and under it the two numbers people actually
 // watch: how fast it is going and how long is left.
 func (m Model) viewProgress() string {
+	t := i18n.Get(m.lang)
 	p := m.prog
 	var b strings.Builder
 
 	if p.Files > 1 {
-		b.WriteString(helpStyle.Render(fmt.Sprintf("Dosya %d / %d", p.Index, p.Files)) + "\n")
+		b.WriteString(helpStyle.Render(t.TransferFileIndex(p.Index, p.Files)) + "\n")
 	}
 	b.WriteString(fileStyle.Render(truncate(p.Name, 46)) + "\n")
 
@@ -1029,9 +1089,9 @@ func (m Model) viewProgress() string {
 		sizeStyle.Render(formatBytes(done)+" / "+formatBytes(total)) + "\n")
 
 	if rate := m.meter.rate(); rate > 0 {
-		line := formatRate(rate)
+		line := formatRateLang(rate, m.lang)
 		if eta, ok := m.meter.eta(total - done); ok {
-			line += "  ·  kalan süre " + formatDuration(eta)
+			line += "  ·  " + t.TransferEta(formatDurationLang(eta, m.lang))
 		}
 		b.WriteString("  " + sizeStyle.Render(line) + "\n")
 	}
@@ -1040,43 +1100,44 @@ func (m Model) viewProgress() string {
 }
 
 func (m Model) viewDone() string {
+	t := i18n.Get(m.lang)
 	var b strings.Builder
 	if m.mode == modeSend {
-		b.WriteString(okStyle.Render("✓  Gönderildi!") + "\n\n")
-		b.WriteString(bodyStyle.Render(
-			"Dosyaların arkadaşına ulaştı ve eksiksiz indiği doğrulandı.") + "\n\n")
-		b.WriteString(helpStyle.Render("Kod artık geçersiz — aynı kodla kimse bir daha indiremez.") + "\n\n")
+		b.WriteString(okStyle.Render(t.DoneSendTitle) + "\n\n")
+		b.WriteString(bodyStyle.Render(t.DoneSendBody) + "\n\n")
+		b.WriteString(helpStyle.Render(t.DoneSendHelp) + "\n\n")
 	} else {
-		b.WriteString(okStyle.Render("✓  İndi!") + "\n\n")
-		b.WriteString(bodyStyle.Render("Dosyalar şuraya kaydedildi:") + "\n\n")
+		b.WriteString(okStyle.Render(t.DoneRecvTitle) + "\n\n")
+		b.WriteString(bodyStyle.Render(t.DoneRecvBody) + "\n\n")
 		const maxListed = 12
 		for i, p := range m.savedPaths {
 			if i == maxListed {
-				b.WriteString(helpStyle.Render(fmt.Sprintf("  ... ve %d dosya daha", len(m.savedPaths)-maxListed)) + "\n")
+				b.WriteString(helpStyle.Render(t.DoneMoreFiles(len(m.savedPaths)-maxListed)) + "\n")
 				break
 			}
 			b.WriteString(fileStyle.Render("• "+p) + "\n")
 		}
-		b.WriteString("\n" + helpStyle.Render("Her dosyanın eksiksiz indiği doğrulandı.") + "\n\n")
+		b.WriteString("\n" + helpStyle.Render(t.DoneVerified) + "\n\n")
 	}
-	b.WriteString(footerStyle.Render("Enter ile ana menüye dön  ·  q ile çık"))
+	b.WriteString(footerStyle.Render(t.DoneFooter))
 	return b.String()
 }
 
 func (m Model) viewError() string {
-	headline, hints := explain(m.err)
+	t := i18n.Get(m.lang)
+	headline, hints := i18n.Explain(m.err, m.lang)
 
 	var b strings.Builder
-	b.WriteString(errStyle.Render("✗  Bir sorun çıktı") + "\n\n")
+	b.WriteString(errStyle.Render(t.ErrorTitle) + "\n\n")
 	b.WriteString(bodyStyle.Render(headline) + "\n\n")
 	if len(hints) > 0 {
-		b.WriteString(helpStyle.Render("Ne yapabilirsin:") + "\n")
+		b.WriteString(helpStyle.Render(t.ErrorWhatCan) + "\n")
 		for _, h := range hints {
 			b.WriteString(helpStyle.Render("  • "+h) + "\n")
 		}
 		b.WriteString("\n")
 	}
-	b.WriteString(footerStyle.Render("Enter ile ana menüye dön  ·  q ile çık"))
+	b.WriteString(footerStyle.Render(t.ErrorFooter))
 	return b.String()
 }
 
@@ -1086,154 +1147,22 @@ func (m Model) viewError() string {
 
 // explain turns a technical error into a plain-language headline and a
 // short list of things the user can actually do about it.
-//
-// Every branch here exists because something reached a real screen without
-// one. The default branch prints the raw error, which is the last resort:
-// if you find yourself looking at one, that is a missing case, not a
-// working fallback.
 func explain(err error) (string, []string) {
-	if err == nil {
-		return "Bilinmeyen bir hata oldu.", nil
-	}
-	s := strings.ToLower(err.Error())
-	has := func(parts ...string) bool {
-		for _, p := range parts {
-			if strings.Contains(s, p) {
-				return true
-			}
-		}
-		return false
-	}
-	retryTogether := []string{
-		"İkiniz de programı açık tutup aynı kodla tekrar deneyin — indirme kaldığı yerden devam eder.",
-		"Doğrudan yol açılamadıysa yedek yolun bir boyut sınırı var; büyük dosyalarda bu sınıra takılmış olabilirsiniz.",
-		"Mümkünse ikiniz de başka bir ağa geçin (wifi yerine mobil veri gibi).",
-	}
-
-	switch {
-	case has("room code does not match"):
-		return "Kod eşleşmedi.", []string{
-			"Kodu harfi harfine doğru yazdığından emin ol.",
-			"Arkadaşın sana kodu yeniden okusun — bir harf bile fark eder.",
-			"Kod tek kullanımlık: daha önce kullanıldıysa yenisini istemen gerekir.",
-		}
-	case has("already sending"):
-		return "Bu kodla şu an başka bir transfer sürüyor.", []string{
-			"Arkadaşına ekranında ne yazdığını sor — dosyalar başka birine gidiyor olabilir.",
-			"Kodu senden başka kimseye vermediyse, yeni bir kodla baştan başlasın.",
-		}
-	case has("not a room code", "malformed room code"):
-		return "Bu bir oda kodu değil.", []string{
-			"Kod iki kelime ve bir sayıdan oluşur, örneğin kiraz-liman-42.",
-		}
-	case has("not used in room codes"):
-		return "Kodda tanınmayan bir kelime var.", []string{
-			"Kodu arkadaşından harf harf yeniden iste.",
-		}
-	case has("room code expired"):
-		return "Kodun süresi doldu.", []string{
-			"Yeni bir gönderim başlat; yeni bir kod alırsın.",
-		}
-	case has("reconnecting"):
-		return "Arkadaşının programı buluşma noktasına yeniden bağlanıyor.", []string{
-			"Birkaç saniye bekleyip aynı kodla tekrar dene.",
-		}
-	case has("sender could not prepare"):
-		return "Arkadaşının bilgisayarı dosyaları okuyamadı.", []string{
-			"Arkadaşın dosyaların yerinde durduğunu kontrol edip baştan göndersin.",
-		}
-	case has("invalid file list", "message exceeds"):
-		return "Karşı taraf geçersiz bir dosya listesi gönderdi.", []string{
-			"Güvenlik için transfer durduruldu, diske hiçbir şey yazılmadı.",
-		}
-	case has("cannot store"):
-		return "Gelen dosyalardan birinin adı bu bilgisayarda kullanılamıyor.", []string{
-			"Arkadaşın dosyanın adından ? * < > | \" gibi işaretleri çıkarıp tekrar göndersin.",
-			"CON, NUL, AUX gibi adlar da Windows'ta kullanılamaz.",
-		}
-	case has("unsafe file name", "reserved file name"):
-		return "Karşı taraf kabul edilemez bir dosya adı gönderdi.", []string{
-			"Güvenlik için transfer durduruldu, diske hiçbir şey yazılmadı.",
-			"Arkadaşın dosyanın adını değiştirip tekrar denesin.",
-		}
-	case has("stopped responding"):
-		return "Karşı taraf yanıt vermeyi bıraktı.", retryTogether
-	case has("connection lost", "stream reset", "connection closed", "acknowledgement",
-		"no answer from receiver", "could not read manifest", "security handshake",
-		"no confirmation from the other side"):
-		return "Bağlantı transfer sırasında koptu.", retryTogether
-	case has("too many failed lookups"):
-		return "Çok fazla hatalı kod denendi.", []string{
-			"Kodu arkadaşından yeniden iste ve dikkatle yaz.",
-			"Bir dakika bekleyip ana menüden tekrar dene.",
-		}
-	case has("too many open rooms"):
-		return "Aynı anda çok fazla gönderim başlattın.", []string{
-			"Açık kalan pencerelerden birini kapatıp tekrar dene.",
-		}
-	case has("server is full", "server is busy"):
-		return "Buluşma noktası şu an çok yoğun.", []string{
-			"Birkaç dakika sonra tekrar dene.",
-		}
-	case has("already in use"):
-		return "Bu kod şu an başkası tarafından kullanılıyor.", []string{
-			"Tekrar dene — yeni bir kod üretilecek.",
-		}
-	// Keep this one late: "room" appears in several more specific messages
-	// above, and a user who hits one of those needs to hear about that, not
-	// about a code that was never opened.
-	case has("not found", "room"):
-		return "Bu kodla açılmış bir oda bulunamadı.", []string{
-			"Kodu doğru yazdığından emin ol (üç parça, aralarında tire).",
-			"Arkadaşının programı hâlâ açık ve bekliyor olmalı.",
-			"Kod tek kullanımlık ve en fazla 1 saat geçerli; kullanıldıysa yeni kod istesin.",
-		}
-	case has("meeting point"):
-		return "Buluşma noktasına ulaşılamadı.", []string{
-			"İnternet bağlantını kontrol et.",
-			"Birkaç dakika sonra tekrar dene.",
-		}
-	case has("could not connect to the other computer"):
-		return "Arkadaşının bilgisayarına bağlanılamadı.", []string{
-			"Arkadaşının programı açık ve bekliyor durumda mı, sor.",
-			"İkiniz de tekrar deneyin — çoğu zaman ikinci denemede olur.",
-		}
-	case has("declined"):
-		return "Karşı taraf transferi kabul etmedi.", nil
-	case has("checksum"):
-		return "Dosya eksik veya bozuk indi.", []string{
-			"Transferi tekrar başlatın; bozuk dosya diske kaydedilmedi.",
-		}
-	case has("too many files"):
-		return "Tek seferde gönderilemeyecek kadar çok dosya var.", []string{
-			"Klasörü birkaç parçaya bölüp ayrı ayrı gönderin.",
-		}
-	case has("no files", "not an ordinary file"):
-		return "Gönderilecek bir şey seçilmedi.", []string{
-			"Listeden en az bir dosya ya da içi dolu bir klasör seç.",
-		}
-	case has("could not read", "could not open file"):
-		return "Seçtiğin dosyalardan biri okunamadı.", []string{
-			"Dosya yerinde duruyor mu ve açma iznin var mı, kontrol et.",
-		}
-	case has("no space left", "could not write to disk"):
-		return "Diske yazılamadı.", []string{
-			"Kaydedilecek yerde yeterli boş alan var mı, bak.",
-			"Ana menüden başka bir indirme klasörü seçebilirsin.",
-		}
-	default:
-		// Whatever this is, part of it may have come from the other side
-		// or the server, so it is cleaned before it reaches the terminal.
-		return safetext.Clean(err.Error(), 300), []string{"Tekrar denemek için Enter'a bas."}
-	}
+	return i18n.Explain(err, i18n.TR)
 }
 
 // codeProblem says what is wrong with a typed code, in words the user can
 // act on without leaving the screen.
-func codeProblem(err error) string {
+func codeProblem(err error, lang i18n.Lang) string {
 	var ce *p2p.CodeError
 	if errors.As(err, &ce) && ce.Word != "" {
+		if lang == i18n.EN {
+			return fmt.Sprintf("\"%s\" is not a recognized word in room codes — check the spelling.", ce.Word)
+		}
 		return fmt.Sprintf("\"%s\" kodlarda geçen bir kelime değil — yazımını kontrol et.", ce.Word)
+	}
+	if lang == i18n.EN {
+		return "Room code consists of two words and a number, e.g. cherry-harbor-42."
 	}
 	return "Kod iki kelime ve bir sayıdan oluşur, örneğin kiraz-liman-42."
 }
@@ -1277,19 +1206,44 @@ func formatBytes(n int64) string {
 }
 
 func formatRate(bytesPerSecond float64) string {
+	return formatRateLang(bytesPerSecond, i18n.TR)
+}
+
+func formatRateLang(bytesPerSecond float64, lang i18n.Lang) string {
+	sec := "sn"
+	if lang == i18n.EN {
+		sec = "s"
+	}
 	switch {
 	case bytesPerSecond >= 1<<20:
-		return fmt.Sprintf("%.1f MB/sn", bytesPerSecond/(1<<20))
+		return fmt.Sprintf("%.1f MB/%s", bytesPerSecond/(1<<20), sec)
 	case bytesPerSecond >= 1<<10:
-		return fmt.Sprintf("%.0f KB/sn", bytesPerSecond/(1<<10))
+		return fmt.Sprintf("%.0f KB/%s", bytesPerSecond/(1<<10), sec)
 	default:
-		return fmt.Sprintf("%.0f B/sn", bytesPerSecond)
+		return fmt.Sprintf("%.0f B/%s", bytesPerSecond, sec)
 	}
 }
 
 // formatDuration rounds hard on purpose: "yaklaşık 3 dakika" is what
 // someone wants to know, not "3 dakika 07 saniye".
 func formatDuration(d time.Duration) string {
+	return formatDurationLang(d, i18n.TR)
+}
+
+func formatDurationLang(d time.Duration, lang i18n.Lang) string {
+	if lang == i18n.EN {
+		switch {
+		case d >= time.Hour:
+			h := int(d.Hours())
+			return fmt.Sprintf("~%d hr %d min", h, int(d.Minutes())-h*60)
+		case d >= time.Minute:
+			return fmt.Sprintf("~%d min", int(d.Minutes())+1)
+		case d >= 10*time.Second:
+			return fmt.Sprintf("~%d sec", int(d.Seconds()))
+		default:
+			return "a few seconds"
+		}
+	}
 	switch {
 	case d >= time.Hour:
 		h := int(d.Hours())

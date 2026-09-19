@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"puresend/internal/i18n"
 	"puresend/internal/p2p"
 	"puresend/internal/transfer"
 
@@ -557,5 +558,66 @@ func TestWelcomeShowsUpdateNotification(t *testing.T) {
 	}
 	if !strings.Contains(view, "puresend -update") {
 		t.Errorf("expected update command instruction in view, got:\n%s", view)
+	}
+}
+
+// TestLanguageToggle verifies switching languages with "l" and "L".
+func TestLanguageToggle(t *testing.T) {
+	m := New(Config{Servers: []string{"x"}})
+	if m.lang != i18n.TR {
+		t.Fatalf("expected initial default language to be TR, got %v", m.lang)
+	}
+	if !strings.Contains(m.View(), "Dosyalarını arkadaşına doğrudan gönderirsin.") {
+		t.Errorf("expected Turkish welcome text, got:\n%s", m.View())
+	}
+	if !strings.Contains(m.View(), "L English") {
+		t.Errorf("expected footer to show 'L English' shortcut, got:\n%s", m.View())
+	}
+
+	// Press "l" to switch to English
+	enModel := press(t, m, "l")
+	if enModel.lang != i18n.EN {
+		t.Fatalf("expected lang to be EN after 'l', got %v", enModel.lang)
+	}
+	enView := enModel.View()
+	if !strings.Contains(enView, "Send files directly to your friend peer-to-peer.") {
+		t.Errorf("expected English welcome text, got:\n%s", enView)
+	}
+	if !strings.Contains(enView, "I want to send files") {
+		t.Errorf("expected English menu option, got:\n%s", enView)
+	}
+	if !strings.Contains(enView, "L Türkçe") {
+		t.Errorf("expected footer to show 'L Türkçe' shortcut, got:\n%s", enView)
+	}
+
+	// Press uppercase "L" to switch back to Turkish
+	trModel := press(t, enModel, "L")
+	if trModel.lang != i18n.TR {
+		t.Fatalf("expected lang to be TR after 'L', got %v", trModel.lang)
+	}
+	if !strings.Contains(trModel.View(), "Dosyalarını arkadaşına doğrudan gönderirsin.") {
+		t.Errorf("expected Turkish welcome text after toggle back, got:\n%s", trModel.View())
+	}
+}
+
+// TestConfigInitialLanguage verifies initializing Model with custom language config.
+func TestConfigInitialLanguage(t *testing.T) {
+	m := New(Config{Servers: []string{"x"}, Lang: "en"})
+	if m.lang != i18n.EN {
+		t.Fatalf("expected lang to be EN, got %v", m.lang)
+	}
+	if !strings.Contains(m.View(), "Send files directly to your friend peer-to-peer.") {
+		t.Errorf("expected English view, got:\n%s", m.View())
+	}
+
+	mErr := m
+	mErr.screen = screenError
+	mErr.err = errString("room code expired")
+	errView := mErr.View()
+	if !strings.Contains(errView, "Room code expired.") {
+		t.Errorf("expected English error headline, got:\n%s", errView)
+	}
+	if !strings.Contains(errView, "Start a new transfer to obtain a fresh code.") {
+		t.Errorf("expected English error hint, got:\n%s", errView)
 	}
 }
