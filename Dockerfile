@@ -6,7 +6,7 @@
 
 # Stage 1: build. The Go version matches the go line in go.mod; CI and
 # the release build use the same one.
-FROM golang:1.26-alpine AS build
+FROM golang:1.27-alpine AS build
 WORKDIR /app
 
 # Download dependencies first so this layer is cached across code changes.
