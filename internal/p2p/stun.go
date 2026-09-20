@@ -64,7 +64,7 @@ func querySTUNServer(ctx context.Context, server string) (net.IP, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer c.Close()
+	defer func() { _ = c.Close() }()
 
 	message := stun.MustBuild(stun.TransactionID, stun.BindingRequest)
 	var (

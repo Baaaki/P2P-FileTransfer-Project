@@ -21,6 +21,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"os"
@@ -202,7 +203,7 @@ func maybeSpawnTerminal() {
 		cmdArgs = append(cmdArgs, c.args...)
 		cmdArgs = append(cmdArgs, exe)
 		cmdArgs = append(cmdArgs, os.Args[1:]...)
-		cmd := exec.Command(path, cmdArgs...)
+		cmd := exec.CommandContext(context.Background(), path, cmdArgs...)
 		cmd.Env = append(os.Environ(), "FT_IN_TERMINAL=1")
 		if err := cmd.Start(); err == nil {
 			os.Exit(0)

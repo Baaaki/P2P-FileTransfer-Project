@@ -3,9 +3,11 @@
 package i18n
 
 import (
+	"context"
 	"os"
 	"os/exec"
 	"strings"
+	"time"
 )
 
 // osLocale returns the system locale string on non-Windows platforms.
@@ -17,7 +19,9 @@ func osLocale() string {
 	}
 
 	// On macOS, if terminal environment variables are unset, check AppleLocale
-	if out, err := exec.Command("defaults", "read", "-g", "AppleLocale").Output(); err == nil {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	if out, err := exec.CommandContext(ctx, "defaults", "read", "-g", "AppleLocale").Output(); err == nil {
 		if loc := strings.TrimSpace(string(out)); loc != "" {
 			return loc
 		}

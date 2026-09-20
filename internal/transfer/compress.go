@@ -67,13 +67,13 @@ func DecompressChunk(dst, src []byte, maxLen int) ([]byte, error) {
 	}()
 
 	if err := r.Reset(bytes.NewReader(src), nil); err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrDecompressFailed, err)
+		return nil, fmt.Errorf("%w: %w", ErrDecompressFailed, err)
 	}
 
 	lr := io.LimitReader(r, int64(maxLen)+1)
 	n, err := buf.ReadFrom(lr)
 	if err != nil && !errors.Is(err, io.EOF) {
-		return nil, fmt.Errorf("%w: %v", ErrDecompressFailed, err)
+		return nil, fmt.Errorf("%w: %w", ErrDecompressFailed, err)
 	}
 	if n > int64(maxLen) {
 		return nil, ErrChunkTooLarge

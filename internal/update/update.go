@@ -142,16 +142,18 @@ func FindAsset(assets []Asset, targetOS, targetArch string) *Asset {
 	archLower := strings.ToLower(targetArch)
 
 	osAliases := []string{osLower}
-	if osLower == "darwin" {
+	switch osLower {
+	case "darwin":
 		osAliases = append(osAliases, "macos", "osx", "mac")
-	} else if osLower == "windows" {
+	case "windows":
 		osAliases = append(osAliases, "win")
 	}
 
 	archAliases := []string{archLower}
-	if archLower == "amd64" {
+	switch archLower {
+	case "amd64":
 		archAliases = append(archAliases, "x86_64", "x64", "64bit")
-	} else if archLower == "arm64" {
+	case "arm64":
 		archAliases = append(archAliases, "aarch64")
 	}
 
@@ -194,7 +196,7 @@ func extractBinary(assetName string, r io.Reader, dst io.Writer) error {
 		if err != nil {
 			return fmt.Errorf("gzip arşivi okunamadı: %w", err)
 		}
-		defer gr.Close()
+		defer func() { _ = gr.Close() }()
 
 		tr := tar.NewReader(gr)
 		for {
@@ -250,7 +252,7 @@ func Apply(currentVersion string, stdout io.Writer) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 
-	fmt.Fprintln(stdout, "Güncellemeler kontrol ediliyor...")
+	_, _ = fmt.Fprintln(stdout, "Güncellemeler kontrol ediliyor...")
 	info, err := CheckLatest(ctx, currentVersion)
 	if err != nil {
 		return fmt.Errorf("sürüm kontrolü yapılamadı: %w", err)

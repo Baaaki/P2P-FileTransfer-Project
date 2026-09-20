@@ -28,11 +28,11 @@ PureSend, büyük dosyaların ve dizin ağaçlarının aracı sunucularda depola
 
 | Alan | Teknolojiler |
 | :--- | :--- |
-| **Programlama Dili** | Go (Golang 1.24) — `CGO_ENABLED=0` (tamamen bağımsız statik ikili dosyalar) |
-| **Ağ & Eşler Arası (P2P)** | libp2p, WebSockets, TLS, DCUtR (Hole Punching), Circuit Relay v2, STUN/UPnP |
-| **Güvenlik & Kriptografi** | SPAKE2 (PAKE), AES-GCM, SHA-256 blok doğrulama, RTLO/bidi terminal temizleme |
-| **Kullanıcı Arayüzü** | Charmbracelet Bubble Tea (Elm Architecture), Lipgloss |
-| **Dağıtım & DevOps** | Docker, Docker Compose, GitHub Actions CI/CD, Debian (`.deb`), Arch Linux (`PKGBUILD`) |
+| **Programlama Dili** | Go (Golang 1.27) — `CGO_ENABLED=0` (tamamen bağımsız statik ikili dosyalar) |
+| **Ağ & Eşler Arası (P2P)** | libp2p (v0.49), WebSockets, TLS, DCUtR (Hole Punching), Circuit Relay v2, STUN (pion/stun v3.1.7), UPnP |
+| **Güvenlik & Kriptografi** | SPAKE2 (PAKE / pake v3), AES-GCM, SHA-256 blok doğrulama, Govulncheck |
+| **Kullanıcı Arayüzü** | Charmbracelet Bubble Tea (v1.3 - Elm Mimarisi), Lipgloss (v1.1) |
+| **Dağıtım & DevOps** | GoReleaser (v2), GitHub Actions CI/CD, Debian (`.deb`), Arch Linux (`PKGBUILD`), Tek Satır Kurulumcu (`sh`/`ps1`) |
 
 ---
 

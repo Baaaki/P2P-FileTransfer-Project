@@ -28,11 +28,11 @@ PureSend is built to solve the privacy, speed, and size-limit bottlenecks of mod
 
 | Area | Technologies |
 | :--- | :--- |
-| **Language & Runtime** | Go (Golang 1.24) — `CGO_ENABLED=0` (standalone static binary, zero runtime dependencies) |
-| **Networking & Protocols** | libp2p, WebSockets, TLS, DCUtR (Hole Punching), Circuit Relay v2, STUN/UPnP |
-| **Cryptography** | SPAKE2 (PAKE), AES-GCM, SHA-256 block verification, Unicode RTLO/bidi sanitization |
-| **Interface (TUI)** | Charmbracelet Bubble Tea (Elm Architecture), Lipgloss |
-| **DevOps & Packaging** | Docker, Docker Compose, GitHub Actions CI/CD, Debian (`.deb`), Arch Linux (`PKGBUILD`) |
+| **Language & Runtime** | Go (Golang 1.27) — `CGO_ENABLED=0` (standalone static binary, zero runtime dependencies) |
+| **Networking & Protocols** | libp2p (v0.49), WebSockets, TLS, DCUtR (Hole Punching), Circuit Relay v2, STUN (pion/stun v3.1.7), UPnP |
+| **Cryptography** | SPAKE2 (PAKE / pake v3), AES-GCM, SHA-256 block verification, Govulncheck |
+| **Interface (TUI)** | Charmbracelet Bubble Tea (v1.3 - Elm Architecture), Lipgloss (v1.1) |
+| **DevOps & Packaging** | GoReleaser (v2), GitHub Actions CI/CD, Debian (`.deb`), Arch Linux (`PKGBUILD`), One-Line Installer (`sh`/`ps1`) |
 
 ---
 

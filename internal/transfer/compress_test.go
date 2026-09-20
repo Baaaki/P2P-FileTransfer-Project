@@ -3,6 +3,7 @@ package transfer
 import (
 	"bytes"
 	"crypto/rand"
+	"errors"
 	"testing"
 )
 
@@ -61,7 +62,7 @@ func TestDecompressChunkOversized(t *testing.T) {
 	compressed := CompressChunk(nil, data)
 
 	_, err := DecompressChunk(nil, compressed, 500) // limit to 500 bytes
-	if err != ErrChunkTooLarge {
+	if !errors.Is(err, ErrChunkTooLarge) {
 		t.Fatalf("Expected ErrChunkTooLarge, got: %v", err)
 	}
 }
