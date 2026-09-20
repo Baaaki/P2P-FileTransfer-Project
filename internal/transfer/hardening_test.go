@@ -478,3 +478,87 @@ func TestResumeKeepsFinishedFiles(t *testing.T) {
 		t.Error("the second file did not arrive intact")
 	}
 }
+
+func FuzzSafeJoin(f *testing.F) {
+	seeds := []string{
+		"belge.txt",
+		"klasor/resim.png",
+		"a/b/c/d/e.txt",
+		"../../etc/passwd",
+		"../../../.bashrc",
+		"/root/secret",
+		"C:\\Windows\\explorer.exe",
+		"CON",
+		"NUL.txt",
+		"AUX",
+		"COM1",
+		"a/./b",
+		"a//b",
+		"dosya.",
+		"dosya ",
+		"foto\u202Egpj.exe",
+		"\x1b[2Jtemiz.txt",
+		".puresend-partial/sinsi.bin",
+		"",
+	}
+	for _, s := range seeds {
+		f.Add(s)
+	}
+
+	outDir := filepath.Join(os.TempDir(), "fuzz-out")
+	f.Fuzz(func(t *testing.T, rel string) {
+		target, err := safeJoin(outDir, rel)
+		if err != nil {
+			return
+		}
+
+		// Invariant 1: Target must strictly be inside outDir and not escape it.
+		cleanOutDir := filepath.Clean(outDir)
+		cleanTarget := filepath.Clean(target)
+		if cleanTarget != cleanOutDir && !strings.HasPrefix(cleanTarget, cleanOutDir+string(filepath.Separator)) {
+			t.Fatalf("safeJoin(%q) produced target outside outDir: target=%q, outDir=%q", rel, cleanTarget, cleanOutDir)
+		}
+
+		diff, relErr := filepath.Rel(outDir, target)
+		if relErr != nil || diff == ".." || strings.HasPrefix(diff, ".."+string(filepath.Separator)) {
+			t.Fatalf("safeJoin(%q) escaped outDir: target=%q, diff=%q", rel, target, diff)
+		}
+
+		// Invariant 2: Target must never begin with reserved partial download directory.
+		cleanRel := filepath.ToSlash(diff)
+		if strings.HasPrefix(cleanRel, partialDir+"/") || cleanRel == partialDir {
+			t.Fatalf("safeJoin(%q) allowed reserved partialDir in target=%q", rel, target)
+		}
+	})
+}
+
+func FuzzValidDigest(f *testing.F) {
+	seeds := []string{
+		"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",  // sha256 of empty string
+		"ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",  // sha256 of "abc"
+		"E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855",  // uppercase
+		"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b85",   // 63 chars
+		"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b8555", // 65 chars
+		"",
+		"../../../../x",
+		"g3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", // 'g' is invalid hex
+	}
+	for _, s := range seeds {
+		f.Add(s)
+	}
+
+	f.Fuzz(func(t *testing.T, s string) {
+		got := validDigest(s)
+		if got {
+			if len(s) != 64 {
+				t.Fatalf("validDigest(%q) = true, but length is %d (want 64)", s, len(s))
+			}
+			for i := 0; i < len(s); i++ {
+				c := s[i]
+				if (c < '0' || c > '9') && (c < 'a' || c > 'f') {
+					t.Fatalf("validDigest(%q) = true, but contains non-hex char %c", s, c)
+				}
+			}
+		}
+	})
+}

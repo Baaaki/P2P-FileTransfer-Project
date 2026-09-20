@@ -6,8 +6,8 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-This release works through the findings of the end-to-end test report
-(`TEST-RAPORU.md`, 7 August 2026) — every issue it raised and every
+This release works through the findings of the initial end-to-end test report
+(now documented under [`BENCHMARK.md`](BENCHMARK.md)) — every issue it raised and every
 improvement it suggested — and then through a pre-release security and
 operations review of the result.
 

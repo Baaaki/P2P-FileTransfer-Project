@@ -66,3 +66,26 @@ func TestDecompressChunkOversized(t *testing.T) {
 		t.Fatalf("Expected ErrChunkTooLarge, got: %v", err)
 	}
 }
+
+func BenchmarkCompressChunk(b *testing.B) {
+	data := bytes.Repeat([]byte("2026-09-19 INFO [transfer] chunk completed successfully in 12ms\n"), 500) // ~32KB
+	b.SetBytes(int64(len(data)))
+	buf := make([]byte, 0, len(data))
+	b.ResetTimer()
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		_ = CompressChunk(buf[:0], data)
+	}
+}
+
+func BenchmarkDecompressChunk(b *testing.B) {
+	data := bytes.Repeat([]byte("2026-09-19 INFO [transfer] chunk completed successfully in 12ms\n"), 500)
+	compressed := CompressChunk(nil, data)
+	b.SetBytes(int64(len(data)))
+	buf := make([]byte, 0, len(data))
+	b.ResetTimer()
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		_, _ = DecompressChunk(buf[:0], compressed, len(data)+100)
+	}
+}

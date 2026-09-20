@@ -167,6 +167,36 @@ func TestPickFilesNeedsAFile(t *testing.T) {
 	}
 }
 
+func TestPickFilesEscReturnsToWelcome(t *testing.T) {
+	m := New(Config{Servers: []string{"x"}})
+	m.mode = modeSend
+	m.screen = screenPickFiles
+	m.picked = []pickedFile{{path: "/tmp/a.txt", name: "a.txt", size: 10}}
+
+	got := press(t, m, "esc")
+	if got.screen != screenWelcome {
+		t.Errorf("screen = %v, want screenWelcome after esc", got.screen)
+	}
+	if len(got.picked) != 0 {
+		t.Errorf("picked = %v, want picked cleared on return to welcome", got.picked)
+	}
+}
+
+func TestEnterCodeEscReturnsToWelcome(t *testing.T) {
+	m := New(Config{Servers: []string{"x"}})
+	m.mode = modeReceive
+	m.screen = screenEnterCode
+	m.codeInput.SetValue("some-code-12")
+
+	got := press(t, m, "esc")
+	if got.screen != screenWelcome {
+		t.Errorf("screen = %v, want screenWelcome after esc", got.screen)
+	}
+	if got.codeInput.Value() != "" {
+		t.Errorf("codeInput = %q, want cleared after esc", got.codeInput.Value())
+	}
+}
+
 // TestRemoveLastPick covers undo in the file picker. Undo is "x" rather
 // than backspace on purpose: backspace is how the browser walks back up a
 // folder, and taking it away left the user stuck in a directory as soon as

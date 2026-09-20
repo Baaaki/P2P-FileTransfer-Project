@@ -192,8 +192,8 @@ var trMessages = &Messages{
 	ConnectingFooter: "[Ctrl+C] İptal",
 
 	PickTitle: "📤  Ne göndereceksin?",
-	PickHelp1: "Klasörlerin içine girmek için [Enter]'a bas. Göndermek",
-	PickHelp2: "istediğin dosyanın üzerinde [Enter]'a basınca listeye eklenir.",
+	PickHelp1: "Klasörlerin içine girmek için [Enter]'a, bir üst klasöre",
+	PickHelp2: "çıkmak için [Backspace] veya [←]'ye bas. Dosyaları [Enter] ile seç.",
 	PickHelp3: "İçinde olduğun klasörün tamamını eklemek için [f]'ye bas.",
 	PickSelected: func(n int) string {
 		return fmt.Sprintf("Seçtiklerin (%d):", n)
@@ -206,8 +206,8 @@ var trMessages = &Messages{
 	},
 	PickStartBtn:       "[s]  ·  Göndermeye başla",
 	PickEmpty:          "Henüz bir şey seçmedin.",
-	PickFooterSelected: "[↑/↓] Gezin  ·  [Enter] Aç/Seç  ·  [f] Klasör Ekle  ·  [x] Çıkar  ·  [s] Başlat  ·  [Ctrl+C] Çıkış",
-	PickFooterEmpty:    "[↑/↓] Gezin  ·  [Enter] Aç/Seç  ·  [f] Klasör Ekle  ·  [Ctrl+C] Çıkış",
+	PickFooterSelected: "[↑/↓] Gezin  ·  [Enter] Gir/Seç  ·  [Backspace/←] Üst Klasör  ·  [f] Klasör Ekle\n[x] Çıkar   ·  [s] Başlat     ·  [Esc] Ana Menü          ·  [Ctrl+C] Çıkış",
+	PickFooterEmpty:    "[↑/↓] Gezin  ·  [Enter] Gir/Seç  ·  [Backspace/←] Üst Klasör  ·  [f] Klasör Ekle\n[Esc] Ana Menü  ·  [Ctrl+C] Çıkış",
 
 	OutDirTitle:   "📁  İnen dosyalar nereye kaydedilsin?",
 	OutDirHelp1:   "• [Enter] : Seçili klasörün içine gir",
@@ -248,7 +248,7 @@ var trMessages = &Messages{
 	EnterHelp2:       "Şuna benziyor: kiraz-liman-42",
 	EnterPlaceholder: "kiraz-liman-42",
 	EnterSavingTo:    "İnenler şuraya kaydedilecek:",
-	EnterFooter:      "[Enter] Onayla & Bağlan  ·  [Ctrl+O] Klasör Değiştir  ·  [Ctrl+C] Çıkış",
+	EnterFooter:      "[Enter] Onayla & Bağlan  ·  [Ctrl+O] Klasör Değiştir  ·  [Esc] Ana Menü  ·  [Ctrl+C] Çıkış",
 
 	FindingTitle:     "Aranıyor",
 	FindingHelp1:     "İki bilgisayar arasında doğrudan bir yol açılmaya",
@@ -336,8 +336,8 @@ var enMessages = &Messages{
 	ConnectingFooter: "[Ctrl+C] Cancel",
 
 	PickTitle: "📤  What do you want to send?",
-	PickHelp1: "Press [Enter] to open folders. Highlight a file and press [Enter]",
-	PickHelp2: "to add it to the transfer list.",
+	PickHelp1: "Press [Enter] to open folders, [Backspace] or [←] to go up.",
+	PickHelp2: "Highlight a file and press [Enter] to add it to the list.",
 	PickHelp3: "Press [f] to add the entire current folder.",
 	PickSelected: func(n int) string {
 		return fmt.Sprintf("Selected (%d):", n)
@@ -350,8 +350,8 @@ var enMessages = &Messages{
 	},
 	PickStartBtn:       "[s]  ·  Start sending",
 	PickEmpty:          "Nothing selected yet.",
-	PickFooterSelected: "[↑/↓] Navigate  ·  [Enter] Open/Pick  ·  [f] Add Folder  ·  [x] Remove  ·  [s] Start  ·  [Ctrl+C] Quit",
-	PickFooterEmpty:    "[↑/↓] Navigate  ·  [Enter] Open/Pick  ·  [f] Add Folder  ·  [Ctrl+C] Quit",
+	PickFooterSelected: "[↑/↓] Navigate  ·  [Enter] Open/Pick  ·  [Backspace/←] Parent Dir  ·  [f] Add Folder\n[x] Remove      ·  [s] Start Send  ·  [Esc] Main Menu        ·  [Ctrl+C] Quit",
+	PickFooterEmpty:    "[↑/↓] Navigate  ·  [Enter] Open/Pick  ·  [Backspace/←] Parent Dir  ·  [f] Add Folder\n[Esc] Main Menu ·  [Ctrl+C] Quit",
 
 	OutDirTitle:   "📁  Where should incoming files be saved?",
 	OutDirHelp1:   "• [Enter] : Open selected folder",
@@ -392,7 +392,7 @@ var enMessages = &Messages{
 	EnterHelp2:       "It looks like: cherry-harbor-42",
 	EnterPlaceholder: "cherry-harbor-42",
 	EnterSavingTo:    "Incoming files will be saved to:",
-	EnterFooter:      "[Enter] Confirm & Connect  ·  [Ctrl+O] Change Folder  ·  [Ctrl+C] Quit",
+	EnterFooter:      "[Enter] Confirm & Connect  ·  [Ctrl+O] Change Folder  ·  [Esc] Main Menu  ·  [Ctrl+C] Quit",
 
 	FindingTitle:     "Connecting",
 	FindingHelp1:     "Attempting direct peer-to-peer connection between both computers.",

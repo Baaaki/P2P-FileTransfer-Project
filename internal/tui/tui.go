@@ -520,6 +520,10 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		// These are checked before the browser sees the key, so folder
 		// navigation is unaffected.
 		switch msg.String() {
+		case "esc":
+			m.screen = screenWelcome
+			m.picked = nil
+			return m, nil
 		case "s":
 			if len(m.picked) > 0 {
 				m.screen = screenConnecting
@@ -580,6 +584,11 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	case screenEnterCode:
 		switch msg.String() {
+		case "esc":
+			m.screen = screenWelcome
+			m.codeInput.Reset()
+			m.codeErr = ""
+			return m, nil
 		case "enter":
 			if strings.TrimSpace(m.codeInput.Value()) == "" {
 				return m, nil

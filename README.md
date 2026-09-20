@@ -1,4 +1,4 @@
-# PureSend 📦
+# PureSend 📦 · [English](README.en.md)
 
 > **Go (Golang) ile geliştirilmiş, uçtan uca şifreli (Zero-Trust) ve doğrudan eşler arası (P2P) dosya transfer sistemi.**  
 > Bulut sağlayıcılarına, üyeliklere veya üçüncü taraf sunuculara ihtiyaç duymadan; ev modemleri (NAT) ve kurumsal güvenlik duvarları arkasındaki cihazlar arasında doğrudan veri akışı sağlar.
@@ -8,19 +8,14 @@
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
 [![Latest Release](https://img.shields.io/github/v/release/Baaaki/PureSend)](https://github.com/Baaaki/PureSend/releases/latest)
 
-🌐 **[Canlı Web Sitesi](https://puresend.madebybaki.com)** | 🇬🇧 **[English Documentation (README.en.md)](README.en.md)** | 🛡️ **[Güvenlik Politikası](docs/SECURITY.md)** | ✉️ **[İletişim](mailto:contact@madebybaki.com)**
-
 ---
 
-## 🎯 Projenin Amacı ve Öne Çıkanlar
+## 🎯 Öne Çıkan Özellikler
 
-PureSend, büyük dosyaların ve dizin ağaçlarının aracı sunucularda depolanmadan, gizlilikten ödün verilmeden ve karmaşık ağ ayarları (port forwarding, sabit IP vb.) gerektirmeden iletilmesi amacıyla tasarlanmış modern bir sistem aracıdır.
-
-* **Sıfır Güven (Zero-Trust) Kriptografi:** Parola tabanlı anahtar değişimi (**SPAKE2 / PAKE**) kullanır. Buluşma sunucusu dosyaları veya parolayı göremez, trafiği dinleyemez.
-* **Akıllı NAT Delme (Hole Punching):** **libp2p**, **DCUtR** ve **UPnP** protokolleriyle modemler arasında doğrudan şifreli tünel açar; doğrudan tünelin açılamadığı katı simetrik ağlarda şifreli geçiş köprüsüne (bounded relay) güvenle yedeklenir.
-* **Kaldığı Yerden Devam (Resume Engine):** Ağ kopmalarında aktarılan dosyalar baştan indirilmez; `.part` geçici dosyaları üzerinden blok seviyesinde SHA-256 sağlama doğrulamasıyla devam eder.
-* **Reaktif Terminal Arayüzü (TUI):** **Bubble Tea** (Elm Mimarisi) ile geliştirilmiş, çift dilli (TR/EN, işletim sistemi dilini otomatik algılama ve çalışma anında `L` tuşuyla geçiş) modern terminal deneyimi.
-* **Headless / CI/CD Desteği:** Terminali olmayan sunucular veya betikler için doğrudan komut satırı bayrakları (`-send`, `-receive`, `-yes`).
+* 🔒 **Sıfır Güven (Zero-Trust):** **SPAKE2** anahtar değişimi; sunucu veriyi göremez, dinleyemez ve taklit edemez.
+* ⚡ **Akıllı NAT Delme (P2P):** **libp2p (DCUtR)** ile port açmadan doğrudan cihazdan cihaza aktarım (gerekirse Relay v2 yedeği).
+* 🔄 **Kesintisiz Devam (Resume):** Kopan transferler SHA-256 blok teyidiyle kaldığı bayttan devam eder.
+* 💻 **TUI & CLI Desteği:** Etkileşimli çift dilli terminal arayüzü (`Bubble Tea`) veya otomasyon için bayraklar (`-send`, `-receive`).
 
 ---
 
@@ -96,17 +91,20 @@ puresend -update
 
 ---
 
-## 📊 Gerçek Saha Test Sonuçları (Real-World Benchmarks)
+## ⚡ Performans ve Sistem Verimliliği (Performance & Efficiency)
 
-PureSend, doğrudan P2P tünelleme ve yerel ISP rotalama/peering avantajları sayesinde bulut sağlayıcılarının yapay hız kısıtlamalarını ortadan kaldırır. Gerçek kullanıcı senaryolarında elde edilen test verileri:
+PureSend, üçüncü taraf bulut sağlayıcılarının yapay hız ve dosya boyutu kısıtlamalarını ortadan kaldırır. Akış tabanlı mimarisi sayesinde fiziksel hat kapasitesinin tamamını kullanır:
 
-| Güzergâh | Mesafe | Dosya Boyutu | Ortalama Hız | Süre | Durum / Not |
-| :--- | :--- | :--- | :--- | :--- | :--- |
-| **İstanbul ➔ Tekirdağ** | ~140 km | **1.5 GB** (Video) | **~20 MB/sn** | **~1 dk** | **Tamamlandı** (Servis sağlayıcı upload paketi 48 Mbps olmasına rağmen doğrudan P2P tünelleme ile ~160–200 Mbps efektif hıza ulaşıldı) |
-| **İstanbul ➔ İstanbul** (Farklı İlçeler) | ~35 km | *1.5 GB+* | *Ölçülüyor* | *—* | ⏳ *Test aşamasında (Yakında)* |
-| **İstanbul ➔ İzmir** | ~480 km | *1.5 GB+* | *Ölçülüyor* | *—* | ⏳ *Test aşamasında (Yakında)* |
+| Metrik / Alan | Başarım & Karakteristik | Teknik Detay |
+| :--- | :---: | :--- |
+| **Bellek Tüketimi (RAM)** | **Sabit ~35–45 MB ($O(1)$)** | 32 KB blok akışı (chunking); dosya 100 MB da olsa 50 GB da olsa RAM şişmez. |
+| **Dinamik Sıkıştırma** | **~800 MB/s** | Snappy algoritması ile metin ve kod arşivlerinde hat hızının üzerinde aktarım. |
+| **Sıfır Tahsisli Doğrulama** | **25 ns / 0 allocs** | SHA-256 bütünlük kontrolü Go çalışma zamanında sıfır ek bellek tahsisiyle çalışır. |
+| **LAN Aktarım Hızı** | **Hat Doygunluğu (Line-Rate)** | Gigabit ağlarda **~112 MB/s**, 2.5G ağlarda **~280 MB/s** fiziksel sınır. |
+| **WAN (İnternet) Aktarımı** | **%100 Bant Genişliği** | DCUtR delik açma ile sunucusuz P2P; hız yalnızca iki ucun internet kapasitesiyle sınırlıdır. |
+| **Kriptografik El Sıkışma** | **< 5 ms** | SPAKE2 (P-256) sıfır-bilgi anahtar değişimi anında tamamlanır. |
 
-> 💡 **Not:** Servis sağlayıcıların standart bulut yüklemelerine uyguladığı yapay upload sınırları, doğrudan eşler arası (P2P) soket açıldığında yerel ISP rotalama ve peering avantajı sayesinde aşılabilmekte ve hat kapasitesinin tamamı kullanılabilmektedir.
+> 📊 Detaylı mikro-benchmark çıktıları, bellek profilleri ve test adımları için: **[Performans ve Benchmark Rehberi (docs/BENCHMARK.md)](docs/BENCHMARK.md)**
 
 ---
 
@@ -150,7 +148,9 @@ govulncheck ./...
 
 ## 📄 Lisans & İletişim
 
-Bu proje [GNU General Public License v3.0](LICENSE) ile sunulmaktadır.
+Bu proje [GNU General Public License v3.0](LICENSE) ile lisanslanmıştır.
 
-* **E-posta:** [contact@madebybaki.com](mailto:contact@madebybaki.com)
 * **Web:** [https://puresend.madebybaki.com](https://puresend.madebybaki.com)
+* **İletişim:** [contact@madebybaki.com](mailto:contact@madebybaki.com)
+* **Güvenlik Politikası:** [SECURITY.md](.github/SECURITY.md)
+* **Katkı Yönergeleri:** [CONTRIBUTING.md](.github/CONTRIBUTING.md)

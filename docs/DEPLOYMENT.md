@@ -1,150 +1,169 @@
 # PureSend — Sunucu Kurulum ve Dağıtım Rehberi (Deployment Guide)
 
-Bu belge, PureSend buluşma (rendezvous) ve yedek aktarım (relay) sunucusunun **Ubuntu + Docker Compose + Cloudflare Tunnel** altyapısında 7/24 kesintisiz ve güvenli şekilde çalıştırılması için gereken tüm adımları içerir.
+Bu kılavuz, PureSend buluşma (rendezvous) ve yedek aktarım (relay) sunucusunun Docker Compose veya ters vekil (reverse proxy) arkasında güvenli, kesintisiz ve standart bir şekilde çalıştırılması için gerekli adımları içerir.
 
 ---
 
-## 1. Mimarî Genel Bakış
+## 1. Mimarî ve Ön Koşullar
 
-Sunucu (`cmd/server`) dosya içeriklerine asla dokunmaz ve bunları diske kaydetmez. İki temel görevi vardır:
-1. **Buluşma (Rendezvous):** Gönderici ve alıcının oda kodları üzerinden ağ adreslerini takas etmesini sağlar.
-2. **Circuit Relay v2:** NAT arkasındaki iki cihaz arasında doğrudan P2P bağlantı (DCUtR hole punching) kurulana kadar ilk el sıkışmayı köprüler. Doğrudan yol açılamazsa sınırlı bir yedek aktarım sağlar.
+Sunucu (`cmd/server`) istemcilerin dosya içeriklerine asla dokunmaz ve sıfır-bilgi (zero-knowledge) mantığıyla çalışır:
+* **8080/TCP:** libp2p WebSocket sinyalleşme ve DCUtR delik açma portu.
+* **8081/TCP:** Sağlık kontrolü (`/health`) ve Prometheus metrik (`/metrics`) portu (yalnızca yerel erişim).
 
 ```
-İstemci ──wss://...:443──► Cloudflare Edge ──ws://localhost:8080──► PureSend Sunucu
-                              (TLS burada biter)                        (Docker)
+İstemci ──wss://p2p.alanadiniz.com:443──► [Ters Vekil / Tünel] ──ws://localhost:8080──► PureSend Sunucu
+                                            (TLS Sonlandırma)                                (Docker)
 ```
-
-`cloudflared` internete yalnızca HTTP/WebSocket trafiğini açar. Bu nedenle sunucu libp2p WebSocket transport üzerinden haberleşir. Buluşma ve delik açma koordinasyonu birkaç kilobayttır; P2P delik açıldıktan sonra dosya trafiği Cloudflare'e hiç uğramaz.
 
 ---
 
-## 2. Docker Compose ile Başlatma
+## 2. Hızlı Başlangıç: Docker Compose (Önerilen)
 
-Repo kökündeki `docker-compose.yml` dosyası üretim ortamı için hazır ve sertleştirilmiştir.
+En kolay ve güvenli yöntem, repo kökündeki `docker-compose.yml` dosyasını kullanmaktır.
+
+### Adım 1: Alan Adınızı Belirleyin ve Başlatın
 
 ```bash
-# Alan adınızı belirterek sunucuyu arka planda başlatın
-PUBLIC_HOST=rendezvous.madebybaki.com docker compose up -d
+# Alan adınızı çevre değişkeni olarak tanımlayıp sunucuyu başlatın
+PUBLIC_HOST=p2p.alanadiniz.com docker compose up -d
 ```
 
-### Peer ID'yi Alma
-Sunucu ilk açıldığında kalıcı bir kimlik anahtarı üretir. Bu Peer ID istemcilerin sunucuya bağlanabilmesi için gereklidir:
+*(Dilerseniz repo köküne bir `.env` dosyası oluşturup `PUBLIC_HOST=p2p.alanadiniz.com` yazabilirsiniz.)*
+
+### Adım 2: Sunucu Peer ID'sini Alın
+
+Sunucu ilk başladığında kalıcı bir kimlik anahtarı üretir. İstemcilerin sunucuya bağlanabilmesi için bu Peer ID gereklidir:
 
 ```bash
 docker compose logs rendezvous | grep "Peer ID"
 ```
 
 Çıktı örneği:
-```
+```text
   Peer ID: 12D3KooWKKqpYTw3D8arNmcNG7ZK1mPfSH2cQ7ohZqHBmYN6eEAn
 
 Client address:
-  /dns4/rendezvous.madebybaki.com/tcp/443/tls/ws/p2p/12D3KooWKKqpYTw3D8arNmcNG7ZK1mPfSH2cQ7ohZqHBmYN6eEAn
+  /dns4/p2p.alanadiniz.com/tcp/443/tls/ws/p2p/12D3KooWKKqpYTw3D8arNmcNG7ZK1mPfSH2cQ7ohZqHBmYN6eEAn
 ```
 
-> ⚠️ **ÖNEMLİ:** `rendezvous-key` Docker volume'ünü **kesinlikle silmeyin**. Peer ID değişirse daha önce dağıtılan istemciler bu sunucuyu bulamaz.
+> ⚠️ **ÖNEMLİ:** `rendezvous-key` Docker volume'ü sunucu kimliğini saklar. Bu volume silinirse Peer ID değişir ve eski istemciler sunucuya bağlanamaz.
 
 ---
 
-## 3. Sağlık Kontrolü ve Prometheus Metrikleri
+## 3. Ters Vekil (Reverse Proxy) & Tünel Seçenekleri
 
-Sunucu yerel arayüzde (`127.0.0.1:8081`) sağlık ve Prometheus metrik uç noktalarını dinler:
+Sunucu yerel ağda düz `ws://` dinlediği için TLS sonlandırması ters vekil tarafından yapılmalıdır. İhtiyacınıza uygun olanı seçin:
 
-```bash
-# Sağlık kontrolü (JSON)
-curl http://localhost:8081/health
-# {"status":"ok","version":"v0.2.0","peer_id":"12D3KooW...","active_rooms":0}
+### Seçenek A: Cloudflare Tunnel (Statik IP Gerektirmez)
 
-# Prometheus metrikleri
-curl -s http://localhost:8081/metrics | grep -E '^(puresend|libp2p_relaysvc)_'
-```
+Eğer sunucunuzun sabit bir genel IP'si veya açık portu yoksa Cloudflare Tunnel en pratik çözümdür.
 
-### Önemli Prometheus Sorguları
+`cloudflared` ingress yapılandırmanıza (`/etc/cloudflared/config.yml`) ekleyin:
 
-| Amaç | PromQL Sorgusu |
-|---|---|
-| Relay üzerinden akan veri hızı (yedek aktarım) | `rate(libp2p_relaysvc_data_transferred_bytes_total[1h])` |
-| Açılan relay bağlantıları | `rate(libp2p_relaysvc_connections_total{type="opened"}[1h])` |
-| Anlık aktif oda sayısı | `puresend_active_rooms` |
-| Zaman aşımına uğrayan odalar | `rate(puresend_rooms_expired_total[1h])` |
-| Sahibi kopup dönmeyen odalar | `rate(puresend_rooms_abandoned_total[1h])` |
-| Engellenen / kısıtlanan sorgular | `rate(puresend_lookups_throttled_total[5m])` |
-| Kaynak yöneticisi sınırlarına takılanlar | `libp2p_rcmgr_blocked_resources` |
-
----
-
-## 4. Cloudflare Tunnel Yapılandırması
-
-### Mevcut bir tünel varsa
-Aynı makinede çalışan mevcut bir `cloudflared` varsa config dosyasını ezmeyin. DNS rotasını ekleyip ingress listesini güncelleyin:
-
-```bash
-cloudflared tunnel route dns <mevcut-tünel-adı> rendezvous.madebybaki.com
-```
-
-`/etc/cloudflared/config.yml` dosyasındaki `ingress:` bölümüne, `http_status:404` kuralından **önce** ekleyin:
 ```yaml
-  - hostname: rendezvous.madebybaki.com
+tunnel: <tunnel-uuid-veya-adi>
+credentials-file: /root/.cloudflared/<tunnel-uuid>.json
+
+ingress:
+  - hostname: p2p.alanadiniz.com
     service: http://localhost:8080
     originRequest:
       connectTimeout: 30s
+  - service: http_status:404
 ```
 
-Yapılandırmayı doğrulayıp servisi yeniden başlatın:
+Servisi yeniden başlatın:
 ```bash
-cloudflared tunnel ingress validate
 sudo systemctl restart cloudflared
 ```
 
-### Sıfırdan tünel kuruluyorsa
-```bash
-cloudflared tunnel login
-cloudflared tunnel create puresend
-cloudflared tunnel route dns puresend rendezvous.madebybaki.com
-sudo cp deploy/cloudflared-config.yml /etc/cloudflared/config.yml
-sudo cloudflared service install
+---
+
+### Seçenek B: Caddy (Otomatik Let's Encrypt TLS)
+
+Sabit IP'li bir VPS kullanıyorsanız Caddy otomatik SSL sertifikası üretir ve WebSocket trafiğini yönlendirir.
+
+`/etc/caddy/Caddyfile`:
+```caddy
+p2p.alanadiniz.com {
+    reverse_proxy localhost:8080
+}
 ```
-
-### IP Başına Hız Sınırı (Rate Limiting — Şiddetle Önerilir)
-Sunucu tünelin arkasında gerçek istemci IP adresini doğrudan göremez (bütün bağlantılar yerel tünelden gelir). Kod tahmin saldırılarına (brute-force) karşı IP başına sınırı Cloudflare Dashboard üzerinden koyabilirsiniz:
-
-* **Yol:** *Cloudflare Dashboard → Security → Security rules → Create rule → Rate limiting rules*
-* **Koşul:** `Hostname equals rendezvous.madebybaki.com`
-* **Karakteristik:** IP
-* **Eşik:** 20 istek / 10 saniye
-* **Eylem:** Block (10 saniye)
 
 ---
 
-## 5. Dışarıdan Erişimi Doğrulama
+### Seçenek C: Nginx
 
-Sunucunun bulunduğu yerel ağın dışındaki bir bağlantıdan (örneğin mobil veri / telefon interneti) WebSocket el sıkışmasını test edin:
+Mevcut bir Nginx altyapınız varsa `/etc/nginx/sites-available/puresend.conf`:
 
+```nginx
+server {
+    server_name p2p.alanadiniz.com;
+
+    location / {
+        proxy_pass http://127.0.0.1:8080;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_read_timeout 86400s;
+        proxy_send_timeout 86400s;
+    }
+
+    listen 443 ssl; # SSL sertifika direktiflerinizi ekleyin
+}
+```
+
+---
+
+## 4. Dağıtımı Doğrulama ve Sağlık Kontrolü
+
+### 1. Yerel Sağlık Kontrolü
+Sunucu üzerinde JSON sağlık çıktısını test edin:
 ```bash
-curl -sI https://rendezvous.madebybaki.com \
+curl http://localhost:8081/health
+```
+**Beklenen Yanıt:**
+```json
+{"status":"ok","version":"v0.2.0","peer_id":"12D3KooW...","active_rooms":0}
+```
+
+### 2. Dışarıdan WebSocket El Sıkışması Testi
+Sunucu dışındaki bir ağdan WebSocket bağlantısını test edin:
+```bash
+curl -sI https://p2p.alanadiniz.com \
      -H "Connection: Upgrade" -H "Upgrade: websocket"
 ```
-Beklenen yanıt: `HTTP/1.1 101 Switching Protocols`.
+**Beklenen Yanıt:** `HTTP/1.1 101 Switching Protocols`.
 
 ---
 
-## 6. Konteyner Güvenliği ve Kimlik Yedeği
+## 5. Güvenlik Sertleştirmesi ve İzleme
 
-`docker-compose.yml` şu güvenlik sertleştirmelerini içerir:
-- **Salt-okunur kök dosya sistemi (`read_only: true`):** Konteyner içine zararlı dosya yazılamaz.
-- **Düşürülmüş yetkiler (`cap_drop: ALL`, `no-new-privileges: true`):** Root yetki yükseltmeleri engellenir.
-- **Kaynak sınırları (`mem_limit: 512m`, `pids_limit: 256`):** Olası bellek ve süreç tükenmesi saldırılarına karşı host korunur.
-- **Yerel Port İzolasyonu:** `8080` ve `8081` yalnızca `127.0.0.1` arayüzüne bağlanır.
+### 5.1 Docker Güvenliği
+Sağlanan `docker-compose.yml` şu sertleştirmelerle birlikte gelir:
+* **Salt-okunur Dosya Sistemi (`read_only: true`):** Konteyner kök dizinine zararlı dosya yazılamaz.
+* **Yetki İzolasyonu (`cap_drop: ALL`, `no-new-privileges: true`):** Root yetki yükseltmeleri engellenir.
+* **Port İzolasyonu:** `8080` ve `8081` yalnızca `127.0.0.1` dinler; dış dünyaya doğrudan açılmaz.
 
-### Kimlik Anahtarını Yedekleme (Disksiz Kurtarma)
-Sunucu kimlik anahtarını sunucu dışına yedeklemek için:
+### 5.2 Prometheus Metrikleri
+Sunucu `http://localhost:8081/metrics` üzerinden metrik yayınlar. Öne çıkan metrikler:
+
+| Metrik | Anlamı |
+|---|---|
+| `puresend_active_rooms` | Anlık aktif transfer odası sayısı |
+| `puresend_rooms_expired_total` | Zaman aşımına uğrayıp kapatılan odalar |
+| `puresend_lookups_throttled_total` | Hız sınırına (rate limit) takılan oda sorguları |
+| `libp2p_relaysvc_data_transferred_bytes_total` | Röle üzerinden akan veri miktarı (bayt) |
+| `libp2p_rcmgr_blocked_resources` | Kaynak yöneticisinin reddettiği aşırı istekler |
+
+### 5.3 Sunucu Kimlik Anahtarını Yedekleme (Kurtarma)
+Sunucu anahtarını parola yöneticinizde saklamak için:
 ```bash
 docker compose exec rendezvous base64 -w0 /data/server.key
 ```
-Elde edilen base64 dizgisini parola yöneticinizde saklayabilirsiniz. Farklı bir sunucuda bu kimliği çalıştırmak için compose ortamına `FT_IDENTITY_KEY` olarak tanımlamanız yeterlidir:
+Yeni veya farklı bir sunucuda aynı kimliği kullanmak için compose ortamında `FT_IDENTITY_KEY` değişkenine bu çıktıyı atamanız yeterlidir:
 ```yaml
 environment:
   - FT_IDENTITY_KEY=CAESQ...
 ```
-
