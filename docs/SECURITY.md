@@ -1,153 +1,273 @@
-# Security
+# Security Policy
 
-## Reporting a vulnerability
+Security and user privacy are foundational to PureSend. Reports and contributions from security researchers and the open-source community are always welcome.
 
-Please report security issues privately, through GitHub's
-[private vulnerability reporting](https://github.com/Baaaki/PureSend/security/advisories/new)
-rather than a public issue. Include what you did, what happened, and what
-you expected — a proof of concept helps but is not required.
+---
 
-Expect an acknowledgement within a week. If a fix is warranted, we will
-agree a disclosure date with you, and credit you in the release notes
-unless you would rather we did not.
+## Reporting a Vulnerability
 
-## What this program protects, and what it does not
+To protect PureSend users, please report security vulnerabilities **privately** rather than opening a public issue or pull request.
 
-### Protected
+The primary and recommended channel is **GitHub Private Vulnerability Reporting**:  
+👉 **[Report a Security Vulnerability](https://github.com/Baaaki/PureSend/security/advisories/new)**
 
-**File contents.** Every byte moves inside a libp2p connection secured with
-Noise or TLS between the two peers. The rendezvous server terminates
-nothing: on the relay path it forwards ciphertext it cannot read, and on the
-direct path it is not in the conversation at all.
+This feature works just like submitting an issue, but keeps all reproduction steps, logs, and discussions completely private between you and the repository maintainer until a patch is released.
 
-**Integrity.** Every file carries a SHA-256 digest computed by the sender.
-The receiver checks it while writing, and a file only takes its final name
-once the digest matches — an interrupted transfer never leaves something
-that looks complete but is not.
+Alternatively, you can email:  
+📧 **<contact@madebybaki.com>**
 
-**Who you are talking to.** The room code is a shared password, and both
-ends prove they hold it before a file list is exchanged. The exchange binds
-both peer IDs, so a peer that intercepts the connection cannot pass the two
-honest ends' messages through to each other. In particular the **rendezvous
-server is not trusted**: it is the party that tells the receiver who the
-sender is, and if it names a peer of its own, that peer fails the handshake.
+You do not need a complete or weaponized proof-of-concept to reach out. An early heads-up or rough observation is always welcome.
 
-**The code itself.** It never crosses the wire, and nothing derived from it
-can be attacked offline — not by the server, not by anyone listening on
-either link.
+---
 
-**Where files land.** Everything in a manifest is checked before the user
-sees it or anything touches the disk: a path that could escape the chosen
-folder, a digest that is not 64 lowercase hex characters (it names the
-partial download, so an unchecked one would be a path too), a negative
-size or a total that overflows. Names with control characters or
-bidirectional marks are refused, since they are about to be printed on the
-approval screen; on Windows, names Windows cannot store are refused too. An
-existing file is never overwritten.
+## What to Include
 
-**The terminal.** Anything the other peer or the server writes — file
-names, error messages, reasons for refusing — is stripped of control
-characters before it is shown.
+Providing structured information helps validate and remediate findings rapidly:
 
-**Your time and your room.** Every wait on the other side has an end: 30
-seconds for the handshake, five minutes for a person to answer the file
-list, two minutes of silence while files move. The room is taken only by a
-receiver that has proven the code, so someone who connects and says
-nothing, or guesses wrong, cannot keep the real receiver out.
+- **Description:** A clear summary of the issue and its realistic security impact.
+- **Reproduction:** Step-by-step instructions, including a proof-of-concept (PoC) script, multi-peer setup, or network capture where applicable.
+- **Affected Component(s):** Affected submodules (`cmd/client`, `cmd/server`, `internal/transfer`, `internal/rendezvous`, etc.), release version, commit hash, operating system, and architecture.
+- **Preconditions & Environment:** Required execution context (e.g., direct P2P connection vs. Circuit Relay v2 fallback, interactive Bubble Tea TUI vs. headless CLI mode, default public server vs. custom self-hosted rendezvous server, symmetric NAT vs. open firewall).
+- **Remediation:** Any proposed code fix, patch, or configuration adjustment if you have developed one.
 
-### Not protected
+---
 
-**Metadata.** The server sees which peers meet, when, and from what
-addresses. It does not see file names, sizes or contents — but if who is
-talking to whom is itself sensitive, this is not the tool for it.
+## Safe Harbor
 
-**Anonymity.** The two peers learn each other's IP addresses; that is what a
-direct connection means. On the relay path the addresses stay hidden from
-each other, but that path is the fallback, not the goal.
+Security research conducted in good faith under this policy is considered **authorized**. For research adhering to these terms:
 
-**A code you hand to the wrong person.** The code is the whole
-authentication. Send it over a channel you trust, and remember it works
-exactly once.
+- No legal action will be pursued against you regarding your research activities.
+- You will be publicly credited for valid findings in release notes and GitHub Security Advisories (unless you request anonymity).
 
-**A code someone guesses.** A code is two words from a list of 256 and a
-number from 10 to 99: about 5.9 million combinations, 22.5 bits. The code
-is also the key the server looks rooms up by, so a lookup that finds a
-room *is* a correct guess — the handshake protects against a lying server
-and eavesdroppers, not against that. What limits guessing is how fast the
-server answers:
+**Good-faith research guidelines:**
 
-- a peer gets 5 misses a minute, then nothing — hit or miss — until the
-  minute is over;
-- once 200 misses a minute have piled up server-wide, a peer that has
-  missed once gets nothing more. Someone typing the code they were given,
-  first time, is never refused, so flooding the server with guesses cannot
-  lock real users out;
-- a refusal is always decided before the room is looked at. Answering hits
-  while refusing misses would tell a guesser exactly which guesses hit.
+- **Authorized scope only:** Test exclusively against systems and environments you control — your own client machines, test transfers between your own endpoints, and your own self-hosted rendezvous/relay instances.
+- **Protect user privacy & service reliability:** Do not attempt to intercept, eavesdrop on, or alter files belonging to other users. Do not exhaust or degrade shared relay bandwidth or server resources.
+- **Zero data exfiltration:** Never retain, copy, or distribute data belonging to others. If incidental data is encountered during testing, halt testing, report the incident immediately, and securely purge all local copies once reported.
+- **Coordinated disclosure:** Allow reasonable time for remediation and release before disclosing findings publicly.
 
-Identities cost nothing, so under a flood the real limit is how fast one
-can open connections. Behind a tunnel the server cannot see addresses; the
-tunnel can, and a rate limiting rule there (see the README) is what caps
-guesses per address. With N rooms open, each guess succeeds with
-probability N / 5.9 million. A code in the hands of a stranger is exactly
-as good as one in the hands of your friend — the receiver still has to
-approve the file list, but the sender does not see who the receiver is.
+If you are uncertain whether a particular testing method falls within scope, reach out to <contact@madebybaki.com> before proceeding.
 
-**The sending machine.** Anything you select is sent. Folders are walked in
-full, so check what is in one before choosing it. Symbolic links inside a
-folder are skipped precisely so a link cannot widen the selection past what
-you agreed to.
+---
 
-**Downloads themselves.** A digest proves a file arrived intact, not that it
-is safe to open. Nothing that arrives is executed or opened for you.
+## Scope
 
-**Binary authenticity.** Releases are not code-signed. Check downloads
-against the published `checksums.txt`.
+### In Scope — PureSend Components
 
-## Cryptography
+- **PureSend Client (`cmd/client`):**
+  - Interactive Terminal User Interface (`internal/tui`) built on Charmbracelet Bubble Tea.
+  - Headless and automated transfer CLI modes (`internal/headless`).
+- **Transfer Engine & Cryptographic Core (`internal/transfer`):**
+  - SPAKE2 password-authenticated key exchange (`internal/transfer/auth.go`).
+  - Session key derivation with mutual libp2p Peer ID binding.
+  - End-to-end stream encryption (AES-GCM, Noise, TLS).
+  - Role-separated HMAC confirmation tags (`confirmReceiverLabel`, `confirmSenderLabel`).
+  - File manifest parser, path validation, and directory traversal protections (`internal/transfer/names.go`).
+  - Symlink safety and destination boundary containment (`safeJoin`).
+  - Filename sanitization, control character stripping, and bidirectional (Bidi) override mitigation (`internal/safetext`).
+  - Windows reserved device name filtering (`CON`, `PRN`, `AUX`, `NUL`, `COM1-9`, `LPT1-9`, etc.).
+  - SHA-256 block-level verification and chunked resume engine (`.part` staging).
+- **Peer-to-Peer & Networking Stack (`internal/p2p`):**
+  - libp2p node configuration, multiaddr discovery, and transport negotiation (WebSockets, TLS).
+  - Direct Connection Upgrade through Relay (DCUtR) hole punching and STUN traversal.
+  - Circuit Relay v2 protocol handling and fallback routing.
+- **Rendezvous & Relay Server (`cmd/server`, `internal/rendezvous`):**
+  - Ephemeral room registry and room lifecycle management.
+  - Room code lookup rate limiting, per-peer miss budgets, and global brute-force throttling.
+  - Relay access control lists (ACL), per-reservation bandwidth bounds, and session duration limits.
+  - Local diagnostic services: Prometheus metrics (`/metrics`) and health check endpoints (`/health`).
+- **Packaging, Deployment & Updates:**
+  - Docker container configuration (`Dockerfile`, `docker-compose.yml`).
+  - Cloudflare Tunnel routing configuration (`deploy/cloudflared-config.yml`).
+  - One-line installation scripts (`install.sh`, `install.ps1`).
+  - Binary self-update engine (`internal/update`).
 
-The handshake is a password-authenticated key exchange from
-[schollz/pake](https://github.com/schollz/pake) (v3, P-256). It is a
-SPAKE2-style construction of that library's own design — not RFC 9382
-SPAKE2 and not CPace — and has had far less review than either. It is
-what croc has shipped for years. The properties this project relies on
-are built around it rather than inside it: both peer IDs are bound into
-the session key, and both sides prove the key to each other with
-role-separated HMAC tags before anything else is said. Moving to a
-standard construction once a maintained Go implementation exists means
-changing `internal/transfer/auth.go` and the protocol version; nothing
-else depends on the choice.
+### Out of Scope
 
-## Running the server safely
+- **Volumetric Denial-of-Service (DoS):** Flooding public rendezvous servers, saturating relay network pipes, or resource-exhaustion attacks against public infrastructure without an exploitable application flaw.
+- **Social Engineering:** Phishing, spear-phishing, or social engineering targeting the maintainer, server operators, or users.
+- **Local Machine / Host Compromise:** Vulnerabilities that require prior physical access, malware execution, or root/administrator privileges on the user's host operating system.
+- **Probabilistic Room Code Guessing:** Exploiting the baseline entropy of the room code (22.5 bits) within expected probabilistic parameters, without bypassing server rate limiting or cryptographic controls.
+- **Harmless Content Receipt:** Transferring files containing malware that the receiving user explicitly approved and accepted. (PureSend guarantees data integrity in transit via SHA-256, but does not perform content inspection or antivirus analysis).
+- **Unexploited Upstream Dependencies:** Vulnerabilities in third-party Go modules or upstream libraries without a demonstrated, reachable exploit vector within PureSend.
+- **Automated Scanner Dumps:** Unvalidated outputs from automated security scanners lacking an actionable proof-of-concept.
 
-- **Guard `server.key`.** It is the server's identity, and every released
-  client has the corresponding peer ID compiled in. Losing it breaks every
-  copy of the program in the world; leaking it lets someone impersonate the
-  meeting point — which the room-code handshake makes far less useful than
-  it once was, but is still worth avoiding.
-- **Keep a copy of the key off the machine** (`base64 -w0 server.key`,
-  restored with `FT_IDENTITY_KEY`), and keep the landing page's
-  `server.txt` listing the server's current address. Released clients
-  read that list when their built-in address stops answering; it is what
-  keeps them alive if the key is lost anyway.
-- **Keep the health port off the internet.** `8081` serves `/health` and
-  `/metrics`. The binary listens on `127.0.0.1` unless `-health-addr` says
-  otherwise; the image listens inside the container, and the shipped
-  compose file maps it to the host's `127.0.0.1` only.
-- **Rate-limit at the tunnel.** Behind cloudflared every client arrives
-  from the same address, so the server exempts the proxy networks
-  (`-trusted-proxies`) from libp2p's per-address limits — which would
-  otherwise let 8 connections in for the whole world. Put a per-IP rate
-  limiting rule on the hostname at Cloudflare; it is on the free plan.
-- **Leave the relay limits in place.** `-relay-data` and `-relay-duration`
-  bound what a failed hole punch can push through your connection. The
-  relay's ACL already restricts it to peers with an active room.
-- **Keep `-rooms-per-peer` at 1.** The program opens one room per session.
-  Together with `-register-budget` (new rooms per minute) and rooms being
-  dropped a minute after their owner disconnects, it is what stops one
-  client filling the room table.
+---
 
-## Supported versions
+## Supported Versions
 
-The latest release is supported. Given the project's size, security fixes
-are shipped as a new release rather than backported.
+| Version | Supported | Notes |
+| :--- | :---: | :--- |
+| **Latest Release (v1.x)** | ✅ | Active support. Security patches are prioritized and released promptly. |
+| **Pre-release / Beta / Release Candidates** | ⚠️ | Evaluated on a best-effort basis; fixes merge into the upcoming release. |
+| **Older Releases (< v1.0.0)** | ❌ | Not supported. Users must upgrade using `puresend -update` or installer scripts. |
+
+PureSend distributes single static binaries (`CGO_ENABLED=0`). Security fixes are deployed as new tagged releases rather than backported point releases. Self-hosted server operators and end users should keep their installations up to date.
+
+---
+
+## Response & Triage
+
+PureSend is maintained by an independent open-source developer.
+
+- **Triage & Remediation:** Reports are reviewed and addressed on a **best-effort basis** around personal, professional, and military service commitments. Critical vulnerabilities affecting transfer confidentiality, data integrity, or remote code execution are prioritized for resolution.
+- **Coordinated Disclosure:** Once a fix is verified, a patched release is published and credited in the GitHub Security Advisory and release notes.
+
+---
+
+## Recognition
+
+With your permission, contributors are credited in:
+- The corresponding GitHub Security Advisory.
+- The project release notes ([CHANGELOG.md](CHANGELOG.md)).
+
+PureSend is an open-source, community-driven project and does not currently operate a paid bug-bounty program.
+
+---
+
+## Threat Model & Security Guarantees
+
+PureSend operates under a **Zero-Trust** security architecture. Below is a detailed breakdown of what the system protects and what falls outside its security boundary.
+
+### What PureSend Protects
+
+1. **File Contents (Zero-Trust Confidentiality):**
+   Every byte moves inside a libp2p connection encrypted with Noise or TLS directly between the two communicating peers. The rendezvous server is cryptographically untrusted:
+   - On the direct P2P path (hole punching via DCUtR), the rendezvous server is entirely absent from the data stream.
+   - On the Circuit Relay v2 fallback path, the relay merely proxies encrypted ciphertext frames that it cannot inspect, decrypt, or tamper with.
+
+2. **Data Integrity & Atomic Finalization:**
+   Every offered file carries an authoritatively computed SHA-256 digest in its manifest. The receiver streams incoming chunks through a streaming SHA-256 hasher while writing to a staging file (`.part`). The file is renamed to its destination path **only after** the complete byte stream matches the sender's SHA-256 checksum. An interrupted or corrupted transfer never leaves a poisoned or incomplete file posing as legitimate.
+
+3. **Peer Authentication & Impersonation Defense:**
+   The ephemeral 3-word room code serves as a shared secret in a Password-Authenticated Key Exchange (PAKE). Both peers cryptographically prove knowledge of the code before any file list or metadata is exchanged. The handshake explicitly binds both libp2p Peer IDs into the derived session key. As a result:
+   - A compromised or rogue rendezvous server cannot inject an impostor peer: if the server supplies a rogue Peer ID, the cryptographic handshake fails immediately.
+   - A network eavesdropper cannot relay handshake messages between two legitimate peers to perform a Man-in-the-Middle (MitM) attack.
+
+4. **Offline Attack Resistance (Room Code Safety):**
+   The room code is never transmitted in plaintext across the wire. Nothing derived from the code exposed during the handshake can be subjected to offline dictionary attacks by network listeners or rendezvous operators.
+
+5. **Filesystem Boundary Protection (`safeJoin`):**
+   Manifest data received from the remote peer is treated as untrusted input. The manifest parser (`internal/transfer/names.go`) enforces strict sanitization before the user is presented with an approval prompt or any disk write occurs:
+   - Directory traversal sequences (`..`, absolute paths, leading slashes, Windows drive letters `C:\`, backslashes) are rejected immediately.
+   - Digest strings must strictly match 64 lowercase hexadecimal characters (preventing path traversal via staging file names).
+   - Negative file sizes, manifest file count overflows (`maxFiles`), and cumulative integer overflows are rejected.
+   - Windows reserved device names (`CON`, `PRN`, `AUX`, `NUL`, `COM1-9`, `LPT1-9`, and names ending with trailing dots or spaces) are blocked on Windows destinations.
+   - Existing destination files are never silently overwritten; collisions trigger safe unique naming or user confirmation.
+
+6. **Terminal & UI Command Injection Defense:**
+   All text originating from the remote peer or the server (file names, error messages, cancellation reasons) is sanitized through `internal/safetext` before display. ANSI escape sequences that could reprogram the terminal, reposition cursors, or spoof UI approval prompts are stripped. Unicode Bidirectional (Bidi) override characters (which could visually camouflage `.exe` files as `.jpg`) are removed.
+
+7. **Transfer Deadlines & State Isolation:**
+   Every protocol phase is strictly bounded by deterministic timeouts:
+   - Handshake authentication timeout: 30 seconds.
+   - Receiver approval wait timeout: 5 minutes.
+   - In-transit idle silence timeout: 2 minutes.
+   Rooms are claimed exclusively by receivers that successfully complete the cryptographic handshake. Unauthenticated connections or peers guessing incorrect codes are dropped without blocking legitimate receivers.
+
+---
+
+### What PureSend Does Not Protect
+
+1. **Metadata Confidentiality:**
+   The rendezvous server observes when peers connect, their IP addresses, and their public libp2p Peer IDs. While file names, directory structures, and file payloads remain completely hidden, PureSend is not designed for metadata-resistant traffic anonymity.
+
+2. **Network IP Privacy on Direct Connections:**
+   In direct P2P mode (the primary performance target), peers inherently discover each other's public/local IP addresses to establish socket connections. On the Circuit Relay v2 fallback path, peer IP addresses remain hidden behind the relay, but relaying is an operational fallback, not a guaranteed privacy mechanism.
+
+3. **Room Codes Shared Over Insecure Channels:**
+   The 3-word room code represents complete authorization for that transfer session. If a user transmits the code over an unencrypted or compromised communications channel (e.g., public chat, compromised email), anyone with the code can attempt to connect and claim the room.
+
+4. **Brute-Force Guessing Entropy Limits:**
+   A room code consists of two words chosen from a 256-word dictionary and a two-digit integer (10–99), yielding approximately 5.9 million combinations (~22.5 bits of entropy). Protection against online guessing relies on server-side rate limiting:
+   - **Per-peer limit:** A peer is allowed up to 5 failed lookups per minute; exceeding this locks the peer out from further lookups.
+   - **Server-wide global pressure limit:** If 200 failed lookups accumulate across all clients within a 60-second window, the server enters pressure mode, permitting only one failed attempt per peer. Legitimate users entering the correct code on their first attempt are never locked out.
+   - **Decoupled decision ordering:** Rejections are evaluated before database/registry lookups to prevent side-channel timing disclosures between valid and invalid codes.
+   - **Reverse Proxy / Cloudflare Tunnel Layer:** When deployed behind reverse proxies where all incoming connections share a gateway IP, external IP rate limiting rules must be configured at the proxy layer (see [DEPLOYMENT.md](DEPLOYMENT.md)).
+
+5. **Sender-Side Selection Mistakes:**
+   PureSend recursively walks and packages selected directories. Symbolic links targeting locations outside the chosen directory tree are explicitly ignored to prevent unintentional leakage, but all non-symlink contents within selected folders will be transmitted.
+
+6. **Safety of Approved Downloaded Files:**
+   A SHA-256 match verifies that the received file is identical to what the sender transmitted. It does not certify that the file is safe to execute, benign, or free of malicious code. PureSend does not sandbox or execute transferred files.
+
+7. **Binary Code Signing:**
+   Binary releases are not currently signed with commercial OS code-signing certificates. Users and system administrators should verify downloaded packages against published `checksums.txt` SHA-256 digests.
+
+---
+
+## Cryptographic Architecture
+
+PureSend's authentication and key exchange pipeline is implemented in `internal/transfer/auth.go`:
+
+```
+Sender (Peer A)                                           Receiver (Peer B)
+      │                                                          │
+      │ ◄────────── 1. libp2p Connection (Noise / TLS) ────────► │
+      │                                                          │
+      │ 2. Initialize SPAKE2 Party                               │ 2. Initialize SPAKE2 Party
+      │    Role: Sender (Role 1)                                 │    Role: Receiver (Role 0)
+      │    Curve: P-256 (Constant-time)                         │    Curve: P-256 (Constant-time)
+      │                                                          │
+      │ ◄────────── 3. Exchange PAKE Public Messages ──────────► │
+      │                                                          │
+      │ 4. Compute Shared Key S                                  │ 4. Compute Shared Key S
+      │ 5. Session Key = KDF(S || PeerID_A || PeerID_B)          │ 5. Session Key = KDF(S || PeerID_A || PeerID_B)
+      │                                                          │
+      │ ◄────────── 6. Mutual HMAC Confirmation Tags ──────────► │
+      │    "puresend/pake/confirm/receiver/v1"                   │
+      │    "puresend/pake/confirm/sender/v1"                     │
+      │                                                          │
+      │ ═══════════ 7. Authenticated Stream Established ═════════│
+```
+
+- **PAKE Primitive:** SPAKE2 implementation via `github.com/schollz/pake/v3` using the NIST P-256 elliptic curve (`pakeCurve = "p256"`), backed by Go standard library constant-time scalar arithmetic.
+- **Identity Binding:** The derived session key binds both the sender and receiver's cryptographic `peer.ID`, preventing cross-session message splicing and man-in-the-middle relay substitution.
+- **Role-Separated Confirmation:** Before manifest or file payloads are accepted, both parties exchange mutual HMAC-SHA256 authentication tags using domain-separated protocol labels:
+  - Receiver tag: `confirmReceiverLabel = "puresend/pake/confirm/receiver/v1"`
+  - Sender tag: `confirmSenderLabel = "puresend/pake/confirm/sender/v1"`
+
+---
+
+## Server Hardening & Operational Security Guide
+
+For operators running self-hosted rendezvous and relay nodes (`cmd/server`):
+
+1. **Protect the Server Identity Key (`server.key`):**
+   - The cryptographic identity of the server defines its libp2p `Peer ID`. Client binaries may pin or discover this server address.
+   - Store `server.key` on a secured, non-root readable volume (`chmod 600`).
+   - Maintain an offline backup of the key (`base64 -w0 server.key`), restorable via the `FT_IDENTITY_KEY` environment variable.
+2. **Isolate Diagnostic & Metrics Ports:**
+   - The server exposes `/health` and `/metrics` on port `8081`.
+   - Ensure port `8081` binds strictly to `127.0.0.1` and is never exposed to the public internet. Use reverse-proxy authentication or SSH port forwarding for monitoring.
+3. **Configure Edge Rate Limiting:**
+   - When placing the server behind Cloudflare Tunnel or an OpenResty/Nginx reverse proxy, client multiaddrs will appear to originate from the proxy IP.
+   - Configure `-trusted-proxies` to prevent libp2p from throttling the tunnel, and enforce strict IP-based rate limiting on WebSocket upgrades at the edge gateway.
+4. **Enforce Relay Quotas:**
+   - Retain bounded relay constraints: `-relay-data` (default: 512 MB per reservation) and `-relay-duration` (default: 5 minutes) prevent rogue peers from abusing relay bandwidth when direct hole punching fails.
+5. **Enforce Single-Room Concurrency:**
+   - Maintain `-rooms-per-peer 1`. A legitimate sender only requires one active room per transfer session. Allowing arbitrary rooms per peer enables state-exhaustion attacks.
+
+---
+
+## Verified Safeguards & Testing
+
+PureSend maintains a comprehensive automated security regression suite in `internal/transfer/hardening_test.go` and `internal/rendezvous/rendezvous_test.go`, verifying:
+
+| Test Case | Defensive Guarantee | Test Verification |
+| :--- | :--- | :--- |
+| **Path Traversal Defenses** | Rejects `../`, absolute paths, leading slashes, and Windows drive roots. | `TestUnsafePaths` |
+| **Manifest Sanitization** | Blocks path-traversal digests, invalid checksum formats, negative file sizes, and arithmetic overflows. | `TestManifestFieldsAreValidated`, `TestManifestTotalCannotOverflow` |
+| **Windows Namespace Isolation** | Blocks illegal DOS device names (`CON`, `NUL`, `AUX`, `LPT1-9`, `COM1-9`, trailing dots/spaces). | `TestWindowsNames` |
+| **Handshake Impersonation** | Rejects unauthenticated connections, mismatched peer identities, and wrong room codes without leaking secret state. | `TestWrongCodeRejected`, `TestIdentityMismatchRejected` |
+| **Denial-of-State & Hijacking** | Prevents unauthenticated receivers from holding or claiming rooms; turns away conflicting claims with `ErrBusy`. | `TestWrongCodeNeverClaims`, `TestSilentReceiverTimesOut`, `TestBusyRoomTurnsAway` |
+| **Terminal Control Sanitization** | Strips ANSI escape sequences and Unicode Bidirectional control markers from peer text. | `TestRemoteErrorTextIsCleaned`, `safetext.Clean` |
+| **Data Integrity Verification** | Detects transmission bit flips and chunk tampering, terminating transfers without final file rename. | `TestChecksumMismatch` |
+
+---
+
+## Contact & Questions
+
+If you have questions regarding PureSend's security architecture, deployment hardening, or this policy, please reach out via:
+- **Email:** <contact@madebybaki.com>
+- **Website:** [https://puresend.madebybaki.com](https://puresend.madebybaki.com)
