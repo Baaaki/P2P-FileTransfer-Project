@@ -907,7 +907,7 @@ func (m Model) viewWaiting() string {
 	if m.warn != "" {
 		b.WriteString(warnStyle.Render("! "+m.warn) + "\n\n")
 	}
-	b.WriteString(bodyStyle.Render(t.WaitingCodeLabel) + codeStyle.Render(m.room) + "\n\n")
+	b.WriteString(codeStyle.Render(m.room) + "\n\n")
 	b.WriteString(m.hostingNotes())
 	b.WriteString(helpStyle.Render(t.WaitingHelp1) + "\n")
 	b.WriteString(helpStyle.Render(t.WaitingHelp2) + "\n\n")

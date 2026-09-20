@@ -99,13 +99,12 @@ type Messages struct {
 	RoomFooter    string
 
 	// Waiting
-	WaitingTitle     string
-	WaitingStatus    string
-	WaitingCodeLabel string
-	WaitingHelp1     string
-	WaitingHelp2     string
-	WaitingHelp3     string
-	WaitingFooter    string
+	WaitingTitle  string
+	WaitingStatus string
+	WaitingHelp1  string
+	WaitingHelp2  string
+	WaitingHelp3  string
+	WaitingFooter string
 
 	// Hosting notes
 	HostReady     string
@@ -229,13 +228,12 @@ var trMessages = &Messages{
 	RoomSentBtn:   "✓  Arkadaşıma ilettim",
 	RoomFooter:    "[Enter] Devam Et  ·  [L] Dil: English  ·  [Ctrl+C] Çıkış",
 
-	WaitingTitle:     "Bekleniyor",
-	WaitingStatus:    "Arkadaşının kodu girmesi bekleniyor...",
-	WaitingCodeLabel: "Kod: ",
-	WaitingHelp1:     "Bu pencereyi kapatma. Arkadaşın kodu girdiği anda",
-	WaitingHelp2:     "gönderme kendiliğinden başlayacak.",
-	WaitingHelp3:     "Kod en fazla 1 saat geçerli.",
-	WaitingFooter:    "[L] Dil: English  ·  [Ctrl+C] İptal Et",
+	WaitingTitle:  "Bekleniyor",
+	WaitingStatus: "Arkadaşının kodu girmesi bekleniyor...",
+	WaitingHelp1:  "Bu pencereyi kapatma. Arkadaşın kodu girdiği anda",
+	WaitingHelp2:  "gönderme kendiliğinden başlayacak.",
+	WaitingHelp3:  "Kod en fazla 1 saat geçerli.",
+	WaitingFooter: "[L] Dil: English  ·  [Ctrl+C] İptal Et",
 
 	HostReady: "✓ Dosyalar gönderilmeye hazır",
 	HostPreparing: func(cur, total int) string {
@@ -374,13 +372,12 @@ var enMessages = &Messages{
 	RoomSentBtn:   "✓  I shared the code",
 	RoomFooter:    "[Enter] Continue  ·  [L] Language: Türkçe  ·  [Ctrl+C] Quit",
 
-	WaitingTitle:     "Waiting",
-	WaitingStatus:    "Waiting for your friend to enter the code...",
-	WaitingCodeLabel: "Code: ",
-	WaitingHelp1:     "Keep this window open. As soon as your friend enters the code,",
-	WaitingHelp2:     "the transfer will begin automatically.",
-	WaitingHelp3:     "Code is valid for up to 1 hour.",
-	WaitingFooter:    "[L] Language: Türkçe  ·  [Ctrl+C] Cancel",
+	WaitingTitle:  "Waiting",
+	WaitingStatus: "Waiting for your friend to enter the code...",
+	WaitingHelp1:  "Keep this window open. As soon as your friend enters the code,",
+	WaitingHelp2:  "the transfer will begin automatically.",
+	WaitingHelp3:  "Code is valid for up to 1 hour.",
+	WaitingFooter: "[L] Language: Türkçe  ·  [Ctrl+C] Cancel",
 
 	HostReady: "✓ Files are ready to send",
 	HostPreparing: func(cur, total int) string {

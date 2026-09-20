@@ -652,3 +652,47 @@ func TestConfigInitialLanguage(t *testing.T) {
 		t.Errorf("expected English error hint, got:\n%s", errView)
 	}
 }
+
+// TestWaitingScreenCodeBoxAlignment ensures that the code box on the waiting screen
+// is not misaligned by any preceding text label like "Kod:".
+func TestWaitingScreenCodeBoxAlignment(t *testing.T) {
+	for _, lang := range []i18n.Lang{i18n.TR, i18n.EN} {
+		m := New(Config{Servers: []string{"x"}})
+		m.mode = modeSend
+		m.screen = screenWaiting
+		m.room = "kiraz-liman-42"
+		m.lang = lang
+
+		view := m.View()
+		if !strings.Contains(view, "kiraz-liman-42") {
+			t.Fatalf("expected room code in view:\n%s", view)
+		}
+
+		lines := strings.Split(view, "\n")
+		var topBorderLine, bottomBorderLine string
+		for _, l := range lines {
+			if strings.Contains(l, "╭") {
+				topBorderLine = l
+			}
+			if strings.Contains(l, "╰") {
+				bottomBorderLine = l
+			}
+		}
+
+		if topBorderLine == "" || bottomBorderLine == "" {
+			t.Fatalf("could not find code box border lines in view:\n%s", view)
+		}
+
+		// The top and bottom border should start with the exact same prefix/indentation.
+		topIdx := strings.Index(topBorderLine, "╭")
+		bottomIdx := strings.Index(bottomBorderLine, "╰")
+		if topIdx != bottomIdx {
+			t.Errorf("code box border misaligned: top corner at col %d, bottom corner at col %d", topIdx, bottomIdx)
+		}
+
+		// Ensure no "Kod" or "Code" label is prepended on the same line as the top border.
+		if strings.Contains(topBorderLine, "Kod") || strings.Contains(topBorderLine, "Code") {
+			t.Errorf("top border line contains code label:\n%s", topBorderLine)
+		}
+	}
+}
