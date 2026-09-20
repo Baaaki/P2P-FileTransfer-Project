@@ -41,14 +41,11 @@ PureSend, büyük dosyaların ve dizin ağaçlarının aracı sunucularda depola
 İşletim sisteminize uygun tek satırlık komutu terminalde çalıştırarak anında kurabilir ve güncelleyebilirsiniz:
 
 ```bash
-# Linux & macOS (Bash) — Otomatik mimari tespiti ve PATH entegrasyonu
-curl -fsSL https://puresend.madebybaki.com/install.sh | sh
+# Linux & macOS (Arch, Ubuntu, Fedora, Debian, macOS vb.)
+curl -fsSL https://raw.githubusercontent.com/Baaaki/PureSend/main/install.sh | sh
 
-# Windows (PowerShell) — Tek kopya, otomatik güncelleme ve PATH entegrasyonu
-irm https://puresend.madebybaki.com/install.ps1 | iex
-
-# Arch Linux (AUR)
-yay -S puresend-bin
+# Windows (PowerShell)
+irm https://raw.githubusercontent.com/Baaaki/PureSend/main/install.ps1 | iex
 ```
 
 > **Klasik İndirme:** Kurulum yapmadan taşınabilir (portable) çalıştırmak için [GitHub Releases](https://github.com/Baaaki/PureSend/releases/latest) veya [Web Sitemizden](https://puresend.madebybaki.com/#indir) doğrudan `.exe`, `mac_arm64` veya `.deb` dosyalarını indirebilirsiniz.

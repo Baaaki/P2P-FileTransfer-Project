@@ -1,14 +1,5 @@
 # Cross-compiles the desktop client for every OS and publishes it to
 # GitHub Releases.
-#
-#   export FT_SERVER=/dns4/rendezvous.madebybaki.com/tcp/443/tls/ws/p2p/12D3Koo...
-#   git tag v0.1.0 && git push --tags
-#
-# FT_SERVER is baked into the binary, which is what lets a user just
-# double-click it — no flags, no configuration. FT_SERVER_LIST is the
-# address of a small text file listing the current meeting points, which a
-# client reads only if FT_SERVER stops answering: it is what keeps copies
-# already downloaded alive if the server ever changes address or identity.
 version: 2
 
 project_name: puresend
@@ -30,6 +21,8 @@ builds:
         goarch: amd64
       - goos: windows
         goarch: arm64
+      - goos: linux
+        goarch: arm64
     flags:
       - -trimpath
     ldflags:
@@ -38,24 +31,6 @@ builds:
       - -X main.defaultServerList={{ envOrDefault "FT_SERVER_LIST" "https://puresend.madebybaki.com/server.txt" }}
       # Stamped so `puresend -version` can answer the first
       # question any bug report raises.
-      - -X main.version={{ .Version }}
-      - -X main.commit={{ .FullCommit }}
-      - -X main.date={{ .Date }}
-
-  # The server is not something users download, but shipping it means a
-  # deployment can be pinned to a released version instead of to whatever
-  # main happened to be at the time.
-  - id: server
-    main: ./cmd/server
-    binary: puresend-server
-    env:
-      - CGO_ENABLED=0
-    goos: [linux]
-    goarch: [amd64, arm64]
-    flags:
-      - -trimpath
-    ldflags:
-      - -s -w
       - -X main.version={{ .Version }}
       - -X main.commit={{ .FullCommit }}
       - -X main.date={{ .Date }}
@@ -71,16 +46,6 @@ archives:
     name_template: >-
       {{ .ProjectName }}_{{ .Version }}_
       {{- if eq .Os "darwin" }}macOS{{ else }}{{ .Os }}{{ end }}_
-      {{- if eq .Arch "amd64" }}x86_64{{ else }}{{ .Arch }}{{ end }}
-    files:
-      - README.md
-      - LICENSE
-
-  - id: server
-    ids: [server]
-    formats: [tar.gz]
-    name_template: >-
-      {{ .ProjectName }}-server_{{ .Version }}_{{ .Os }}_
       {{- if eq .Arch "amd64" }}x86_64{{ else }}{{ .Arch }}{{ end }}
     files:
       - README.md
@@ -110,35 +75,42 @@ nfpms:
         file_info:
           mode: 0644
 
-
 checksum:
   name_template: "checksums.txt"
 
 changelog:
-  use: git
-  sort: asc
-  filters:
-    exclude:
-      - "^docs:"
-      - "^test:"
-      - "^ci:"
+  disable: true
 
 release:
   draft: false
   header: |
-    # 📦 PureSend
+    ## PureSend 🚀
 
     Go ile geliştirilmiş, uçtan uca şifreli (Zero-Trust) ve doğrudan eşler arası (P2P) dosya ve klasör transfer sistemi.
 
-    ### ⚡ Hızlı Kurulum
+    ### ⚡ Hızlı Kurulum (Tek Satır)
 
-    - **Linux & macOS:** `curl -fsSL https://puresend.madebybaki.com/install.sh | sh`
-    - **Windows (PowerShell):** `irm https://puresend.madebybaki.com/install.ps1 | iex`
-    - **Arch Linux (AUR):** `yay -S puresend-bin`
+    - **Linux & macOS (Arch, Ubuntu, Fedora, Debian, macOS):**
+      ```bash
+      curl -fsSL https://raw.githubusercontent.com/Baaaki/PureSend/main/install.sh | sh
+      ```
+    - **Windows (PowerShell):**
+      ```powershell
+      irm https://raw.githubusercontent.com/Baaaki/PureSend/main/install.ps1 | iex
+      ```
+
+    ---
+
+    ### 📦 Manuel Kurulum & Doğrudan İndirme (Assets)
+
+    - 🪟 **Windows (`x86_64`)**: `.zip` arşivini indirip çıkartın ve `puresend.exe`yi çalıştırın.
+    - 📦 **Debian / Ubuntu (`amd64`)**: `.deb` paketini indirip çift tıklayarak veya `sudo dpkg -i puresend_*.deb` komutu ile kurun.
+    - 🐧 **Linux (`x86_64`)**: `.tar.gz` arşivini çıkartıp doğrudan terminalden çalıştırın (`./puresend`).
+    - 🍏 **macOS (Apple Silicon - M1/M2/M3/M4)**: `.tar.gz` arşivini çıkartıp terminalden çalıştırın (`./puresend`).
 
     ---
 
   footer: |
     ---
-    **macOS Notu:** İlk açılışta *"geliştirici doğrulanamadı"* uyarısı çıkarsa, dosyaya sağ tıklayıp *Aç* deyin ya da terminalde şu komutu çalıştırın:
-    `xattr -d com.apple.quarantine puresend`
+    > 💡 **macOS Notu:** macOS Gatekeeper ilk açılışta *"geliştirici doğrulanamadı"* uyarısı verirse, terminalde şu komutu çalıştırarak karantina bayrağını kaldırabilirsiniz:  
+    > `xattr -d com.apple.quarantine puresend`

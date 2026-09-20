@@ -38,17 +38,14 @@ PureSend is built to solve the privacy, speed, and size-limit bottlenecks of mod
 
 ## ⚡ Quick Installation
 
-Run the one-line installer for your platform to install and keep PureSend continuously updated:
+Run the one-line installer for your platform to install and integrate PureSend into your PATH:
 
 ```bash
-# Linux & macOS (Bash) — Auto-detects architecture & integrates into PATH
-curl -fsSL https://puresend.madebybaki.com/install.sh | sh
+# Linux & macOS (Arch, Ubuntu, Fedora, Debian, macOS, etc.)
+curl -fsSL https://raw.githubusercontent.com/Baaaki/PureSend/main/install.sh | sh
 
-# Windows (PowerShell) — Single copy, auto-update & PATH integration
-irm https://puresend.madebybaki.com/install.ps1 | iex
-
-# Arch Linux (AUR)
-yay -S puresend-bin
+# Windows (PowerShell)
+irm https://raw.githubusercontent.com/Baaaki/PureSend/main/install.ps1 | iex
 ```
 
 > **Portable Binaries:** Prebuilt standalone executables (`.exe`, `mac_arm64`, and `.deb`) are available directly from [GitHub Releases](https://github.com/Baaaki/PureSend/releases/latest) and the [Project Website](https://puresend.madebybaki.com/#indir).

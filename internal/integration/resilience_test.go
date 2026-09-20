@@ -60,6 +60,9 @@ func waitForEvent[T p2p.Event](t *testing.T, events <-chan p2p.Event, timeout ti
 // "waiting" forever while its friend was told the code did not exist; now
 // it notices, reconnects, and puts the same code back.
 func TestRoomSurvivesAServerRestart(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping slow server restart test in short mode")
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
 
