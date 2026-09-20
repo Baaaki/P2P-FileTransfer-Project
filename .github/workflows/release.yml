@@ -32,7 +32,7 @@ jobs:
           go test -race -short -timeout 15m ./...
 
       - name: Clean existing release if present
-        run: gh release delete "${{ github.ref_name }}" --yes || true
+        run: gh release delete "${{ github.ref_name }}" --yes --repo "${{ github.repository }}" || true
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 

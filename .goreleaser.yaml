@@ -54,7 +54,7 @@ archives:
 nfpms:
   - id: client-deb
     package_name: puresend
-    builds:
+    ids:
       - client
     formats:
       - deb
@@ -83,6 +83,8 @@ changelog:
 
 release:
   draft: false
+  mode: replace
+  replace_existing_artifacts: true
   header: |
     ## PureSend 🚀
 
