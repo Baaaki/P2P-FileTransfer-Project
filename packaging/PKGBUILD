@@ -13,7 +13,7 @@ conflicts=('puresend')
 source_x86_64=("https://puresend.madebybaki.com/downloads/puresend"
                "puresend.desktop"
                "puresend.svg")
-sha256sums_x86_64=('2c2747a4d384d7002390136b1091150cd391c0b2724d37e747769281030568da'
+sha256sums_x86_64=('56d35702c14220ffba8cf39741abf24afa9a69df9b44f956b1986de02ab65fd6'
                    'SKIP'
                    'SKIP')
 
