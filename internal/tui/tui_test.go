@@ -735,3 +735,64 @@ func TestWaitingScreenCodeBoxAlignment(t *testing.T) {
 		}
 	}
 }
+
+// TestPickFilesLanguageToggle ensures pressing 'l' or 'L' in the file picker
+// only toggles the language, without picking files, without entering directories,
+// or doing anything else.
+func TestPickFilesLanguageToggle(t *testing.T) {
+	m := New(Config{Servers: []string{"x"}})
+	m.mode = modeSend
+	m.screen = screenPickFiles
+	initialDir := m.picker.CurrentDirectory
+	initialPicked := len(m.picked)
+
+	// Press lowercase 'l'
+	m1 := press(t, m, "l")
+	if m1.lang != i18n.EN {
+		t.Fatalf("expected lang to be EN after 'l', got %v", m1.lang)
+	}
+	if len(m1.picked) != initialPicked {
+		t.Errorf("picked files changed from %d to %d after 'l'", initialPicked, len(m1.picked))
+	}
+	if m1.picker.CurrentDirectory != initialDir {
+		t.Errorf("picker directory changed from %s to %s after 'l'", initialDir, m1.picker.CurrentDirectory)
+	}
+
+	// Press uppercase 'L'
+	m2 := press(t, m1, "L")
+	if m2.lang != i18n.TR {
+		t.Fatalf("expected lang to be TR after 'L', got %v", m2.lang)
+	}
+	if len(m2.picked) != initialPicked {
+		t.Errorf("picked files changed from %d to %d after 'L'", initialPicked, len(m2.picked))
+	}
+	if m2.picker.CurrentDirectory != initialDir {
+		t.Errorf("picker directory changed from %s to %s after 'L'", initialDir, m2.picker.CurrentDirectory)
+	}
+}
+
+// TestFooterThreeColumnLayout verifies formatFooter wraps items into 3 columns per line.
+func TestFooterThreeColumnLayout(t *testing.T) {
+	sample := "[1] One  ·  [2] Two  ·  [3] Three  ·  [4] Four  ·  [5] Five  ·  [6] Six  ·  [7] Seven"
+	formatted := formatFooter(sample)
+	lines := strings.Split(formatted, "\n")
+	if len(lines) != 3 {
+		t.Fatalf("expected 3 lines for 7 items (3 + 3 + 1), got %d lines:\n%s", len(lines), formatted)
+	}
+	// Line 1 should contain items 1, 2, 3
+	for _, it := range []string{"[1] One", "[2] Two", "[3] Three"} {
+		if !strings.Contains(lines[0], it) {
+			t.Errorf("line 0 missing %s:\n%s", it, lines[0])
+		}
+	}
+	// Line 2 should contain items 4, 5, 6
+	for _, it := range []string{"[4] Four", "[5] Five", "[6] Six"} {
+		if !strings.Contains(lines[1], it) {
+			t.Errorf("line 1 missing %s:\n%s", it, lines[1])
+		}
+	}
+	// Line 3 should contain item 7
+	if !strings.Contains(lines[2], "[7] Seven") {
+		t.Errorf("line 2 missing [7] Seven:\n%s", lines[2])
+	}
+}

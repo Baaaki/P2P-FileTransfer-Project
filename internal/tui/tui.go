@@ -22,6 +22,7 @@ import (
 	"puresend/internal/update"
 
 	"github.com/charmbracelet/bubbles/filepicker"
+	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -151,6 +152,7 @@ func New(cfg Config) Model {
 	fp.FileAllowed = true
 	fp.ShowPermissions = false
 	fp.SetHeight(10)
+	fp.KeyMap.Open = key.NewBinding(key.WithKeys("enter", "right"), key.WithHelp("enter", "open"))
 
 	dp := filepicker.New()
 	dp.CurrentDirectory = home
@@ -159,6 +161,7 @@ func New(cfg Config) Model {
 	dp.ShowPermissions = false
 	dp.ShowSize = false
 	dp.SetHeight(10)
+	dp.KeyMap.Open = key.NewBinding(key.WithKeys("enter", "right"), key.WithHelp("enter", "open"))
 
 	l := i18n.Normalize(cfg.Lang)
 	if cfg.Lang == "" {
@@ -524,6 +527,9 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.screen = screenWelcome
 			m.picked = nil
 			return m, nil
+		case "l", "L":
+			m.lang = i18n.Toggle(m.lang)
+			return m, nil
 		case "s":
 			if len(m.picked) > 0 {
 				m.screen = screenConnecting
@@ -554,6 +560,9 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		case "esc", "q":
 			m.screen = m.backScreen
+			return m, nil
+		case "l", "L":
+			m.lang = i18n.Toggle(m.lang)
 			return m, nil
 		case "backspace", "left", "u":
 			parent := filepath.Dir(m.dirPicker.CurrentDirectory)
@@ -611,8 +620,11 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	case screenConfirm:
 		switch msg.String() {
-		case "left", "h", "right", "l":
+		case "left", "h", "right":
 			m.confirmIndex = 1 - m.confirmIndex
+		case "l", "L":
+			m.lang = i18n.Toggle(m.lang)
+			return m, nil
 		case "y", "Y":
 			m.confirmIndex = 0
 			return m.answerConfirm(true)

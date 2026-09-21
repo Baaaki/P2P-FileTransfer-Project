@@ -104,9 +104,56 @@ func repeat(s string, n int) string {
 	return string(out)
 }
 
-// formatFooter highlights key brackets [Key] within the footer text so that
-// shortcuts clearly stand out from descriptions.
+// formatFooter formats shortcut hints into a 3-column layout.
+// Up to 3 shortcuts per line, with additional keys wrapping to the next line.
+// Columns are aligned so shortcuts line up cleanly.
 func formatFooter(s string) string {
+	s = strings.ReplaceAll(s, "\n", " · ")
+	rawItems := strings.Split(s, "·")
+	var items []string
+	for _, it := range rawItems {
+		it = strings.TrimSpace(it)
+		if it != "" {
+			items = append(items, it)
+		}
+	}
+	if len(items) == 0 {
+		return ""
+	}
+
+	const cols = 3
+	colWidths := make([]int, cols)
+	for i, it := range items {
+		col := i % cols
+		w := lipgloss.Width(it)
+		if w > colWidths[col] {
+			colWidths[col] = w
+		}
+	}
+
+	var b strings.Builder
+	for i, it := range items {
+		col := i % cols
+		if col > 0 {
+			b.WriteString(footerStyle.Render("  ·  "))
+		}
+		b.WriteString(formatKeyBadges(it))
+
+		if col < cols-1 && i < len(items)-1 && (i+1)%cols != 0 {
+			w := lipgloss.Width(it)
+			if colWidths[col] > w {
+				b.WriteString(strings.Repeat(" ", colWidths[col]-w))
+			}
+		}
+
+		if col == cols-1 && i < len(items)-1 {
+			b.WriteString("\n")
+		}
+	}
+	return b.String()
+}
+
+func formatKeyBadges(s string) string {
 	if !strings.Contains(s, "[") {
 		return footerStyle.Render(s)
 	}
