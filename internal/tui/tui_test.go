@@ -847,4 +847,3 @@ func TestVimKeysDisabled(t *testing.T) {
 		}
 	}
 }
-
