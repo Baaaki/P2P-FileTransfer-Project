@@ -208,7 +208,7 @@ var trMessages = &Messages{
 	},
 	PickStartBtn:       "[s]  ·  Göndermeye başla",
 	PickEmpty:          "Henüz bir şey seçmedin.",
-	PickFooterSelected: "[↑/↓] Gezin  ·  [Enter] Gir/Seç  ·  [Backspace/←] Üst Klasör  ·  [f] Klasör Ekle  ·  [x] Çıkar  ·  [s] Başlat  ·  [Esc] Ana Menü  ·  [L] Dil: English  ·  [Ctrl+C] Çıkış",
+	PickFooterSelected: "[↑/↓] Gezin  ·  [Enter] Gir/Seç  ·  [Backspace/←] Üst Klasör  ·  [f] Klasör Ekle  ·  [x] Dosyayı Çıkar  ·  [s] Başlat  ·  [Esc] Ana Menü  ·  [L] Dil: English  ·  [Ctrl+C] Çıkış",
 	PickFooterEmpty:    "[↑/↓] Gezin  ·  [Enter] Gir/Seç  ·  [Backspace/←] Üst Klasör  ·  [f] Klasör Ekle  ·  [Esc] Ana Menü  ·  [L] Dil: English  ·  [Ctrl+C] Çıkış",
 
 	OutDirTitle:   "📁  İnen dosyalar nereye kaydedilsin?",
@@ -358,7 +358,7 @@ var enMessages = &Messages{
 	},
 	PickStartBtn:       "[s]  ·  Start sending",
 	PickEmpty:          "Nothing selected yet.",
-	PickFooterSelected: "[↑/↓] Navigate  ·  [Enter] Open/Pick  ·  [Backspace/←] Parent Dir  ·  [f] Add Folder  ·  [x] Remove  ·  [s] Start Send  ·  [Esc] Main Menu  ·  [L] Language: Türkçe  ·  [Ctrl+C] Quit",
+	PickFooterSelected: "[↑/↓] Navigate  ·  [Enter] Open/Pick  ·  [Backspace/←] Parent Dir  ·  [f] Add Folder  ·  [x] Remove File  ·  [s] Start Send  ·  [Esc] Main Menu  ·  [L] Language: Türkçe  ·  [Ctrl+C] Quit",
 	PickFooterEmpty:    "[↑/↓] Navigate  ·  [Enter] Open/Pick  ·  [Backspace/←] Parent Dir  ·  [f] Add Folder  ·  [Esc] Main Menu  ·  [L] Language: Türkçe  ·  [Ctrl+C] Quit",
 
 	OutDirTitle:   "📁  Where should incoming files be saved?",
