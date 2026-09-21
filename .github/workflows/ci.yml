@@ -55,7 +55,7 @@ jobs:
           cache: true
       # Pinned, and the same version `make lint` runs, so CI and a laptop
       # never disagree about what counts as a finding.
-      - uses: golangci/golangci-lint-action@v8
+      - uses: golangci/golangci-lint-action@v9
         with:
           version: v2.13.2
 
