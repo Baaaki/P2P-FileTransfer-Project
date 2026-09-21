@@ -99,12 +99,14 @@ type Messages struct {
 	RoomFooter    string
 
 	// Waiting
-	WaitingTitle  string
-	WaitingStatus string
-	WaitingHelp1  string
-	WaitingHelp2  string
-	WaitingHelp3  string
-	WaitingFooter string
+	WaitingTitle     string
+	WaitingStatus    string
+	WaitingHelp1     string
+	WaitingHelp2     string
+	WaitingHelp3     string
+	WaitingFiles     func(count int) string
+	WaitingMoreFiles func(count int) string
+	WaitingFooter    string
 
 	// Hosting notes
 	HostReady     string
@@ -228,11 +230,17 @@ var trMessages = &Messages{
 	RoomSentBtn:   "✓  Arkadaşıma ilettim",
 	RoomFooter:    "[Enter] Devam Et  ·  [L] Dil: English  ·  [Ctrl+C] Çıkış",
 
-	WaitingTitle:  "Bekleniyor",
+	WaitingTitle:  "🔑  Oda kodun hazır!",
 	WaitingStatus: "Arkadaşının kodu girmesi bekleniyor...",
-	WaitingHelp1:  "Bu pencereyi kapatma. Arkadaşın kodu girdiği anda",
-	WaitingHelp2:  "gönderme kendiliğinden başlayacak.",
-	WaitingHelp3:  "Kod en fazla 1 saat geçerli.",
+	WaitingHelp1:  "Bu kodu arkadaşına ilet. Kodu girdiği anda aktarım başlayacak.",
+	WaitingHelp2:  "Bu pencereyi kapatma. Kod tek kullanımlıktır ve 1 saat geçerlidir.",
+	WaitingHelp3:  "",
+	WaitingFiles: func(n int) string {
+		return fmt.Sprintf("Gönderilecek (%d):", n)
+	},
+	WaitingMoreFiles: func(n int) string {
+		return fmt.Sprintf("  ... ve %d dosya daha", n)
+	},
 	WaitingFooter: "[L] Dil: English  ·  [Ctrl+C] İptal Et",
 
 	HostReady: "✓ Dosyalar gönderilmeye hazır",
@@ -372,11 +380,17 @@ var enMessages = &Messages{
 	RoomSentBtn:   "✓  I shared the code",
 	RoomFooter:    "[Enter] Continue  ·  [L] Language: Türkçe  ·  [Ctrl+C] Quit",
 
-	WaitingTitle:  "Waiting",
+	WaitingTitle:  "🔑  Your room code is ready!",
 	WaitingStatus: "Waiting for your friend to enter the code...",
-	WaitingHelp1:  "Keep this window open. As soon as your friend enters the code,",
-	WaitingHelp2:  "the transfer will begin automatically.",
-	WaitingHelp3:  "Code is valid for up to 1 hour.",
+	WaitingHelp1:  "Share this room code with your friend. Transfer will start once entered.",
+	WaitingHelp2:  "Keep this window open. Code is single-use and valid for 1 hour.",
+	WaitingHelp3:  "",
+	WaitingFiles: func(n int) string {
+		return fmt.Sprintf("Files to send (%d):", n)
+	},
+	WaitingMoreFiles: func(n int) string {
+		return fmt.Sprintf("  ... and %d more files", n)
+	},
 	WaitingFooter: "[L] Language: Türkçe  ·  [Ctrl+C] Cancel",
 
 	HostReady: "✓ Files are ready to send",

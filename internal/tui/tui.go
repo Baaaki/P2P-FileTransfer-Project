@@ -338,7 +338,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case roomReadyMsg:
 		m.room = msg.room
-		m.screen = screenRoomCode
+		m.screen = screenWaiting
 		return m, nil
 
 	case eventMsg:
@@ -566,16 +566,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.dirPicker, cmd = m.dirPicker.Update(msg)
 		return m, cmd
 
-	case screenRoomCode:
-		switch msg.String() {
-		case "enter":
-			m.screen = screenWaiting
-		case "l", "L":
-			m.lang = i18n.Toggle(m.lang)
-		}
-		return m, nil
-
-	case screenWaiting:
+	case screenRoomCode, screenWaiting:
 		switch msg.String() {
 		case "l", "L":
 			m.lang = i18n.Toggle(m.lang)
@@ -776,9 +767,7 @@ func (m Model) View() string {
 		body = m.viewConnecting()
 	case screenPickFiles:
 		body = m.viewPickFiles()
-	case screenRoomCode:
-		body = m.viewRoomCode()
-	case screenWaiting:
+	case screenRoomCode, screenWaiting:
 		body = m.viewWaiting()
 	case screenEnterCode:
 		body = m.viewEnterCode()
@@ -893,19 +882,7 @@ func (m Model) viewOutDir() string {
 }
 
 func (m Model) viewRoomCode() string {
-	t := i18n.Get(m.lang)
-	var b strings.Builder
-	b.WriteString(titleStyle.Render(t.RoomTitle) + "\n\n")
-	b.WriteString(codeStyle.Render(m.room) + "\n\n")
-	b.WriteString(bodyStyle.Render(t.RoomBody) + "\n")
-	b.WriteString(helpStyle.Render(t.RoomHelp1) + "\n\n")
-	b.WriteString(helpStyle.Render(t.RoomHelp2) + "\n")
-	b.WriteString(helpStyle.Render(t.RoomHelp3) + "\n\n")
-	b.WriteString(helpStyle.Render(t.RoomSingleUse) + "\n\n")
-	b.WriteString(m.hostingNotes())
-	b.WriteString(buttonSelStyle.Render(t.RoomSentBtn) + "\n\n")
-	b.WriteString(formatFooter(t.RoomFooter))
-	return b.String()
+	return m.viewWaiting()
 }
 
 func (m Model) viewWaiting() string {
@@ -917,10 +894,41 @@ func (m Model) viewWaiting() string {
 		b.WriteString(warnStyle.Render("! "+m.warn) + "\n\n")
 	}
 	b.WriteString(codeStyle.Render(m.room) + "\n\n")
+
+	if len(m.picked) > 0 {
+		var total int64
+		b.WriteString(bodyStyle.Render(t.WaitingFiles(len(m.picked))) + "\n")
+		limit := 5
+		for i, f := range m.picked {
+			if i >= limit {
+				remaining := len(m.picked) - limit
+				b.WriteString(helpStyle.Render(t.WaitingMoreFiles(remaining)) + "\n")
+				break
+			}
+			label := "• " + f.name
+			detail := formatBytes(f.size)
+			if f.isDir {
+				label = "• 📁 " + f.name
+				detail = t.PickFolderFiles(f.files, formatBytes(f.size))
+			}
+			b.WriteString(fileStyle.Render(label) + " " + sizeStyle.Render("("+detail+")") + "\n")
+		}
+		for _, f := range m.picked {
+			total += f.size
+		}
+		b.WriteString(sizeStyle.Render(t.PickTotal(formatBytes(total))) + "\n\n")
+	}
+
 	b.WriteString(m.hostingNotes())
-	b.WriteString(helpStyle.Render(t.WaitingHelp1) + "\n")
-	b.WriteString(helpStyle.Render(t.WaitingHelp2) + "\n\n")
-	b.WriteString(helpStyle.Render(t.WaitingHelp3) + "\n\n")
+	if t.WaitingHelp1 != "" {
+		b.WriteString(helpStyle.Render(t.WaitingHelp1) + "\n")
+	}
+	if t.WaitingHelp2 != "" {
+		b.WriteString(helpStyle.Render(t.WaitingHelp2) + "\n\n")
+	}
+	if t.WaitingHelp3 != "" {
+		b.WriteString(helpStyle.Render(t.WaitingHelp3) + "\n\n")
+	}
 	b.WriteString(formatFooter(t.WaitingFooter))
 	return b.String()
 }

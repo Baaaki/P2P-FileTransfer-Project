@@ -60,23 +60,32 @@ func TestWelcomeChoosesMode(t *testing.T) {
 	}
 }
 
-// TestRoomCodeButtonAdvances covers the "I told my friend" button: the
-// user reads the code out, presses Enter, and lands on the waiting screen.
-func TestRoomCodeButtonAdvances(t *testing.T) {
+// TestRoomReadyTransitionsToWaitingAndShowsFiles covers the unified waiting
+// screen: as soon as the room is ready, the user directly lands on the waiting
+// screen where both the room code and the files to be sent are displayed.
+func TestRoomReadyTransitionsToWaitingAndShowsFiles(t *testing.T) {
 	m := New(Config{Servers: []string{"x"}})
 	m.mode = modeSend
-	m.screen = screenRoomCode
-	m.room = "kiraz-liman-42"
-
-	next := press(t, m, "enter")
-	if next.screen != screenWaiting {
-		t.Fatalf("screen after confirming = %v, want waiting", next.screen)
+	m.picked = []pickedFile{
+		{name: "tatil.zip", size: 1024 * 1024 * 12},
+		{name: "belgeler", isDir: true, files: 5, size: 1024 * 500},
 	}
 
-	// The code must stay on screen while waiting — the user often has to
-	// read it out a second time.
-	if !strings.Contains(next.View(), "kiraz-liman-42") {
+	next, _ := m.Update(roomReadyMsg{room: "kiraz-liman-42"})
+	nm := next.(Model)
+	if nm.screen != screenWaiting {
+		t.Fatalf("screen after roomReady = %v, want screenWaiting", nm.screen)
+	}
+
+	view := nm.View()
+	if !strings.Contains(view, "kiraz-liman-42") {
 		t.Error("waiting screen does not show the room code")
+	}
+	if !strings.Contains(view, "tatil.zip") {
+		t.Error("waiting screen does not show the picked file name")
+	}
+	if !strings.Contains(view, "belgeler") {
+		t.Error("waiting screen does not show the picked folder name")
 	}
 }
 
