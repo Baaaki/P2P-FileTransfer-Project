@@ -196,7 +196,7 @@ var trMessages = &Messages{
 	PickTitle: "📤  Ne göndereceksin?",
 	PickHelp1: "Klasörlerin içine girmek için [Enter]'a, bir üst klasöre",
 	PickHelp2: "çıkmak için [Backspace] veya [←]'ye bas. Dosyaları [Enter] ile seç.",
-	PickHelp3: "İçinde olduğun klasörün tamamını eklemek için [f]'ye bas.",
+	PickHelp3: "İçinde olduğun klasörün tamamını seçmek için [f]'ye bas.",
 	PickSelected: func(n int) string {
 		return fmt.Sprintf("Seçtiklerin (%d):", n)
 	},
@@ -208,8 +208,8 @@ var trMessages = &Messages{
 	},
 	PickStartBtn:       "[s]  ·  Göndermeye başla",
 	PickEmpty:          "Henüz bir şey seçmedin.",
-	PickFooterSelected: "[↑/↓] Gezin  ·  [Enter] Gir/Seç  ·  [Backspace/←] Üst Klasör  ·  [f] Klasör Ekle  ·  [x] Dosyayı Çıkar  ·  [s] Başlat  ·  [Esc] Ana Menü  ·  [L] Dil: English  ·  [Ctrl+C] Çıkış",
-	PickFooterEmpty:    "[↑/↓] Gezin  ·  [Enter] Gir/Seç  ·  [Backspace/←] Üst Klasör  ·  [f] Klasör Ekle  ·  [Esc] Ana Menü  ·  [L] Dil: English  ·  [Ctrl+C] Çıkış",
+	PickFooterSelected: "[↑/↓] Gezin  ·  [Enter] Gir / Dosya Seç  ·  [Backspace/←] Üst Klasör  ·  [f] Klasörü Seç  ·  [x] Dosyayı Çıkar  ·  [s] Başlat  ·  [Esc] Ana Menü  ·  [L] Dil: English  ·  [Ctrl+C] Çıkış",
+	PickFooterEmpty:    "[↑/↓] Gezin  ·  [Enter] Gir / Dosya Seç  ·  [Backspace/←] Üst Klasör  ·  [f] Klasörü Seç  ·  [Esc] Ana Menü  ·  [L] Dil: English  ·  [Ctrl+C] Çıkış",
 
 	OutDirTitle:   "📁  İnen dosyalar nereye kaydedilsin?",
 	OutDirHelp1:   "• [Enter] : Seçili klasörün içine gir",
@@ -346,7 +346,7 @@ var enMessages = &Messages{
 	PickTitle: "📤  What do you want to send?",
 	PickHelp1: "Press [Enter] to open folders, [Backspace] or [←] to go up.",
 	PickHelp2: "Highlight a file and press [Enter] to add it to the list.",
-	PickHelp3: "Press [f] to add the entire current folder.",
+	PickHelp3: "Press [f] to select the entire current folder.",
 	PickSelected: func(n int) string {
 		return fmt.Sprintf("Selected (%d):", n)
 	},
@@ -358,8 +358,8 @@ var enMessages = &Messages{
 	},
 	PickStartBtn:       "[s]  ·  Start sending",
 	PickEmpty:          "Nothing selected yet.",
-	PickFooterSelected: "[↑/↓] Navigate  ·  [Enter] Open/Pick  ·  [Backspace/←] Parent Dir  ·  [f] Add Folder  ·  [x] Remove File  ·  [s] Start Send  ·  [Esc] Main Menu  ·  [L] Language: Türkçe  ·  [Ctrl+C] Quit",
-	PickFooterEmpty:    "[↑/↓] Navigate  ·  [Enter] Open/Pick  ·  [Backspace/←] Parent Dir  ·  [f] Add Folder  ·  [Esc] Main Menu  ·  [L] Language: Türkçe  ·  [Ctrl+C] Quit",
+	PickFooterSelected: "[↑/↓] Navigate  ·  [Enter] Open / Select File  ·  [Backspace/←] Parent Dir  ·  [f] Select Folder  ·  [x] Remove File  ·  [s] Start Send  ·  [Esc] Main Menu  ·  [L] Language: Türkçe  ·  [Ctrl+C] Quit",
+	PickFooterEmpty:    "[↑/↓] Navigate  ·  [Enter] Open / Select File  ·  [Backspace/←] Parent Dir  ·  [f] Select Folder  ·  [Esc] Main Menu  ·  [L] Language: Türkçe  ·  [Ctrl+C] Quit",
 
 	OutDirTitle:   "📁  Where should incoming files be saved?",
 	OutDirHelp1:   "• [Enter] : Open selected folder",
