@@ -913,10 +913,6 @@ func (m Model) viewOutDir() string {
 	return b.String()
 }
 
-func (m Model) viewRoomCode() string {
-	return m.viewWaiting()
-}
-
 func (m Model) viewWaiting() string {
 	t := i18n.Get(m.lang)
 	var b strings.Builder
