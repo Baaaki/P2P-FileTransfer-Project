@@ -146,13 +146,23 @@ type Model struct {
 func New(cfg Config) Model {
 	home, _ := os.UserHomeDir()
 
+	cleanKeyMap := filepicker.KeyMap{
+		Down:     key.NewBinding(key.WithKeys("down")),
+		Up:       key.NewBinding(key.WithKeys("up")),
+		PageUp:   key.NewBinding(key.WithKeys("pgup")),
+		PageDown: key.NewBinding(key.WithKeys("pgdown")),
+		Back:     key.NewBinding(key.WithKeys("backspace", "left")),
+		Open:     key.NewBinding(key.WithKeys("enter")),
+		Select:   key.NewBinding(key.WithKeys("enter")),
+	}
+
 	fp := filepicker.New()
 	fp.CurrentDirectory = home
 	fp.DirAllowed = false // Enter walks into a folder; "f" sends the whole thing
 	fp.FileAllowed = true
 	fp.ShowPermissions = false
 	fp.SetHeight(10)
-	fp.KeyMap.Open = key.NewBinding(key.WithKeys("enter", "right"), key.WithHelp("enter", "open"))
+	fp.KeyMap = cleanKeyMap
 
 	dp := filepicker.New()
 	dp.CurrentDirectory = home
@@ -161,7 +171,7 @@ func New(cfg Config) Model {
 	dp.ShowPermissions = false
 	dp.ShowSize = false
 	dp.SetHeight(10)
-	dp.KeyMap.Open = key.NewBinding(key.WithKeys("enter", "right"), key.WithHelp("enter", "open"))
+	dp.KeyMap = cleanKeyMap
 
 	l := i18n.Normalize(cfg.Lang)
 	if cfg.Lang == "" {
@@ -482,9 +492,9 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	case screenWelcome:
 		switch msg.String() {
-		case "up", "k":
+		case "up":
 			m.menuIndex = max(m.menuIndex-1, 0)
-		case "down", "j":
+		case "down":
 			m.menuIndex = min(m.menuIndex+1, 2)
 		case "l", "L":
 			m.lang = i18n.Toggle(m.lang)
@@ -512,16 +522,15 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 			m.screen = screenConnecting
 			return m, connectCmd(m.ctx, m.servers, m.serverList, m.stunServers)
-		case "q":
+		case "q", "Q":
 			m.quitted = true
 			m.cancel()
 			return m, tea.Quit
+		default:
+			return m, nil
 		}
-		return m, nil
 
 	case screenPickFiles:
-		// These are checked before the browser sees the key, so folder
-		// navigation is unaffected.
 		switch msg.String() {
 		case "esc":
 			m.screen = screenWelcome
@@ -530,50 +539,59 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		case "l", "L":
 			m.lang = i18n.Toggle(m.lang)
 			return m, nil
-		case "s":
+		case "s", "S":
 			if len(m.picked) > 0 {
 				m.screen = screenConnecting
 				return m, hostCmd(m.ctx, m.node, m.picked)
 			}
 			return m, nil
-		case "f":
+		case "f", "F":
 			m.addPath(m.picker.CurrentDirectory)
 			return m, nil
-		case "x":
+		case "x", "X":
 			if len(m.picked) > 0 {
 				m.picked = m.picked[:len(m.picked)-1]
 			}
 			return m, nil
+		case "up", "down", "pgup", "pgdown", "enter", "backspace", "left":
+			var cmd tea.Cmd
+			m.picker, cmd = m.picker.Update(msg)
+			if ok, path := m.picker.DidSelectFile(msg); ok {
+				m.addPath(path)
+			}
+			return m, cmd
+		default:
+			// Non-technical user protection: Ignore any other key
+			return m, nil
 		}
-		var cmd tea.Cmd
-		m.picker, cmd = m.picker.Update(msg)
-		if ok, path := m.picker.DidSelectFile(msg); ok {
-			m.addPath(path)
-		}
-		return m, cmd
 
 	case screenOutDir:
 		switch msg.String() {
-		case "s":
+		case "s", "S":
 			m.outDir = m.dirPicker.CurrentDirectory
 			m.screen = m.backScreen
 			return m, nil
-		case "esc", "q":
+		case "esc", "q", "Q":
 			m.screen = m.backScreen
 			return m, nil
 		case "l", "L":
 			m.lang = i18n.Toggle(m.lang)
 			return m, nil
-		case "backspace", "left", "u":
+		case "backspace", "left":
 			parent := filepath.Dir(m.dirPicker.CurrentDirectory)
 			if parent != "" && parent != m.dirPicker.CurrentDirectory {
 				m.dirPicker.CurrentDirectory = parent
 				return m, m.dirPicker.Init()
 			}
+			return m, nil
+		case "up", "down", "pgup", "pgdown", "enter":
+			var cmd tea.Cmd
+			m.dirPicker, cmd = m.dirPicker.Update(msg)
+			return m, cmd
+		default:
+			// Ignore any other key
+			return m, nil
 		}
-		var cmd tea.Cmd
-		m.dirPicker, cmd = m.dirPicker.Update(msg)
-		return m, cmd
 
 	case screenRoomCode, screenWaiting:
 		switch msg.String() {
@@ -620,7 +638,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	case screenConfirm:
 		switch msg.String() {
-		case "left", "h", "right":
+		case "left", "right":
 			m.confirmIndex = 1 - m.confirmIndex
 		case "l", "L":
 			m.lang = i18n.Toggle(m.lang)
@@ -632,8 +650,9 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m.answerConfirm(false)
 		case "enter":
 			return m.answerConfirm(m.confirmIndex == 0)
+		default:
+			return m, nil
 		}
-		return m, nil
 
 	case screenDone, screenError:
 		switch msg.String() {
@@ -642,12 +661,13 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		case "l", "L":
 			m.lang = i18n.Toggle(m.lang)
 			return m, nil
-		case "q":
+		case "q", "Q":
 			m.quitted = true
 			m.cancel()
 			return m, tea.Quit
+		default:
+			return m, nil
 		}
-		return m, nil
 	}
 	return m, nil
 }

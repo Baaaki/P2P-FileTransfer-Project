@@ -796,3 +796,55 @@ func TestFooterThreeColumnLayout(t *testing.T) {
 		t.Errorf("line 2 missing [7] Seven:\n%s", lines[2])
 	}
 }
+
+// TestVimKeysDisabled verifies that vim navigation keys (h, j, k, g, G)
+// and other non-specified keys do not trigger any action.
+func TestVimKeysDisabled(t *testing.T) {
+	// 1. Welcome screen: j and k must NOT change menuIndex
+	m := New(Config{Servers: []string{"x"}})
+	if m.screen != screenWelcome {
+		t.Fatalf("start screen = %v, want welcome", m.screen)
+	}
+	m = press(t, m, "j")
+	if m.menuIndex != 0 {
+		t.Errorf("menuIndex changed from 0 to %d on 'j' (vim keys should be disabled)", m.menuIndex)
+	}
+	m = press(t, m, "k")
+	if m.menuIndex != 0 {
+		t.Errorf("menuIndex changed on 'k' (vim keys should be disabled)")
+	}
+
+	// 2. PickFiles screen: vim keys and random letters must do nothing
+	m.screen = screenPickFiles
+	initialDir := m.picker.CurrentDirectory
+	initialPicked := len(m.picked)
+
+	for _, key := range []string{"h", "j", "k", "g", "G", "a", "b", "c", "1"} {
+		m = press(t, m, key)
+		if len(m.picked) != initialPicked {
+			t.Errorf("key %q modified picked files: %v", key, m.picked)
+		}
+		if m.picker.CurrentDirectory != initialDir {
+			t.Errorf("key %q changed picker directory: %s", key, m.picker.CurrentDirectory)
+		}
+	}
+
+	// 3. Confirm screen: 'h' must NOT toggle selection
+	m.screen = screenConfirm
+	m.confirmIndex = 0
+	m = press(t, m, "h")
+	if m.confirmIndex != 0 {
+		t.Errorf("confirmIndex changed from 0 to %d on 'h' (vim keys should be disabled)", m.confirmIndex)
+	}
+
+	// 4. OutDir screen: 'u', 'h', 'j', 'k' must NOT change directory
+	m.screen = screenOutDir
+	outDirInitial := m.dirPicker.CurrentDirectory
+	for _, key := range []string{"u", "h", "j", "k"} {
+		m = press(t, m, key)
+		if m.dirPicker.CurrentDirectory != outDirInitial {
+			t.Errorf("key %q changed outDir directory from %s to %s", key, outDirInitial, m.dirPicker.CurrentDirectory)
+		}
+	}
+}
+
