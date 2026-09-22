@@ -108,9 +108,22 @@ changelog:
 release:
   draft: false
   header: |
-    ## PureSend 🚀
+    ## PureSend v2.0.0 🚀
 
     Go ile geliştirilmiş, uçtan uca şifreli ve doğrudan eşler arası (P2P) dosya ve klasör transfer sistemi.
+
+    ### ⚠️ Önemli Değişiklik (Breaking Changes - Neden v2.0.0?)
+    Bu sürüm, **1.0.0 sürümünün kapsamlı güvenlik denetimi** sonuçlarına göre hazırlanmış majör bir sürümdür. Buluşma (rendezvous) protokolü `/puresend/rendezvous/2.0.0` sürümüne yükseltilmiştir ve v1.0.0 istemci/sunucuları ile geriye dönük uyumlu değildir.
+
+    #### 🛡️ Güvenlik ve Mimari Yenilikleri:
+    - **Sunucu Artık Parolayı Görmüyor (Magic-Wormhole Modeli):** Kodlar ikiye ayrıldı; sunucu yalnızca açık oda numarasını (`nameplate: 42`) görür, gizli kelimeler (`kiraz-liman`) sunucuya hiç gitmez ve yalnızca eşler arasındaki PAKE el sıkışmasında kullanılır. Sunucunun MITM yapma riski tamamen ortadan kaldırıldı.
+    - **Dinamik Oda Ölçekleme:** Oda numaraları en az 2 basamaktan (`10..99`) başlar ve sunucu doldukça seyreklik kuralı korunarak otomatik olarak 3, 4, 5+ basamağa dinamik olarak genişler. Eşzamanlı oda sınırı kaldırıldı.
+    - **Brute-Force Koruması:** 3 yanlış kod denemesinde oda sunucudan silinerek kendini imha eder. Teyit etiketi karşı taraf anahtarı kanıtlamadan sunulmaz.
+    - **DoS ve Kaynak Koruması:** Sunucu geneli global dakikalık kayıt bütçesi (`-register-budget`) kaldırıldı; tablo dolduğunda bağlantısı kopmuş odalar tahliye edilir.
+    - **Bütünlük ve İmza Doğrulaması:** `puresend -update`, `install.sh` ve `install.ps1` artık `checksums.txt` üzerinden SHA-256 bütünlük kontrolü ve `minisign` dijital imza doğrulaması yapar.
+    - **Dosya Sistemi Güvenliği:** Ev dizinine indirme yapılması engellendi (`CheckDestination`), sembolik linkler üzerinden dosya sızdırılması durduruldu (`checkNoLinks`), atomik hard-link (`place()`) ile TOCTOU yarış durumları önlendi.
+
+    ---
 
     ### ⚡ Hızlı Kurulum (Tek Satır)
 
