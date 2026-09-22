@@ -54,7 +54,7 @@ func TestHeadlessSendAndReceive(t *testing.T) {
 
 	// The sender prints its room code on stdout, alone on a line, and then
 	// waits. That contract is what makes the mode scriptable.
-	sendCmd := exec.Command(bin, "-server", serverAddr, "-send", strings.Join(paths, ","))
+	sendCmd := clientCmd(bin, "-server", serverAddr, "-send", strings.Join(paths, ","))
 	stdout, err := sendCmd.StdoutPipe()
 	if err != nil {
 		t.Fatal(err)
@@ -72,7 +72,7 @@ func TestHeadlessSendAndReceive(t *testing.T) {
 	}
 
 	outDir := t.TempDir()
-	recvCmd := exec.Command(bin, "-server", serverAddr, "-receive", room, "-out", outDir, "-yes")
+	recvCmd := clientCmd(bin, "-server", serverAddr, "-receive", room, "-out", outDir, "-yes")
 	recvOut, err := recvCmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("receive failed: %v\n%s", err, recvOut)
@@ -102,7 +102,7 @@ func TestHeadlessWrongCodeFails(t *testing.T) {
 	bin := buildClient(t)
 	_, _, serverAddr := newWSServer(t)
 
-	cmd := exec.Command(bin, "-server", serverAddr, "-receive", "zebra-zebra-99",
+	cmd := clientCmd(bin, "-server", serverAddr, "-receive", "zebra-zebra-99",
 		"-out", t.TempDir(), "-yes")
 	out, err := cmd.CombinedOutput()
 	if err == nil {
@@ -117,7 +117,7 @@ func TestVersionFlag(t *testing.T) {
 		t.Skip("builds a binary; skipped under -short")
 	}
 
-	out, err := exec.Command(buildClient(t), "-version").CombinedOutput()
+	out, err := clientCmd(buildClient(t), "-version").CombinedOutput()
 	if err != nil {
 		t.Fatalf("-version failed: %v\n%s", err, out)
 	}
@@ -126,6 +126,22 @@ func TestVersionFlag(t *testing.T) {
 			t.Errorf("-version output is missing %q:\n%s", want, out)
 		}
 	}
+}
+
+// coverDirEnv names the directory `make cover` collects the client
+// binary's coverage in. It cannot simply be GOCOVERDIR: go test hands each
+// test binary a GOCOVERDIR of its own, and a child that inherited that one
+// would write its counters where nothing collects them.
+const coverDirEnv = "PURESEND_COVERDIR"
+
+// clientCmd runs the client binary, pointing its coverage output at
+// coverDirEnv when there is one.
+func clientCmd(bin string, args ...string) *exec.Cmd {
+	cmd := exec.Command(bin, args...)
+	if dir := os.Getenv(coverDirEnv); dir != "" {
+		cmd.Env = append(os.Environ(), "GOCOVERDIR="+dir)
+	}
+	return cmd
 }
 
 // buildClient compiles the client once per test binary and returns its path.
@@ -138,7 +154,14 @@ func buildClient(t *testing.T) string {
 			return
 		}
 		path := filepath.Join(dir, "puresend")
-		cmd := exec.Command("go", "build", "-o", path, "puresend/cmd/client")
+		args := []string{"build", "-o", path}
+		// Under `make cover` the binary is built with coverage on, so the
+		// code only a real process runs — flags, headless mode — counts
+		// like everything the in-process tests reach.
+		if os.Getenv(coverDirEnv) != "" {
+			args = append(args, "-cover", "-covermode=atomic", "-coverpkg=puresend/...")
+		}
+		cmd := exec.Command("go", append(args, "puresend/cmd/client")...)
 		if out, err := cmd.CombinedOutput(); err != nil {
 			clientErr = fmt.Errorf("go build: %w\n%s", err, out)
 			return
@@ -230,7 +253,7 @@ func TestHeadlessSenderSurvivesAFailedAttempt(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	sendCmd := exec.Command(bin, "-server", serverAddr, "-send", src)
+	sendCmd := clientCmd(bin, "-server", serverAddr, "-send", src)
 	stdout, err := sendCmd.StdoutPipe()
 	if err != nil {
 		t.Fatal(err)
@@ -247,7 +270,7 @@ func TestHeadlessSenderSurvivesAFailedAttempt(t *testing.T) {
 	go func() { sendExited <- sendCmd.Wait() }()
 
 	// The first receiver says no.
-	decline := exec.Command(bin, "-server", serverAddr, "-receive", room, "-out", t.TempDir())
+	decline := clientCmd(bin, "-server", serverAddr, "-receive", room, "-out", t.TempDir())
 	decline.Stdin = strings.NewReader("n\n")
 	if out, err := decline.CombinedOutput(); err == nil {
 		t.Fatalf("declining exited successfully:\n%s", out)
@@ -260,7 +283,7 @@ func TestHeadlessSenderSurvivesAFailedAttempt(t *testing.T) {
 
 	// The second one, with the same code, gets the file.
 	outDir := t.TempDir()
-	accept := exec.Command(bin, "-server", serverAddr, "-receive", room, "-out", outDir, "-yes")
+	accept := clientCmd(bin, "-server", serverAddr, "-receive", room, "-out", outDir, "-yes")
 	if out, err := accept.CombinedOutput(); err != nil {
 		t.Fatalf("the retry failed: %v\n%s", err, out)
 	}
@@ -286,7 +309,7 @@ func TestHeadlessRejectsAMalformedCode(t *testing.T) {
 
 	dead := "/ip4/127.0.0.1/tcp/1/ws/p2p/12D3KooWKKqpYTw3D8arNmcNG7ZK1mPfSH2cQ7ohZqHBmYN6eEAn"
 	start := time.Now()
-	out, err := exec.Command(buildClient(t), "-server", dead, "-receive", "kiraz", "-out", t.TempDir()).CombinedOutput()
+	out, err := clientCmd(buildClient(t), "-server", dead, "-receive", "kiraz", "-out", t.TempDir()).CombinedOutput()
 	if err == nil {
 		t.Fatalf("a malformed code exited successfully:\n%s", out)
 	}

@@ -72,9 +72,20 @@ test-short:
 test-relay: $(BIN)/puresend $(BIN)/puresend-server
 	FT_BIN_DIR=$(CURDIR)/$(BIN) unshare -Urnm --map-root-user ./test/relay/netns-relay-test.sh
 
-## cover: run the suite and open a coverage report
+## cover: coverage of the whole suite, the built client binary included
+# -coverpkg counts code in every package, whichever package's tests reach
+# it: most of p2p runs only under the integration tests. The client binary
+# those tests start writes its own counters into COVER_DIR, and the two
+# profiles are merged into one. -count=1 because a cached result runs no
+# binary and leaves COVER_DIR empty.
+COVER_DIR := $(CURDIR)/.cover
 cover:
-	$(GO) test -coverprofile=coverage.out -covermode=atomic ./...
+	@rm -rf $(COVER_DIR) && mkdir -p $(COVER_DIR)
+	PURESEND_COVERDIR=$(COVER_DIR) $(GO) test -count=1 -race -timeout 15m -covermode=atomic \
+		-coverpkg=./... -coverprofile=coverage.unit.out ./...
+	$(GO) tool covdata textfmt -i=$(COVER_DIR) -o coverage.bin.out
+	{ cat coverage.unit.out; tail -n +2 coverage.bin.out; } >coverage.out
+	@rm -rf $(COVER_DIR) coverage.unit.out coverage.bin.out
 	$(GO) tool cover -func=coverage.out | tail -1
 	@echo "html report: go tool cover -html=coverage.out"
 

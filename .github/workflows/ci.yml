@@ -32,9 +32,10 @@ jobs:
 
       # -race matters more than usual here: the transfer runs in a stream
       # handler goroutine while the interface reads its events, and the two
-      # meet on a channel.
+      # meet on a channel. `make cover` runs the suite with it, and counts
+      # the client binary the integration tests start as well.
       - name: Test
-        run: go test -race -timeout 15m -coverprofile=coverage.out -covermode=atomic ./...
+        run: make cover
 
       - name: Coverage summary
         run: go tool cover -func=coverage.out | tail -1 >> "$GITHUB_STEP_SUMMARY"
