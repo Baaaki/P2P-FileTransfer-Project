@@ -308,7 +308,9 @@ func (m Model) enterCodeKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.codeInput.SetValue(code)
 		m.codeErr = ""
 		m.screen = screenFinding
-		m.status = "arkadaşın aranıyor"
+		// Until the node reports its first step, the screen just says it
+		// is looking for the friend.
+		m.status = ""
 		// The event reader is already running; only start the fetch.
 		return m, fetchCmd(m.ctx, m.node, code, m.outDir)
 	case "ctrl+o":

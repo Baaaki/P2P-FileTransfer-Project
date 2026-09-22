@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"puresend/internal/i18n"
+	"puresend/internal/p2p"
 	"puresend/internal/transfer"
 
 	"github.com/charmbracelet/lipgloss"
@@ -240,11 +241,11 @@ func (m Model) viewFinding() string {
 func (m Model) statusText() string {
 	t := i18n.Get(m.lang)
 	switch m.status {
-	case "looking up the code":
+	case p2p.StatusLookingUp:
 		return t.StatusLookingUp
-	case "connecting to the other computer":
+	case p2p.StatusConnecting:
 		return t.StatusConnecting
-	case "opening a direct route":
+	case p2p.StatusDirect:
 		return t.StatusDirect
 	default:
 		return t.StatusDefault

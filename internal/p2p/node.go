@@ -88,6 +88,14 @@ type Event interface{ isEvent() }
 // StatusEvent is a plain-language description of the current step.
 type StatusEvent struct{ Text string }
 
+// The steps a receiver reports as StatusEvent texts. A log prints them as
+// they are; an interface matches on them to say the same in its own words.
+const (
+	StatusLookingUp  = "looking up the code"
+	StatusConnecting = "connecting to the other computer"
+	StatusDirect     = "opening a direct route"
+)
+
 // PreparingEvent fires while files are being read to compute or check
 // their digests. On the sending side this happens in the background right
 // after the code is shown; on the receiving side, while checking what an
@@ -876,13 +884,13 @@ func (n *Node) fetch(ctx context.Context, typed, outDir string) ([]string, error
 
 	// Only the nameplate goes to the server; the words stay here, for the
 	// handshake with whoever the server points us at.
-	n.emit(StatusEvent{Text: "looking up the code"})
+	n.emit(StatusEvent{Text: StatusLookingUp})
 	sender, relayLimit, err := rendezvous.Lookup(ctx, n.host, n.currentServer().ID, rendezvous.Nameplate(room))
 	if err != nil {
 		return nil, err
 	}
 
-	n.emit(StatusEvent{Text: "connecting to the other computer"})
+	n.emit(StatusEvent{Text: StatusConnecting})
 	dialCtx, cancel := context.WithTimeout(ctx, 60*time.Second)
 	defer cancel()
 	if err := n.host.Connect(dialCtx, *sender); err != nil {
@@ -891,7 +899,7 @@ func (n *Node) fetch(ctx context.Context, typed, outDir string) ([]string, error
 
 	// The first connection usually arrives through the relay; DCUtR then
 	// tries to replace it with a direct one in the background.
-	n.emit(StatusEvent{Text: "opening a direct route"})
+	n.emit(StatusEvent{Text: StatusDirect})
 	direct := n.waitForDirect(ctx, sender.ID, directWait)
 	n.emit(ConnectedEvent{Direct: direct, RelayLimit: relayLimit})
 	if !direct {
