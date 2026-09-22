@@ -19,9 +19,6 @@ servers from 1.0.0 cannot talk to this version.
   nameplate — the number — handed out by the server. Only the nameplate is
   ever sent to it; the words go into the PAKE handshake alone. The same
   holds for whoever controls the server list.
-- **Dynamic room scaling.** Room nameplates scale dynamically to longer
-  numbers as the table fills (starting at 2 digits), removing any arbitrary
-  cap on concurrent rooms while keeping codes short under light load.
 - **Wrong codes close the room.** A sender closes its room after 3
   handshakes that fail on the code and tells its user why; each attempt is
   shown as it happens, with how many are left. Nameplates are public, so
@@ -61,6 +58,12 @@ servers from 1.0.0 cannot talk to this version.
 - **Chunks that run past a file's declared size are refused as they
   arrive**, and a sender never sends more of a file than its manifest said.
 
+### Changed
+
+- **Dynamic room scaling.** Room nameplates scale dynamically to longer
+  numbers as the table fills (starting at 2 digits), removing any arbitrary
+  cap on concurrent rooms while keeping codes short under light load.
+
 ### Fixed
 
 - Documentation: compression is DEFLATE (`flate.HuffmanOnly`), not Snappy;
@@ -74,14 +77,15 @@ servers from 1.0.0 cannot talk to this version.
 ## [1.0.0] - 2026-09-21
 
 This release works through the findings of the initial end-to-end test report
-(now documented under [`BENCHMARK.md`](BENCHMARK.md)) — every issue it raised and every
+([`docs/TEST-RAPORU.md`](https://github.com/Baaaki/PureSend/blob/ca8ddc9/docs/TEST-RAPORU.md),
+since removed from the tree) — every issue it raised and every
 improvement it suggested — and then through a pre-release security and
 operations review of the result.
 
 ### Security
 
 - **The room code is now a password, not just a lookup key.** Both ends run
-  a password-authenticated key exchange (PAKE2 over P-256) over the code and
+  a password-authenticated key exchange (PAKE over P-256) over the code and
   prove the derived key to each other before a manifest is sent. The code
   never crosses the wire, a wrong one fails before the file list is
   revealed, and guessing costs a full connection each time — there is no
