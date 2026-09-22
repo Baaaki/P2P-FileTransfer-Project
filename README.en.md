@@ -114,13 +114,16 @@ Every number below was measured; the method and every individual run are in [doc
 │   └── server/          # Rendezvous & Circuit Relay v2 server daemon
 ├── internal/
 │   ├── p2p/             # libp2p host lifecycle, multi-address listener, dynamic relay fallback
-│   ├── transfer/        # SPAKE2 handshake engine, chunk streaming & resumable transfers
+│   ├── rendezvous/      # Room nameplate protocol and the code word list
+│   ├── headless/        # Send / receive without a terminal UI, for scripts
+│   ├── transfer/        # PAKE handshake, chunk streaming & resumable transfers
 │   ├── tui/             # Bubble Tea models, formatters, and keyboard navigation
 │   ├── i18n/            # OS locale detection & localization dictionary (TR/EN)
 │   ├── update/          # In-place self-updater querying GitHub Releases
 │   └── safetext/        # Terminal escape sequence and bidirectional override sanitization
 ├── packaging/           # Arch Linux PKGBUILD, .desktop files, and SVG branding
-└── scripts/             # Native .deb packaging and build automation scripts
+├── scripts/             # .deb packaging and the end-to-end benchmark
+└── test/relay/          # Relay fallback test over isolated network namespaces
 ```
 
 ---

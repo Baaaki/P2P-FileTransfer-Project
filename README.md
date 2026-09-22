@@ -114,13 +114,16 @@ Aşağıdaki sayılar ölçüldü; yöntem ve tek tek bütün çalıştırmalar 
 │   └── server/          # Rendezvous & Circuit Relay v2 buluşma sunucusu
 ├── internal/
 │   ├── p2p/             # libp2p host yönetimi, çoklu sunucu ve dinamik liste senkronizasyonu
-│   ├── transfer/        # SPAKE2 doğrulama motoru, chunk streaming ve resume mantığı
+│   ├── rendezvous/      # Oda numarası (nameplate) protokolü ve kod kelime listesi
+│   ├── headless/        # Betikler için terminal arayüzsüz gönderme / alma
+│   ├── transfer/        # PAKE el sıkışması, dilim akışı ve kaldığı yerden devam
 │   ├── tui/             # Bubble Tea bileşenleri, modeller, formatlayıcılar ve tuş haritaları
 │   ├── i18n/            # İşletim sistemi yerel dil algılama ve çift dil (TR/EN) sözlüğü
 │   ├── update/          # GitHub API üzerinden çalışan in-place ikili dosya güncelleme motoru
 │   └── safetext/        # Terminal escape dizisi ve RTLO karakter güvenlik filtresi
 ├── packaging/           # Arch Linux PKGBUILD, .desktop başlatıcı ve uygulama simgeleri
-└── scripts/             # Otomatik .deb paketleme ve derleme otomasyonları
+├── scripts/             # .deb paketleme ve uçtan uca benchmark betikleri
+└── test/relay/          # İzole network namespace'lerde röle yedeği testi
 ```
 
 ---
