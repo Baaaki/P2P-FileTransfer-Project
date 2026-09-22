@@ -653,6 +653,36 @@ func TestLegacyUncompressedReceiver(t *testing.T) {
 	}
 }
 
+// BenchmarkHandshake times one complete room-code handshake: both PAKE
+// halves and both confirmation tags, over an in-memory pipe, with both
+// sides' work counted. A real handshake adds a network round trip or two
+// on top.
+func BenchmarkHandshake(b *testing.B) {
+	b.ReportAllocs()
+	for b.Loop() {
+		a, c := net.Pipe()
+		done := make(chan error, 1)
+		go func() {
+			enc, dec := json.NewEncoder(a), json.NewDecoder(a)
+			_, err := authenticate(roleSender, testCreds(),
+				func(m *authMsg) error { return dec.Decode(m) },
+				func(m authMsg) error { return enc.Encode(m) })
+			done <- err
+		}()
+		enc, dec := json.NewEncoder(c), json.NewDecoder(c)
+		if _, err := authenticate(roleReceiver, testCreds(),
+			func(m *authMsg) error { return dec.Decode(m) },
+			func(m authMsg) error { return enc.Encode(m) }); err != nil {
+			b.Fatal(err)
+		}
+		if err := <-done; err != nil {
+			b.Fatal(err)
+		}
+		a.Close()
+		c.Close()
+	}
+}
+
 func BenchmarkSafeJoin(b *testing.B) {
 	outDir := "/home/user/Downloads/PureSend"
 	rel := "klasor/alt_klasor/belge_2026.pdf"

@@ -89,6 +89,14 @@ cover:
 	$(GO) tool cover -func=coverage.out | tail -1
 	@echo "html report: go tool cover -html=coverage.out"
 
+## bench: the Go micro-benchmarks
+bench:
+	$(GO) test -run '^$$' -bench . -benchmem ./...
+
+## bench-e2e: throughput and peak memory of the real binaries on loopback
+bench-e2e: $(BIN)/puresend $(BIN)/puresend-server
+	FT_BIN_DIR=$(CURDIR)/$(BIN) ./scripts/bench-e2e.sh
+
 ## vet: go vet
 vet:
 	$(GO) vet ./...
@@ -130,5 +138,5 @@ deb:
 clean:
 	rm -rf $(BIN) coverage.out
 
-.PHONY: help build test test-short test-relay cover vet lint vuln fmt tidy dev docker deb clean
+.PHONY: help build test test-short test-relay cover bench bench-e2e vet lint vuln fmt tidy dev docker deb clean
 
