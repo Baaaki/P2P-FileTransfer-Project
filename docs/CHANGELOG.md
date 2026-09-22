@@ -4,6 +4,48 @@ Notable changes to PureSend. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project
 follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- **Notices follow the language switch.** The wrong-code warning, the
+  "attempt was interrupted" notice and the update banner were stored as
+  finished sentences, so a sender who pressed `[L]` kept reading them in the
+  old language. They are now kept as facts and put into words when drawn;
+  the code entry placeholder follows the switch from any screen too.
+- **Performance documentation now reports measurements only.** The README
+  claimed "100% bandwidth", a 2.5G line rate that was never measured, and
+  called the handshake "zero-knowledge"; `BENCHMARK.md` listed a 0-allocation
+  result for `safetext.Clean` that the code has never had (it is ~650 ns and
+  4 allocations). Both now carry measured numbers with the command behind
+  each, and say what has not been measured.
+- The handshake is described as what it is — a SPAKE2-style exchange from
+  `schollz/pake`, not RFC 9382 SPAKE2 — everywhere, as `auth.go` already did.
+- The AUR package no longer describes PureSend as WebRTC.
+
+### Added
+
+- `make bench-e2e` (`scripts/bench-e2e.sh`): throughput and peak memory of
+  the real binaries end to end on loopback. On a Ryzen 7 5700X: 360–390 MB/s,
+  35–41 MB of RAM from 256 MiB up to 8 GiB.
+- `BenchmarkHandshake`: the room-code handshake takes ~0.6 ms of CPU.
+- `make cover` counts the client binary the integration tests start, so
+  flag handling and headless mode show up in coverage (72% → 77% overall).
+  CI reports the same number.
+- A test that every message exists in both languages.
+
+### Changed
+
+- The terminal interface is split by concern (`tui.go`, `update.go`,
+  `view.go`, `format.go`), and its key handling into one function per screen.
+- Receiver status steps are shared constants of `p2p`, not strings the
+  interface had to spell the same way.
+
+### Removed
+
+- The room code screen and its messages, unused since the sender's waiting
+  screen took its place.
+
 ## [2.0.0] - 2026-09-22
 
 This release works through a security review of 1.0.0. The rendezvous
