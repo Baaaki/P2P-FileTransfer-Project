@@ -91,20 +91,18 @@ puresend -update
 
 ---
 
-## ⚡ Performans ve Sistem Verimliliği (Performance & Efficiency)
+## ⚡ Performans
 
-PureSend, üçüncü taraf bulut sağlayıcılarının yapay hız ve dosya boyutu kısıtlamalarını ortadan kaldırır. Akış tabanlı mimarisi sayesinde fiziksel hat kapasitesinin tamamını kullanır:
+Aşağıdaki sayılar ölçüldü; yöntem ve tek tek bütün çalıştırmalar [docs/BENCHMARK.md](docs/BENCHMARK.md) içinde. Donanım: AMD Ryzen 7 5700X, NVMe disk, Linux 6.8, Go 1.27.
 
-| Metrik / Alan | Başarım & Karakteristik | Teknik Detay |
+| Ölçüm | Sonuç | Nasıl |
 | :--- | :---: | :--- |
-| **Bellek Tüketimi (RAM)** | **Sabit ~35–45 MB ($O(1)$)** | 32 KB blok akışı (chunking); dosya 100 MB da olsa 50 GB da olsa RAM şişmez. |
-| **Dinamik Sıkıştırma** | **~800 MB/s** | DEFLATE (`flate.HuffmanOnly`) ile metin ve kod arşivlerinde hat hızının üzerinde aktarım; küçülmeyen veri olduğu gibi gönderilir. |
-| **Sıfır Tahsisli Doğrulama** | **25 ns / 0 allocs** | Gelen SHA-256 özetlerinin biçim denetimi sıfır ek bellek tahsisiyle çalışır. |
-| **LAN Aktarım Hızı** | **Hat Doygunluğu (Line-Rate)** | Gigabit ağlarda **~112 MB/s**, 2.5G ağlarda **~280 MB/s** fiziksel sınır. |
-| **WAN (İnternet) Aktarımı** | **%100 Bant Genişliği** | DCUtR delik açma ile sunucusuz P2P; hız yalnızca iki ucun internet kapasitesiyle sınırlıdır. |
-| **Kriptografik El Sıkışma** | **< 5 ms** | SPAKE2 (P-256) sıfır-bilgi anahtar değişimi anında tamamlanır. |
+| **Uçtan uca aktarım hızı** | **360–390 MB/s** | Gerçek sunucu + gönderici + alıcı süreçleri, loopback üzerinde; 2–8 GiB rastgele veri, şifreli libp2p bağlantısı, iki uçta SHA-256, diske yazma (`make bench-e2e`) |
+| **Tepe bellek (RSS)** | **35–41 MB** | Aynı ölçümde; 256 MiB ile 8 GiB arasında dosya boyutuyla değişmiyor |
+| **El sıkışma (CPU)** | **~0,6 ms** | İki tarafın PAKE ve onay adımları birlikte (`BenchmarkHandshake`); gerçek bir bağlantıda ağ gidiş-dönüşleri baskındır |
+| **Sıkıştırma** | **~800 MB/s** | Metin benzeri 32 KB dilim, DEFLATE `HuffmanOnly`; küçülmeyen dilim olduğu gibi gönderilir |
 
-> 📊 Detaylı mikro-benchmark çıktıları, bellek profilleri ve test adımları için: **[Performans ve Benchmark Rehberi (docs/BENCHMARK.md)](docs/BENCHMARK.md)**
+**Ne anlama geliyor:** Loopback'in kendi hat hızı yoktur, bu yüzden bu ölçüm yazılımın koyduğu tavanı gösterir. 390 MB/s, gigabit Ethernet'in (~118 MB/s) yaklaşık üç katıdır, yani bu donanımda yerel ağdaki darboğaz PureSend değil ağın kendisidir. Daha yavaş bir işlemci ya da diskte tavan düşer. İnternet üzerinden hız iki ucun bağlantısıyla, röle yedeğinde ise sunucunun koyduğu sınırlarla belirlenir. Farklı gerçek ağ çiftlerinde delik açma başarı oranı henüz ölçülmedi.
 
 ---
 
@@ -129,19 +127,15 @@ PureSend, üçüncü taraf bulut sağlayıcılarının yapay hız ve dosya boyut
 
 ## 🧪 Testler ve Kod Kalitesi
 
-Proje, kurumsal Go standartlarına uygun olarak yüksek birim test kapsamı ve yarış durumu denetimiyle geliştirilmiştir:
+CI her commit'te şunları çalıştırır: `gofmt` denetimi, `go vet`, race detector ile tüm testler, golangci-lint, govulncheck, sunucu Docker imajının sağlık kontrolü ve iki eşin birbirini hiç göremediği izole network namespace'lerde röle yedeği testi. Test kapsamı, entegrasyon testlerinin çalıştırdığı derlenmiş client binary'si dahil ~%77'dir.
 
 ```bash
-# Yarış durumu (race detector) ile birim testleri çalıştır
-make test
-# veya
-go test -v -race ./...
-
-# Statik kod analizi (linter)
-golangci-lint run
-
-# Güvenlik açığı taraması
-govulncheck ./...
+make test        # go vet + race detector ile tüm testler
+make cover       # birleşik kapsama raporu (binary dahil)
+make lint        # golangci-lint, CI ile aynı sürüm
+make vuln        # erişilebilir bilinen açıklar (govulncheck)
+make test-relay  # röle yedeği, izole ağlarda (root gerekmez)
+make bench-e2e   # uçtan uca hız ve bellek ölçümü
 ```
 
 ---

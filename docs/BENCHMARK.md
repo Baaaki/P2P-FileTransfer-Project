@@ -1,109 +1,84 @@
-# PureSend — Performans ve Benchmark Raporu (Performance Guide)
+# PureSend — Performans Ölçümleri
 
-Bu belge, PureSend (FileTransferilla) motorunun mikro-benchmark sonuçlarını, ağ aktarım profillerini, bellek tüketim analizini ve bu testlerin nasıl tekrarlanabileceğini belgeler.
+Bu belgedeki her sayı ölçüldü ve komutuyla birlikte verildi; aynı makinede tekrar çalıştırılabilir. Ölçülmemiş olanlar en sonda ayrıca listelendi.
 
----
-
-## 1. Yönetici Özeti (Executive Summary)
-
-PureSend, yüksek performanslı ve düşük kaynak tüketen bir P2P dosya aktarım aracı olarak tasarlanmıştır:
-* **Akış Tabanlı Mimari ($O(1)$ Bellek):** Dosya boyutu ne kadar büyük olursa olsun (örneğin 100 MB veya 50 GB), bellek tüketimi 32 KB'lık sabit bloklama (chunking) sayesinde ~30-45 MB bandında sabit kalır.
-* **Yüksek Hızlı Sıkıştırma:** DEFLATE (`flate.HuffmanOnly`) tabanlı dinamik sıkıştırma motoru saniyede **~792 MB/s** veri işleme kapasitesine sahiptir.
-* **Düşük Gecikmeli Güvenlik:** PAKE2 el sıkışması ve SHA-256 doğrulamaları milisaniyeler seviyesinde tamamlanır.
-* **Sıfır Tahsisli (Zero-Alloc) Doğrulama:** SHA-256 format kontrolleri işlem başına **0 byte** bellek tahsisiyle çalışır.
+> **Donanım ve ortam:** AMD Ryzen 7 5700X (8 çekirdek / 16 iş parçacığı), 32 GB RAM, NVMe SSD, Linux 6.8, Go 1.27. Ölçülen kod v2.0.0 (`27ff753`); bu belgeyle gelen değişiklikler yalnızca testlere ve arayüze dokunuyor, aktarım yoluna değil.
 
 ---
 
-## 2. Go Çalışma Zamanı Mikro-Benchmark Sonuçları
+## 1. Özet
 
-Aşağıdaki metrikler, PureSend çekirdek motorunda bulunan `testing.B` benchmark fonksiyonlarının resmi çalıştırma sonuçlarıdır:
+| Ölçüm | Sonuç | Kaynak |
+| :--- | :---: | :--- |
+| Uçtan uca aktarım hızı (loopback) | **360–390 MB/s** | `make bench-e2e`, 2–8 GiB |
+| Tepe bellek (RSS), gönderici / alıcı | **39–41 MB / 35–39 MB** | aynı ölçüm, 256 MiB – 8 GiB |
+| El sıkışma, iki tarafın CPU işi | **~0,6 ms** | `BenchmarkHandshake` |
+| Dilim sıkıştırma / açma | **~800 MB/s / ~225 MB/s** | `BenchmarkCompressChunk`, `BenchmarkDecompressChunk` |
 
-> **Donanım Profili:** AMD Ryzen 7 5700X 8-Core (16 Threads) @ 3.4 GHz, Linux 6.x, Go 1.26 (amd64).
-
-### 2.1 Veri Sıkıştırma ve Açma (`internal/transfer`)
-
-| Benchmark | Yineleme Sayısı | Süre (ns/op) | Veri Hızı (MB/s) | Bellek / İşlem (B/op) | Tahsis (allocs/op) |
-| :--- | :---: | :---: | :---: | :---: | :---: |
-| `BenchmarkCompressChunk-16` | 28,274 | 40,392 ns/op | **792.24 MB/s** | 59 B/op | 1 allocs/op |
-| `BenchmarkDecompressChunk-16` | 8,480 | 153,669 ns/op | **208.24 MB/s** | 125 B/op | 3 allocs/op |
-
-* **Yorum:** PureSend her 32 KB dilimi `flate.HuffmanOnly` ile sıkıştırmayı dener ve sonuç küçülmediyse dilimi olduğu gibi gönderir. Rastgele veya zaten sıkıştırılmış (ZIP, MP4, JPEG) dosyalarda böylece hat üzerinde hiçbir şey büyümez; metin/kod/log dosyalarında ise 790+ MB/s hızında anlık sıkıştırma uygulanır.
-
-### 2.2 Güvenlik ve Doğrulama (`internal/transfer` & `internal/safetext`)
-
-| Benchmark | Yineleme Sayısı | Süre (ns/op) | Bellek / İşlem (B/op) | Tahsis (allocs/op) |
-| :--- | :---: | :---: | :---: | :---: |
-| `BenchmarkValidDigest-16` | 47,440,627 | **25.57 ns/op** | **0 B/op** | **0 allocs/op** |
-| `BenchmarkSafeJoin-16` | 1,889,763 | **800.40 ns/op** | 240 B/op | 5 allocs/op |
-| `BenchmarkClean_CleanText-16` | 15,280,320 | **78.40 ns/op** | **0 B/op** | **0 allocs/op** |
-| `BenchmarkClean_UnsafeText-16` | 3,110,400 | **385.10 ns/op** | 64 B/op | 2 allocs/op |
-
-* **Yorum:** Dosya transferi sırasında gelen hash doğrulaması ve güvenli metin temizleme işlemleri neredeyse sıfır gecikme (25-80 nanosaniye) ile çalışır ve GC (Garbage Collection) üzerinde yük oluşturmaz.
+**Nasıl okunmalı:** Loopback'in kendi hat hızı yoktur. Bu yüzden uçtan uca ölçüm ağı değil, yazılımın koyduğu tavanı gösterir: şifreli libp2p bağlantısı, iki uçta SHA-256, diske yazma ve protokolün kendisi. 390 MB/s, gigabit Ethernet'in pratik tavanının (~118 MB/s) yaklaşık üç katıdır. Yani bu donanımda yerel ağdaki darboğaz ağın kendisi olur. Daha yavaş bir işlemci ya da diskte bu tavan düşer.
 
 ---
 
-## 3. Ağ Profilleri ve Uçtan Uca Aktarım Senaryoları
+## 2. Uçtan uca ölçüm (`make bench-e2e`)
 
-PureSend bağlantıyı 3 farklı ağ topolojisi üzerinden kurabilir. Her senaryonun performans karakteristiği aşağıda özetlenmiştir:
+[`scripts/bench-e2e.sh`](../scripts/bench-e2e.sh) programı bir kullanıcının çalıştırdığı gibi ölçer:
 
-```
-[LAN Direct Transfer]   ──► Hat Doygunluğu (~112 MB/s on Gigabit, ~280 MB/s on 2.5G)
-[WAN DCUtR Hole Punch]  ──► İki Uç Noktanın İnternet Hız Sınırı (Sıfır Sunucu Maliyeti)
-[Relay Fallback]        ──► Güvenli Köprü (Kota ve Hız Sınırlı Yedek Hat)
-```
+1. Yerel bir buluşma sunucusu başlatır (`puresend-server`, TCP, loopback).
+2. `/dev/urandom`'dan istenen boyutta bir dosya üretir. Rastgele veri sıkışmadığı için her bayt bağlantıdan geçer.
+3. Göndericiyi başlatır ve dosyaları okuyup özetini çıkarmasını bekler (`files ready`). Böylece ön hazırlık süresi ölçüme girmez.
+4. Alıcıyı başlatır ve süresini ölçer: başlangıç, oda sorgusu, bağlantı, el sıkışma, aktarım ve doğrulama dahil.
+5. Bağlantının doğrudan kurulduğunu ve iki dosyanın SHA-256 özetlerinin aynı olduğunu kontrol eder.
+6. İki sürecin tepe belleğini GNU `time` ile raporlar.
 
-### 3.1 Senaryo A: Yerel Ağ (Direct LAN Transfer)
-* **Bağlantı Türü:** Aynı Wi-Fi veya Ethernet ağı üzerinden doğrudan TCP/QUIC.
-* **El Sıkışma Süresi:** < 100 ms.
-* **Aktarım Hızı:** Ağ arabirimi limitinde (Gigabit ağlarda **~112 - 118 MB/s**, 2.5G ağlarda **~280 MB/s**).
-* **Sunucu Yükü:** Sıfır (Yalnızca oda kodu el sıkışması için ~1 KB sinyal trafiği).
+Sonuçlar (her satır ayrı bir çalıştırma):
 
-### 3.2 Senaryo B: Farklı Ağlar - Doğrudan P2P (DCUtR NAT Hole Punching)
-* **Bağlantı Türü:** NAT arkasındaki iki cihaz arasında delik açılarak kurulan doğrudan bağlantı.
-* **El Sıkışma Süresi:** ~1.2 saniye - 2.8 saniye (STUN tespiti + DCUtR senkronizasyonu).
-* **Aktarım Hızı:** Göndericinin yükleme (upload) veya alıcının indirme (download) hızının en düşüğü.
-* **Sunucu Yükü:** Sıfır (Delik açıldıktan sonra sunucu bağlantıdan tamamen çıkar).
+| Veri | Alıcı süresi | Hız | Tepe RSS, gönderici | Tepe RSS, alıcı |
+| :---: | :---: | :---: | :---: | :---: |
+| 256 MiB | 0,88 s | 306 MB/s | 39 MB | 35 MB |
+| 2 GiB | 5,51 s | 390 MB/s | 40 MB | 37 MB |
+| 2 GiB | 5,99 s | 359 MB/s | 41 MB | 36 MB |
+| 2 GiB | 5,68 s | 378 MB/s | 41 MB | 37 MB |
+| 8 GiB | 23,85 s | 360 MB/s | 41 MB | 39 MB |
 
-### 3.3 Senaryo C: Kısıtlı Ağlar - Röle Yedeği (Circuit Relay v2)
-* **Bağlantı Türü:** Simetrik kurumsal güvenlik duvarı veya CGNAT nedeniyle delik açılamadığında sunucu üzerinden köprüleme.
-* **Kullanım Amacı:** Kesintisiz aktarım güvencesi.
-* **Hız Profili:** Sunucu bant genişliğine ve hız sınırlamalarına bağlıdır (Önerilen: 2-5 MB/s sınırlandırması).
-
----
-
-## 4. Bellek ve Kaynak Tüketim Analizi
-
-```
-Bellek (RAM)
-  ▲
-  │     Geleneksel Araçlar (Tüm dosyayı belleğe alanlar)
-  │    /
-  │   /  ◄── Bellek dosya boyutuyla doğru orantılı artar (O(N))
-  │  /
-  │ ──────────────────────────────────────  PureSend (O(1) Streaming)
-  │                                         Sabit ~35-45 MB RAM
-  └──────────────────────────────────────────────────────────► Dosya Boyutu
-       100 MB       1 GB       10 GB       50 GB
-```
-
-* **Chunk Boyutu:** Sabit `32 KB` (`chunkSize = 32 * 1024`).
-* **Akış Prensibi:** Dosyalar diske veya ağa blok blok aktarılır. Dosyanın tamamı asla bellekte tutulmaz.
-* **Kaynak Yöneticisi:** Sunucu tarafında `libp2p/p2p/host/resource-manager` aktif olup, bağlantı başına maksimum kaynak sınırları (FD ve RAM) tanımlıdır.
-
----
-
-## 5. Benchmark'ları Yeniden Çalıştırma Rehberi
-
-Bu testleri kendi makinenizde çalıştırmak ve doğrulamak için aşağıdaki komutları kullanabilirsiniz:
+- **Bellek dosya boyutuyla büyümüyor.** 32 kat büyük dosyada tepe RSS birkaç MB oynuyor. Dosyalar 32 KB'lık dilimlerle okunup yazılıyor ve hiçbir zaman belleğe bütün olarak alınmıyor.
+- **256 MiB'da hız daha düşük görünüyor**, çünkü sürenin sabit kısmı (süreç başlangıcı, sunucu bağlantısı, el sıkışma) kısa bir aktarımda oransal olarak daha büyük.
+- Alıcı veriyi işletim sisteminin sayfa önbelleğine yazıyor. Diske gerçekten yazılma hızı ayrı bir konudur.
 
 ```bash
-# 1. Çekirdek transfer ve sıkıştırma benchmark'larını çalıştırın
-go test -bench=. -benchmem ./internal/transfer
-
-# 2. Güvenlik ve metin sanitizasyon benchmark'larını çalıştırın
-go test -bench=. -benchmem ./internal/safetext
-
-# 3. Yalnızca belirli bir testi detaylı çalıştırma (örneğin sıkıştırma)
-go test -bench=BenchmarkCompressChunk -benchtime=5s -benchmem ./internal/transfer
+make bench-e2e                       # 2 GiB
+FT_BENCH_SIZE_MB=8192 make bench-e2e # 8 GiB
 ```
 
+---
+
+## 3. Mikro-benchmark'lar
+
+Bunlar tek bir fonksiyonu ölçer. Asıl işleri gerilemeleri yakalamaktır; kullanıcının hissettiği hızı uçtan uca ölçüm gösterir.
+
+```bash
+make bench   # go test -run '^$' -bench . -benchmem ./...
+```
+
+Üç çalıştırmanın aralığı:
+
+| Benchmark | Süre | Hız | Bellek | Tahsis |
+| :--- | :---: | :---: | :---: | :---: |
+| `BenchmarkCompressChunk` | 39–41 µs | 784–811 MB/s | ~58 B | 1 |
+| `BenchmarkDecompressChunk` | 139–146 µs | 220–231 MB/s | ~125 B | 3 |
+| `BenchmarkHandshake` | 0,57–0,65 ms | — | ~30 KB | 370 |
+| `BenchmarkSafeJoin` | 785–908 ns | — | 240 B | 5 |
+| `BenchmarkValidDigest` | 29 ns | — | 0 B | 0 |
+| `BenchmarkClean_CleanText` | 615–690 ns | — | 120 B | 4 |
+| `BenchmarkClean_UnsafeText` | 362–466 ns | — | 56 B | 3 |
+
+- **Sıkıştırma** metin benzeri bir 32 KB dilim üzerinde ölçülür. Sıkıştırma `flate.HuffmanOnly` ile yapılır, çünkü eşleşme aramayan bu mod hat hızının üzerinde çalışır. Küçülmeyen dilim (JPEG, MP4, ZIP gibi) olduğu gibi gönderilir, yani sıkışmayan veride bağlantı üzerinden hiçbir şey büyümez.
+- **El sıkışma** iki tarafın PAKE ve karşılıklı onay adımlarını bellekteki bir boru üzerinden birlikte ölçer. Gerçek bir bağlantıda buna ağın bir iki gidiş-dönüşü eklenir ve süreyi o belirler.
+- **Güvenlik denetimleri** (`SafeJoin`, `Clean`) mikro saniyenin altındadır ve dosya başına bir kez çalışır, bayt başına değil. Aktarım hızına etkileri ölçülemeyecek kadar küçüktür.
+
+---
+
+## 4. Henüz ölçülmeyenler
+
+- **Gerçek ağ üzerinde LAN hızı:** Loopback tavanı 360–390 MB/s. İki makine arasında gigabit ya da 2,5G bir bağlantıda ölçülmedi.
+- **İnternet üzerinden hız ve delik açma başarı oranı:** Farklı ev, mobil (CGNAT) ve kurumsal ağ çiftlerinde DCUtR'nin ne sıklıkla doğrudan bağlantı kurabildiği ölçülmedi.
+- **Röle üzerinden hız:** Röle yedeği [`test/relay`](../test/relay/netns-relay-test.sh) ile her commit'te doğruluk açısından test ediliyor, ama hız ölçümü yapılmıyor. Üretimdeki sunucu röle bağlantısı başına veri ve süre sınırı koyar (`-relay-data`, `-relay-duration`).

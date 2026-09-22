@@ -91,20 +91,18 @@ puresend -update
 
 ---
 
-## ⚡ Performance & System Efficiency
+## ⚡ Performance
 
-PureSend removes artificial speed and file-size throttling imposed by cloud providers. Its stream-based architecture fully saturates available physical bandwidth:
+Every number below was measured; the method and every individual run are in [docs/BENCHMARK.md](docs/BENCHMARK.md). Hardware: AMD Ryzen 7 5700X, NVMe disk, Linux 6.8, Go 1.27.
 
-| Metric / Domain | Performance & Characteristics | Technical Details |
+| Measurement | Result | How |
 | :--- | :---: | :--- |
-| **Memory Footprint (RAM)** | **Constant ~35–45 MB ($O(1)$)** | 32 KB chunk streaming; memory usage remains flat regardless of 100 MB or 50 GB payloads. |
-| **Dynamic Compression** | **~800 MB/s** | Adaptive DEFLATE (`flate.HuffmanOnly`) compression accelerates text and code beyond raw wire speed; data that does not shrink is sent as is. |
-| **Zero-Allocation Digest** | **25 ns / 0 allocs** | Validation of incoming SHA-256 digests runs with zero heap allocations. |
-| **LAN Line-Rate** | **Full Interface Saturation** | Saturated at **~112 MB/s** on Gigabit Ethernet and **~280 MB/s** on 2.5G interfaces. |
-| **WAN (Internet) Transfer** | **100% Raw Bandwidth** | Serverless P2P via DCUtR hole punching; throughput is bounded solely by ISP uplink/downlink. |
-| **Cryptographic Handshake**| **< 5 ms** | Zero-knowledge SPAKE2 (P-256) mutual key exchange completes almost instantaneously. |
+| **End-to-end throughput** | **360–390 MB/s** | Real server, sender and receiver processes on loopback; 2–8 GiB of random data over the encrypted libp2p connection, SHA-256 on both ends, written to disk (`make bench-e2e`) |
+| **Peak memory (RSS)** | **35–41 MB** | Same runs; flat from 256 MiB to 8 GiB |
+| **Handshake (CPU)** | **~0.6 ms** | Both sides' PAKE and confirmation steps together (`BenchmarkHandshake`); on a real connection, network round trips dominate |
+| **Compression** | **~800 MB/s** | Text-like 32 KB chunks, DEFLATE `HuffmanOnly`; a chunk that does not shrink is sent as is |
 
-> 📊 For full micro-benchmark outputs, memory profiles, and reproducibility steps: **[Performance Guide (docs/BENCHMARK.md)](docs/BENCHMARK.md)**
+**What it means:** loopback has no wire speed of its own, so this measures the ceiling the software sets. 390 MB/s is about three times gigabit Ethernet (~118 MB/s): on this hardware the LAN, not PureSend, is the bottleneck. A slower CPU or disk lowers the ceiling. Over the internet, speed is bounded by the two ends' connections, and on the relay by the server's limits. Hole-punching success rates across real network pairs have not been measured yet.
 
 ---
 
@@ -129,19 +127,15 @@ PureSend removes artificial speed and file-size throttling imposed by cloud prov
 
 ## 🧪 Testing & Code Quality
 
-Developed adhering to strict Go engineering standards with complete race-condition safety and continuous linting:
+CI runs on every commit: a `gofmt` check, `go vet`, the whole suite under the race detector, golangci-lint, govulncheck, a health check of the server's Docker image, and a relay-fallback test over isolated network namespaces where the two peers cannot see each other at all. Coverage is ~77%, counting the compiled client binary the integration tests drive.
 
 ```bash
-# Run unit tests with Go race detector
-make test
-# or
-go test -v -race ./...
-
-# Static analysis
-golangci-lint run
-
-# Vulnerability scan
-govulncheck ./...
+make test        # go vet + the whole suite with the race detector
+make cover       # merged coverage report, binary included
+make lint        # golangci-lint, the same version CI runs
+make vuln        # reachable known vulnerabilities (govulncheck)
+make test-relay  # relay fallback over isolated networks (no root needed)
+make bench-e2e   # end-to-end throughput and memory
 ```
 
 ---
