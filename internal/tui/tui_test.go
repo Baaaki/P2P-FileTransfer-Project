@@ -336,6 +336,41 @@ func TestChooseOutDir(t *testing.T) {
 	}
 }
 
+// TestOutDirUnsafeRejected verifies that selecting home or root as destination
+// immediately displays a warning on screenOutDir and rejects the selection.
+func TestOutDirUnsafeRejected(t *testing.T) {
+	home, err := os.UserHomeDir()
+	if err != nil || home == "" {
+		t.Skip("no home dir")
+	}
+
+	m := New(Config{Servers: []string{"x"}})
+	m.menuIndex = 2
+	m = press(t, m, "enter")
+	if m.screen != screenOutDir {
+		t.Fatalf("screen = %v, want screenOutDir", m.screen)
+	}
+
+	// Trying to select $HOME itself must be rejected immediately on [s]
+	m.dirPicker.CurrentDirectory = home
+	m = press(t, m, "s")
+	if m.screen != screenOutDir {
+		t.Errorf("screen after selecting unsafe home = %v, want to stay on screenOutDir", m.screen)
+	}
+	if m.outDirErr == "" {
+		t.Error("outDirErr is empty, want warning notice")
+	}
+	if !strings.Contains(m.View(), m.outDirErr) {
+		t.Errorf("view does not render outDirErr: %s", m.View())
+	}
+
+	// Navigating with an arrow key should clear the warning
+	m = press(t, m, "down")
+	if m.outDirErr != "" {
+		t.Errorf("outDirErr not cleared on navigation: %q", m.outDirErr)
+	}
+}
+
 // TestOutDirFromConfig checks the -out flag reaches the model.
 func TestOutDirFromConfig(t *testing.T) {
 	m := New(Config{Servers: []string{"x"}, OutDir: "/mnt/disk"})

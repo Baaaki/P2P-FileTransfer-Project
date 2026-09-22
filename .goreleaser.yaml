@@ -99,30 +99,29 @@ signs:
       - "puresend {{ .Tag }} checksums"
     signature: "${artifact}.minisig"
 
+# The release notes come from docs/CHANGELOG.md (see release: below). This
+# step has to stay enabled for that: it is the one that reads the
+# --release-notes file, and disabled it would leave the notes empty.
+# Given that file it generates nothing of its own from the git log.
 changelog:
-  disable: true
+  disable: false
 
 # A published release is never replaced or added to: the workflow refuses
 # to run for a tag that already has one, and existing files are not
 # overwritten if it somehow does.
 release:
   draft: false
+  # The notes between header and footer are the version's section of
+  # docs/CHANGELOG.md, which the release workflow passes in with
+  # --release-notes. Nothing written here may be about one version: this
+  # file is the same for every release, and notes kept in it would repeat
+  # on every release after the one they were written for.
   header: |
-    ## PureSend v2.0.0 🚀
+    ## PureSend {{ .Tag }}
 
     Go ile geliştirilmiş, uçtan uca şifreli ve doğrudan eşler arası (P2P) dosya ve klasör transfer sistemi.
 
-    ### ⚠️ Önemli Değişiklik (Breaking Changes - Neden v2.0.0?)
-    Bu sürüm, **1.0.0 sürümünün kapsamlı güvenlik denetimi** sonuçlarına göre hazırlanmış majör bir sürümdür. Buluşma (rendezvous) protokolü `/puresend/rendezvous/2.0.0` sürümüne yükseltilmiştir ve v1.0.0 istemci/sunucuları ile geriye dönük uyumlu değildir.
-
-    #### 🛡️ Güvenlik ve Mimari Yenilikleri:
-    - **Sunucu Artık Parolayı Görmüyor (Magic-Wormhole Modeli):** Kodlar ikiye ayrıldı; sunucu yalnızca açık oda numarasını (`nameplate: 42`) görür, gizli kelimeler (`kiraz-liman`) sunucuya hiç gitmez ve yalnızca eşler arasındaki PAKE el sıkışmasında kullanılır. Sunucunun MITM yapma riski tamamen ortadan kaldırıldı.
-    - **Dinamik Oda Ölçekleme:** Oda numaraları en az 2 basamaktan (`10..99`) başlar ve sunucu doldukça seyreklik kuralı korunarak otomatik olarak 3, 4, 5+ basamağa dinamik olarak genişler. Eşzamanlı oda sınırı kaldırıldı.
-    - **Brute-Force Koruması:** 3 yanlış kod denemesinde oda sunucudan silinerek kendini imha eder. Teyit etiketi karşı taraf anahtarı kanıtlamadan sunulmaz.
-    - **DoS ve Kaynak Koruması:** Sunucu geneli global dakikalık kayıt bütçesi (`-register-budget`) kaldırıldı; tablo dolduğunda bağlantısı kopmuş odalar tahliye edilir.
-    - **Bütünlük ve İmza Doğrulaması:** `puresend -update`, `install.sh` ve `install.ps1` artık `checksums.txt` üzerinden SHA-256 bütünlük kontrolü ve `minisign` dijital imza doğrulaması yapar.
-    - **Dosya Sistemi Güvenliği:** Ev dizinine indirme yapılması engellendi (`CheckDestination`), sembolik linkler üzerinden dosya sızdırılması durduruldu (`checkNoLinks`), atomik hard-link (`place()`) ile TOCTOU yarış durumları önlendi.
-
+  footer: |
     ---
 
     ### ⚡ Hızlı Kurulum (Tek Satır)
@@ -145,9 +144,6 @@ release:
     - 🐧 **Linux (`x86_64`)**: `.tar.gz` arşivini çıkartıp doğrudan terminalden çalıştırın (`./puresend`).
     - 🍏 **macOS (Apple Silicon - M1/M2/M3/M4)**: `.tar.gz` arşivini çıkartıp terminalden çalıştırın (`./puresend`).
 
-    ---
-
-  footer: |
     ---
     > 💡 **macOS Notu:** macOS Gatekeeper ilk açılışta *"geliştirici doğrulanamadı"* uyarısı verirse, terminalde şu komutu çalıştırarak karantina bayrağını kaldırabilirsiniz:  
     > `xattr -d com.apple.quarantine puresend`

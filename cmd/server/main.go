@@ -50,6 +50,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io/fs"
 	"log"
 	"math"
 	"net"
@@ -509,24 +510,40 @@ func loadOrCreateKey(path string) (crypto.PrivKey, string, error) {
 		return priv, "FT_IDENTITY_KEY", nil
 	}
 
-	if data, err := os.ReadFile(path); err == nil {
+	data, err := os.ReadFile(path)
+	switch {
+	case err == nil:
 		priv, err := crypto.UnmarshalPrivateKey(data)
 		if err != nil {
 			return nil, "", fmt.Errorf("%s is not a valid key: %w", path, err)
 		}
 		return priv, path, nil
+	case !errors.Is(err, fs.ErrNotExist):
+		// The file is there and could not be read — permissions, a disk
+		// error. A new key would change the peer ID and strand every client
+		// already released, so this is a reason to stop, not to start over.
+		return nil, "", fmt.Errorf("could not read %s: %w", path, err)
 	}
 
 	priv, _, err := crypto.GenerateEd25519Key(nil) // nil -> uses crypto/rand
 	if err != nil {
 		return nil, "", err
 	}
-	data, err := crypto.MarshalPrivateKey(priv)
+	data, err = crypto.MarshalPrivateKey(priv)
 	if err != nil {
 		return nil, "", err
 	}
+	// O_EXCL: a key that appeared since the read above is never replaced.
 	// 0600: only the owner may read the key.
-	if err := os.WriteFile(path, data, 0o600); err != nil {
+	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+	if err != nil {
+		return nil, "", err
+	}
+	if _, err := f.Write(data); err != nil {
+		f.Close()
+		return nil, "", err
+	}
+	if err := f.Close(); err != nil {
 		return nil, "", err
 	}
 	return priv, path + " (newly generated)", nil

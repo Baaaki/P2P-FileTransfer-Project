@@ -33,6 +33,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"puresend/internal/safetext"
@@ -508,7 +509,7 @@ func Receive(s io.ReadWriteCloser, outDir string, creds Credentials, confirm fun
 	enc := json.NewEncoder(s)
 	refuse := func(err error) error {
 		dl.write(timeouts.idle)
-		_ = enc.Encode(ack{OK: false, Error: err.Error()})
+		_ = enc.Encode(ack{OK: false, Error: peerMessage(err)})
 		return err
 	}
 
@@ -956,6 +957,23 @@ func (d deadlines) write(after time.Duration) {
 func (d deadlines) both(after time.Duration) {
 	d.read(after)
 	d.write(after)
+}
+
+// peerMessage is what the other side is told about a failure here: the
+// same words, less the local paths a filesystem error carries. Where the
+// receiver keeps its downloads — and the account name in that path — is
+// nothing the sender needs; "no space left on device" is.
+func peerMessage(err error) string {
+	msg := err.Error()
+	var pe *os.PathError
+	if errors.As(err, &pe) {
+		msg = strings.Replace(msg, pe.Error(), pe.Err.Error(), 1)
+	}
+	var le *os.LinkError
+	if errors.As(err, &le) {
+		msg = strings.Replace(msg, le.Error(), le.Err.Error(), 1)
+	}
+	return msg
 }
 
 // describe turns an expired deadline into what it means to a person: the

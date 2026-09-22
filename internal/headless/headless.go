@@ -105,12 +105,7 @@ func pump(ctx context.Context, node *p2p.Node, confirm func(transfer.Manifest) b
 				logf("%s", e.Text)
 
 			case p2p.ConnectedEvent:
-				if e.Direct {
-					logf("connected directly")
-				} else {
-					logf("connected through the fallback relay (limit %s per connection)",
-						formatBytes(e.RelayLimit))
-				}
+				logf("%s", describeConnection(e))
 
 			case p2p.PreparingEvent:
 				// A folder of thousands would otherwise print thousands of
@@ -173,6 +168,20 @@ func pump(ctx context.Context, node *p2p.Node, confirm func(transfer.Manifest) b
 				return nil
 			}
 		}
+	}
+}
+
+// describeConnection says how the two peers are connected. Only the
+// receiver learns the relay's limit, from its lookup; the sender's event
+// carries none, and "limit 0 B" would read as a relay that carries nothing.
+func describeConnection(e p2p.ConnectedEvent) string {
+	switch {
+	case e.Direct:
+		return "connected directly"
+	case e.RelayLimit > 0:
+		return fmt.Sprintf("connected through the fallback relay (limit %s per connection)", formatBytes(e.RelayLimit))
+	default:
+		return "connected through the fallback relay"
 	}
 }
 

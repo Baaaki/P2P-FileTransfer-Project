@@ -6,6 +6,8 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"io"
 	"net"
 	"os"
@@ -407,6 +409,51 @@ func TestDeclinedTransfer(t *testing.T) {
 	}
 	if _, err := os.Stat(outDir); !os.IsNotExist(err) {
 		t.Error("output directory was created for a declined transfer")
+	}
+}
+
+// TestRefusalKeepsLocalPathsHome: when saving fails the sender is told
+// why, but not where the receiver keeps its downloads — a path that on
+// most machines spells out the account name.
+func TestRefusalKeepsLocalPathsHome(t *testing.T) {
+	src := writeTempFile(t, t.TempDir(), "note.txt", []byte("data"))
+	outDir := t.TempDir()
+	// A file where the partial-download folder belongs: preparing the
+	// download fails with an ordinary filesystem error, path and all.
+	writeTempFile(t, outDir, partialDir, nil)
+
+	sender, receiver := net.Pipe()
+	sendErr := make(chan error, 1)
+	go func() { sendErr <- SendPaths(sender, []string{src}, testCreds(), Hooks{}) }()
+
+	if _, err := Receive(receiver, outDir, testCreds(), nil, Hooks{}); err == nil || !strings.Contains(err.Error(), outDir) {
+		t.Fatalf("Receive = %v, want the failure with its local path", err)
+	}
+	err := <-sendErr
+	if err == nil || !strings.Contains(err.Error(), "could not prepare the download folder") {
+		t.Fatalf("the sender was not told why: %v", err)
+	}
+	if strings.Contains(err.Error(), outDir) {
+		t.Errorf("the sender was told the receiver's path: %v", err)
+	}
+}
+
+func TestPeerMessage(t *testing.T) {
+	home := filepath.Join("home", "ali", "Downloads", "PureSend")
+	for _, tc := range []struct {
+		err  error
+		want string
+	}{
+		{fmt.Errorf("could not write to disk: %w", &os.PathError{Op: "write", Path: home, Err: errors.New("disk full")}),
+			"could not write to disk: disk full"},
+		{fmt.Errorf("could not finalize a.jpg: %w", &os.LinkError{Op: "rename", Old: home, New: home, Err: errors.New("cross-device link")}),
+			"could not finalize a.jpg: cross-device link"},
+		{errors.New("checksum mismatch for a.jpg, the file may be corrupted"),
+			"checksum mismatch for a.jpg, the file may be corrupted"},
+	} {
+		if got := peerMessage(tc.err); got != tc.want {
+			t.Errorf("peerMessage(%q) = %q, want %q", tc.err, got, tc.want)
+		}
 	}
 }
 

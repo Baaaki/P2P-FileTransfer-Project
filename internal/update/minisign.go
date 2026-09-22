@@ -37,7 +37,7 @@ func parseMinisignKey(s string) (minisignKey, error) {
 	lines := strings.Split(strings.TrimSpace(s), "\n")
 	raw, err := base64.StdEncoding.DecodeString(strings.TrimSpace(lines[len(lines)-1]))
 	if err != nil || len(raw) != 2+8+ed25519.PublicKeySize || string(raw[:2]) != "Ed" {
-		return minisignKey{}, errors.New("minisign açık anahtarı değil")
+		return minisignKey{}, errors.New("not a minisign public key")
 	}
 	var k minisignKey
 	copy(k.id[:], raw[2:10])
@@ -54,20 +54,20 @@ func verifyMinisign(k minisignKey, message, sigFile []byte) error {
 	lines := strings.Split(strings.ReplaceAll(string(sigFile), "\r\n", "\n"), "\n")
 	if len(lines) < 4 || !strings.HasPrefix(lines[0], "untrusted comment:") ||
 		!strings.HasPrefix(lines[2], "trusted comment: ") {
-		return errors.New("imza dosyası bozuk")
+		return errors.New("the signature file is malformed")
 	}
 	sig, err := base64.StdEncoding.DecodeString(strings.TrimSpace(lines[1]))
 	if err != nil || len(sig) != 2+8+ed25519.SignatureSize {
-		return errors.New("imza bozuk")
+		return errors.New("the signature is malformed")
 	}
 	global, err := base64.StdEncoding.DecodeString(strings.TrimSpace(lines[3]))
 	if err != nil || len(global) != ed25519.SignatureSize {
-		return errors.New("imza bozuk")
+		return errors.New("the signature is malformed")
 	}
 
 	algorithm, keyID, signature := string(sig[:2]), sig[2:10], sig[10:]
 	if !bytes.Equal(keyID, k.id[:]) {
-		return fmt.Errorf("başka bir anahtarla imzalanmış (%X)", keyID)
+		return fmt.Errorf("signed with a different key (%X)", keyID)
 	}
 	signed := message
 	switch algorithm {
@@ -76,14 +76,14 @@ func verifyMinisign(k minisignKey, message, sigFile []byte) error {
 		digest := blake2b.Sum512(message)
 		signed = digest[:]
 	default:
-		return fmt.Errorf("bilinmeyen imza algoritması %q", algorithm)
+		return fmt.Errorf("unknown signature algorithm %q", algorithm)
 	}
 	if !ed25519.Verify(k.key, signed, signature) {
-		return errors.New("imza eşleşmiyor")
+		return errors.New("the signature does not match")
 	}
 	trusted := strings.TrimPrefix(lines[2], "trusted comment: ")
 	if !ed25519.Verify(k.key, append(append([]byte(nil), signature...), trusted...), global) {
-		return errors.New("imzalı yorum değiştirilmiş")
+		return errors.New("the trusted comment was altered")
 	}
 	return nil
 }

@@ -14,11 +14,14 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"path"
 	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
 	"time"
+
+	"puresend/internal/i18n"
 )
 
 const (
@@ -217,7 +220,7 @@ func extractBinary(assetName string, r io.Reader, dst io.Writer) error {
 	if strings.HasSuffix(lower, ".tar.gz") || strings.HasSuffix(lower, ".tgz") {
 		gr, err := gzip.NewReader(r)
 		if err != nil {
-			return fmt.Errorf("gzip arşivi okunamadı: %w", err)
+			return fmt.Errorf("could not read the gzip archive: %w", err)
 		}
 		defer func() { _ = gr.Close() }()
 
@@ -228,7 +231,7 @@ func extractBinary(assetName string, r io.Reader, dst io.Writer) error {
 				break
 			}
 			if err != nil {
-				return fmt.Errorf("tar arşivi okunamadı: %w", err)
+				return fmt.Errorf("could not read the tar archive: %w", err)
 			}
 			if hdr.Typeflag == tar.TypeReg {
 				base := filepath.Base(hdr.Name)
@@ -238,17 +241,17 @@ func extractBinary(assetName string, r io.Reader, dst io.Writer) error {
 				}
 			}
 		}
-		return errors.New("arşiv içinde puresend çalıştırılabilir dosyası bulunamadı")
+		return errors.New("the archive holds no puresend executable")
 	}
 
 	if strings.HasSuffix(lower, ".zip") {
 		buf, err := io.ReadAll(r)
 		if err != nil {
-			return fmt.Errorf("zip indirilemedi: %w", err)
+			return fmt.Errorf("could not read the zip archive: %w", err)
 		}
 		zr, err := zip.NewReader(bytes.NewReader(buf), int64(len(buf)))
 		if err != nil {
-			return fmt.Errorf("zip arşivi okunamadı: %w", err)
+			return fmt.Errorf("could not read the zip archive: %w", err)
 		}
 		for _, f := range zr.File {
 			base := filepath.Base(f.Name)
@@ -262,7 +265,7 @@ func extractBinary(assetName string, r io.Reader, dst io.Writer) error {
 				return err
 			}
 		}
-		return errors.New("zip arşivi içinde puresend çalıştırılabilir dosyası bulunamadı")
+		return errors.New("the zip archive holds no puresend executable")
 	}
 
 	// Plain binary
@@ -270,66 +273,73 @@ func extractBinary(assetName string, r io.Reader, dst io.Writer) error {
 	return err
 }
 
-// Apply checks for updates and replaces the running executable if a newer release exists.
-func Apply(currentVersion string, stdout io.Writer) error {
+// Apply checks for updates and replaces the running executable if a newer
+// release exists. It talks to the person running it in lang; its errors,
+// like every other error in the program, are in English.
+func Apply(currentVersion string, lang i18n.Lang, stdout io.Writer) error {
+	msg := i18n.Get(lang)
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 
-	_, _ = fmt.Fprintln(stdout, "Güncellemeler kontrol ediliyor...")
+	_, _ = fmt.Fprintln(stdout, msg.UpdateChecking)
 	info, err := CheckLatest(ctx, currentVersion)
 	if err != nil {
-		return fmt.Errorf("sürüm kontrolü yapılamadı: %w", err)
+		return fmt.Errorf("could not check for the latest version: %w", err)
 	}
 
 	if !info.HasUpdate {
-		fmt.Fprintf(stdout, "PureSend zaten güncel (%s).\n", currentVersion)
+		_, _ = fmt.Fprintln(stdout, msg.UpdateUpToDate(currentVersion))
+		return nil
+	}
+	_, _ = fmt.Fprintln(stdout, msg.UpdateFound(info.TagName, currentVersion))
+
+	exePath, err := os.Executable()
+	if err != nil {
+		return fmt.Errorf("could not find the running program: %w", err)
+	}
+	exePath, err = filepath.EvalSymlinks(exePath)
+	if err != nil {
+		return fmt.Errorf("could not resolve the program's path: %w", err)
+	}
+	if managedByPackage(runtime.GOOS, exePath) {
+		_, _ = fmt.Fprintln(stdout, msg.UpdateManaged(exePath))
+		_, _ = fmt.Fprintln(stdout, msg.UpdateGetItAt(info.HTMLURL))
 		return nil
 	}
 
-	fmt.Fprintf(stdout, "Yeni bir sürüm mevcut: %s (mevcut sürüm: %s)\n", info.TagName, currentVersion)
-
 	asset := FindAsset(info.Assets, runtime.GOOS, runtime.GOARCH)
 	if asset == nil {
-		fmt.Fprintf(stdout, "Sisteminiz için (%s/%s) hazır ikili dosya bulunamadı.\n", runtime.GOOS, runtime.GOARCH)
-		fmt.Fprintf(stdout, "Yeni sürümü buradan indirebilirsiniz:\n  %s\n", info.HTMLURL)
+		_, _ = fmt.Fprintln(stdout, msg.UpdateNoBinary(runtime.GOOS+"/"+runtime.GOARCH))
+		_, _ = fmt.Fprintln(stdout, msg.UpdateGetItAt(info.HTMLURL))
 		return nil
 	}
 
 	// Download and check everything before touching the installed binary.
-	fmt.Fprintf(stdout, "%s indiriliyor...\n", asset.Name)
+	_, _ = fmt.Fprintln(stdout, msg.UpdateDownloading(asset.Name))
 	archive, err := fetchVerified(ctx, info.Assets, *asset, "puresend/"+currentVersion)
 	if err != nil {
-		return fmt.Errorf("güncelleme doğrulanamadı, hiçbir şey değiştirilmedi: %w", err)
+		return fmt.Errorf("the update could not be verified, nothing was changed: %w", err)
 	}
-	_, _ = fmt.Fprintln(stdout, "Bütünlük doğrulandı.")
-
-	exePath, err := os.Executable()
-	if err != nil {
-		return fmt.Errorf("çalışan dosya konumu belirlenemedi: %w", err)
-	}
-	exePath, err = filepath.EvalSymlinks(exePath)
-	if err != nil {
-		return fmt.Errorf("dosya yolu çözümlenemedi: %w", err)
-	}
+	_, _ = fmt.Fprintln(stdout, msg.UpdateVerified)
 
 	dir := filepath.Dir(exePath)
 	tmpFile, err := os.CreateTemp(dir, "ft-update-*")
 	if err != nil {
 		if errors.Is(err, os.ErrPermission) {
-			return fmt.Errorf("yazma yetkisi yok (yönetici izinleriyle veya 'sudo' ile deneyin): %w", err)
+			return fmt.Errorf("no permission to write to %s (try again as an administrator, or with sudo): %w", dir, err)
 		}
-		return fmt.Errorf("geçici dosya oluşturulamadı: %w", err)
+		return fmt.Errorf("could not create a temporary file: %w", err)
 	}
 	tmpPath := tmpFile.Name()
 	defer os.Remove(tmpPath)
 
 	if err := extractBinary(asset.Name, bytes.NewReader(archive), tmpFile); err != nil {
 		tmpFile.Close()
-		return fmt.Errorf("dosya yazılamadı: %w", err)
+		return fmt.Errorf("could not write the new version: %w", err)
 	}
 	if err := tmpFile.Chmod(0o755); err != nil {
 		tmpFile.Close()
-		return fmt.Errorf("çalıştırma izni verilemedi: %w", err)
+		return fmt.Errorf("could not make the new version executable: %w", err)
 	}
 	if err := tmpFile.Close(); err != nil {
 		return err
@@ -341,22 +351,38 @@ func Apply(currentVersion string, stdout io.Writer) error {
 		oldPath := exePath + ".old"
 		_ = os.Remove(oldPath)
 		if err := os.Rename(exePath, oldPath); err != nil {
-			return fmt.Errorf("eski dosya yeniden adlandırılamadı: %w", err)
+			return fmt.Errorf("could not move the old version aside: %w", err)
 		}
 		if err := os.Rename(tmpPath, exePath); err != nil {
 			// Put the old one back: failing to update must not leave the
 			// user with no program at all.
 			if rerr := os.Rename(oldPath, exePath); rerr != nil {
-				return fmt.Errorf("yeni sürüm yüklenemedi (%w) ve eski sürüm geri konamadı; eski sürüm şurada: %s: %w", err, oldPath, rerr)
+				return fmt.Errorf("could not install the new version (%w), nor put the old one back, which is at %s: %w", err, oldPath, rerr)
 			}
-			return fmt.Errorf("yeni sürüm yüklenemedi, eski sürüm yerinde bırakıldı: %w", err)
+			return fmt.Errorf("could not install the new version, the old one was left in place: %w", err)
 		}
 	} else if err := os.Rename(tmpPath, exePath); err != nil {
-		return fmt.Errorf("yeni sürüm yüklenemedi: %w", err)
+		return fmt.Errorf("could not install the new version: %w", err)
 	}
 
-	fmt.Fprintf(stdout, "PureSend başarıyla %s sürümüne güncellendi!\n", info.TagName)
+	_, _ = fmt.Fprintln(stdout, msg.UpdateDone(info.TagName))
 	return nil
+}
+
+// managedByPackage reports whether exe belongs to the system's package
+// manager. The .deb and the AUR package both install to /usr/bin, where
+// install.sh never puts anything. Replacing the file there behind the
+// package manager's back leaves its records describing a file that is no
+// longer the one it installed.
+func managedByPackage(goos, exe string) bool {
+	if goos != "linux" {
+		return false
+	}
+	switch path.Dir(filepath.ToSlash(exe)) {
+	case "/usr/bin", "/usr/sbin", "/bin", "/sbin":
+		return true
+	}
+	return false
 }
 
 // fetchVerified downloads an asset and returns it only once it matches the
@@ -367,28 +393,28 @@ func Apply(currentVersion string, stdout io.Writer) error {
 func fetchVerified(ctx context.Context, assets []Asset, asset Asset, userAgent string) ([]byte, error) {
 	sumsAsset := assetNamed(assets, "checksums.txt")
 	if sumsAsset == nil {
-		return nil, errors.New("sürüm checksums.txt yayımlamıyor")
+		return nil, errors.New("the release publishes no checksums.txt")
 	}
 	sums, err := download(ctx, sumsAsset.BrowserDownloadURL, userAgent, maxChecksumBytes)
 	if err != nil {
-		return nil, fmt.Errorf("checksums.txt indirilemedi: %w", err)
+		return nil, fmt.Errorf("could not download checksums.txt: %w", err)
 	}
 
 	if publicKey != "" {
 		key, err := parseMinisignKey(publicKey)
 		if err != nil {
-			return nil, fmt.Errorf("programa gömülü güncelleme anahtarı geçersiz: %w", err)
+			return nil, fmt.Errorf("the update key built into this program is not valid: %w", err)
 		}
 		sigAsset := assetNamed(assets, "checksums.txt.minisig")
 		if sigAsset == nil {
-			return nil, errors.New("sürümün checksums.txt dosyası imzalı değil")
+			return nil, errors.New("the release's checksums.txt is not signed")
 		}
 		sig, err := download(ctx, sigAsset.BrowserDownloadURL, userAgent, maxSignatureBytes)
 		if err != nil {
-			return nil, fmt.Errorf("imza indirilemedi: %w", err)
+			return nil, fmt.Errorf("could not download the signature: %w", err)
 		}
 		if err := verifyMinisign(key, sums, sig); err != nil {
-			return nil, fmt.Errorf("checksums.txt imzası: %w", err)
+			return nil, fmt.Errorf("checksums.txt signature: %w", err)
 		}
 	}
 
@@ -398,11 +424,11 @@ func fetchVerified(ctx context.Context, assets []Asset, asset Asset, userAgent s
 	}
 	data, err := download(ctx, asset.BrowserDownloadURL, userAgent, maxArchiveBytes)
 	if err != nil {
-		return nil, fmt.Errorf("indirme başarısız: %w", err)
+		return nil, fmt.Errorf("download failed: %w", err)
 	}
 	got := sha256.Sum256(data)
 	if hex.EncodeToString(got[:]) != want {
-		return nil, fmt.Errorf("%s, checksums.txt'deki özetle eşleşmiyor", asset.Name)
+		return nil, fmt.Errorf("%s does not match its digest in checksums.txt", asset.Name)
 	}
 	return data, nil
 }
@@ -434,7 +460,7 @@ func checksumFor(sums []byte, name string) (string, error) {
 		}
 		return digest, nil
 	}
-	return "", fmt.Errorf("checksums.txt, %s için geçerli bir özet içermiyor", name)
+	return "", fmt.Errorf("checksums.txt has no valid digest for %s", name)
 }
 
 // download fetches a URL into memory, refusing anything over limit bytes.
@@ -450,14 +476,14 @@ func download(ctx context.Context, url, userAgent string, limit int64) ([]byte, 
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("sunucu hata kodu döndürdü: %d", resp.StatusCode)
+		return nil, fmt.Errorf("the server answered %d", resp.StatusCode)
 	}
 	data, err := io.ReadAll(io.LimitReader(resp.Body, limit+1))
 	if err != nil {
 		return nil, err
 	}
 	if int64(len(data)) > limit {
-		return nil, fmt.Errorf("beklenenden büyük (en fazla %d bayt)", limit)
+		return nil, fmt.Errorf("larger than expected (at most %d bytes)", limit)
 	}
 	return data, nil
 }

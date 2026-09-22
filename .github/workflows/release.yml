@@ -10,6 +10,13 @@ permissions:
 jobs:
   release:
     runs-on: ubuntu-latest
+    env:
+      # The meeting point baked into every client this job builds, peer ID
+      # and all, unless the FT_SERVER repository variable names another.
+      FT_SERVER: ${{ vars.FT_SERVER || '/dns4/rendezvous.madebybaki.com/tcp/443/tls/ws/p2p/12D3KooWJdXaT1FN4UGLCrrTpdqvpo7cqrJZK6tHvbUPQbJ6APtK' }}
+      # Where copies of the client look when the server has moved.
+      # Set the FT_SERVER_LIST variable to override the landing page.
+      FT_SERVER_LIST: ${{ vars.FT_SERVER_LIST || 'https://puresend.madebybaki.com/server.txt' }}
     steps:
       # This job holds a token that can rewrite the repository's releases,
       # so every action in it is pinned to a commit rather than to a tag its
@@ -37,14 +44,50 @@ jobs:
           TAG: ${{ github.ref_name }}
           REPO: ${{ github.repository }}
 
-      - name: Check the server address is configured
+      # A wrong server address is only noticed once people have downloaded
+      # the binaries it is baked into. server.txt is where the current one
+      # is published (docs/DEPLOYMENT.md), so the two disagreeing means one
+      # of them is stale — most likely the default above, after the server's
+      # key changed. The list being unreachable is not worth failing over.
+      - name: Check the server address is the published one
         run: |
-          SERVER="${{ vars.FT_SERVER || '/dns4/rendezvous.madebybaki.com/tcp/443/tls/ws/p2p/12D3KooWJdXaT1FN4UGLCrrTpdqvpo7cqrJZK6tHvbUPQbJ6APtK' }}"
-          echo "Building release with rendezvous server: $SERVER"
+          echo "Building release with rendezvous server: $FT_SERVER"
+          if ! list="$(curl -fsSL --max-time 20 "$FT_SERVER_LIST")"; then
+            echo "::warning::Could not fetch $FT_SERVER_LIST to check the server address against."
+            exit 0
+          fi
+          published="$(printf '%s\n' "$list" | sed 's/#.*//; s/^[[:space:]]*//; s/[[:space:]]*$//')"
+          for addr in $(printf '%s' "$FT_SERVER" | tr ',' ' '); do
+            if ! printf '%s\n' "$published" | grep -qxF -- "$addr"; then
+              echo "::error::$addr is not listed in $FT_SERVER_LIST. Update whichever is stale: the FT_SERVER variable (or the default in this workflow), or server.txt."
+              exit 1
+            fi
+          done
+
+      # The release page carries the version's own section of the changelog.
+      # A tag without one is refused: notes written after the fact are notes
+      # nobody writes.
+      - name: Release notes from the changelog
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          awk -v v="${TAG#v}" '
+            /^## \[/ { if (on) exit; on = index($0, "## [" v "]") == 1; next }
+            on
+          ' docs/CHANGELOG.md > "$RUNNER_TEMP/notes.md"
+          if ! grep -q '[^[:space:]]' "$RUNNER_TEMP/notes.md"; then
+            echo "::error::docs/CHANGELOG.md has no section for ${TAG#v}. Move the [Unreleased] notes under a [${TAG#v}] heading first."
+            exit 1
+          fi
 
       # A tag is a promise that this commit works. Check it before six
       # binaries go out under that promise, not after.
       - name: Vet and test
+        env:
+          # The client reads both from the environment. A test whose own
+          # server is unreachable must fail, not find the production one.
+          FT_SERVER: ""
+          FT_SERVER_LIST: ""
         run: |
           go vet ./...
           go test -race -short -timeout 15m ./...
@@ -85,11 +128,7 @@ jobs:
         with:
           # An exact version, for the same reason the actions are pinned.
           version: "v2.18.2"
-          args: release --clean ${{ steps.sign.outputs.skip }}
+          args: release --clean --release-notes=${{ runner.temp }}/notes.md ${{ steps.sign.outputs.skip }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          FT_SERVER: ${{ vars.FT_SERVER || '/dns4/rendezvous.madebybaki.com/tcp/443/tls/ws/p2p/12D3KooWJdXaT1FN4UGLCrrTpdqvpo7cqrJZK6tHvbUPQbJ6APtK' }}
-          # Where copies of the client look when the server has moved.
-          # Set the FT_SERVER_LIST variable to override the landing page.
-          FT_SERVER_LIST: ${{ vars.FT_SERVER_LIST || 'https://puresend.madebybaki.com/server.txt' }}
           FT_UPDATE_KEY: ${{ vars.FT_UPDATE_KEY }}

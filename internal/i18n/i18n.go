@@ -88,6 +88,7 @@ type Messages struct {
 	OutDirCurrent   string
 	OutDirSelectBtn func(dir string) string
 	OutDirFooter    string
+	OutDirUnsafe    string
 
 	// Waiting
 	WaitingTitle     string
@@ -170,6 +171,18 @@ type Messages struct {
 	ErrorWhatCan string
 	ErrorFooter  string
 
+	// Self-update (puresend -update)
+	UpdateChecking    string
+	UpdateUpToDate    func(version string) string
+	UpdateFound       func(latest, current string) string
+	UpdateNoBinary    func(platform string) string
+	UpdateManaged     func(path string) string
+	UpdateGetItAt     func(url string) string
+	UpdateDownloading func(name string) string
+	UpdateVerified    string
+	UpdateDone        func(tag string) string
+	UpdateFailed      string
+
 	Goodbye string
 }
 
@@ -221,6 +234,7 @@ var trMessages = &Messages{
 		return "[s]  ·  Burayı seç (" + dir + ")"
 	},
 	OutDirFooter: "[↑/↓] Gezin  ·  [Enter] Gir  ·  [Backspace/←] Üst Klasör  ·  [s] Seç  ·  [Esc] Vazgeç",
+	OutDirUnsafe: "Dosyalar doğrudan ev klasörüne veya sistem köküne kaydedilemez; lütfen içine bir alt klasör seçin.",
 
 	WaitingTitle:  "🔑  Oda kodun hazır!",
 	WaitingStatus: "Arkadaşının kodu girmesi bekleniyor...",
@@ -331,6 +345,32 @@ var trMessages = &Messages{
 	ErrorWhatCan: "Ne yapabilirsin:",
 	ErrorFooter:  "[Enter] Ana Menü  ·  [L] Dil: English  ·  [q] Çıkış",
 
+	UpdateChecking: "Güncellemeler kontrol ediliyor...",
+	UpdateUpToDate: func(version string) string {
+		return fmt.Sprintf("PureSend zaten güncel (%s).", version)
+	},
+	UpdateFound: func(latest, current string) string {
+		return fmt.Sprintf("Yeni bir sürüm var: %s (sendeki: %s)", latest, current)
+	},
+	UpdateNoBinary: func(platform string) string {
+		return fmt.Sprintf("Sistemin (%s) için hazır bir ikili dosya yok.", platform)
+	},
+	UpdateManaged: func(path string) string {
+		return fmt.Sprintf("Bu kopya bir paket yöneticisiyle kurulmuş (%s); onu güncellemek de paket yöneticisinin işi.\n"+
+			"Yeni .deb paketini kur ya da AUR yardımcınla güncelle.", path)
+	},
+	UpdateGetItAt: func(url string) string {
+		return fmt.Sprintf("Yeni sürümü buradan indirebilirsin:\n  %s", url)
+	},
+	UpdateDownloading: func(name string) string {
+		return fmt.Sprintf("%s indiriliyor...", name)
+	},
+	UpdateVerified: "Bütünlük doğrulandı.",
+	UpdateDone: func(tag string) string {
+		return fmt.Sprintf("PureSend %s sürümüne güncellendi!", tag)
+	},
+	UpdateFailed: "Güncelleme hatası",
+
 	Goodbye: "Görüşürüz!",
 }
 
@@ -382,6 +422,7 @@ var enMessages = &Messages{
 		return "[s]  ·  Select here (" + dir + ")"
 	},
 	OutDirFooter: "[↑/↓] Navigate  ·  [Enter] Open Folder  ·  [Backspace/←] Parent Dir  ·  [s] Select Dir  ·  [Esc] Cancel",
+	OutDirUnsafe: "Files cannot be saved straight into your home folder or system root; choose a folder inside it.",
 
 	WaitingTitle:  "🔑  Your room code is ready!",
 	WaitingStatus: "Waiting for your friend to enter the code...",
@@ -494,6 +535,32 @@ var enMessages = &Messages{
 	ErrorTitle:   "✗  Something went wrong",
 	ErrorWhatCan: "What you can do:",
 	ErrorFooter:  "[Enter] Main Menu  ·  [L] Language: Türkçe  ·  [q] Quit",
+
+	UpdateChecking: "Checking for updates...",
+	UpdateUpToDate: func(version string) string {
+		return fmt.Sprintf("PureSend is up to date (%s).", version)
+	},
+	UpdateFound: func(latest, current string) string {
+		return fmt.Sprintf("A new version is available: %s (you have %s)", latest, current)
+	},
+	UpdateNoBinary: func(platform string) string {
+		return fmt.Sprintf("There is no ready-made binary for your system (%s).", platform)
+	},
+	UpdateManaged: func(path string) string {
+		return fmt.Sprintf("This copy was installed by a package manager (%s), so updating it is the package manager's job.\n"+
+			"Install the new .deb package, or update it through your AUR helper.", path)
+	},
+	UpdateGetItAt: func(url string) string {
+		return fmt.Sprintf("You can download the new version here:\n  %s", url)
+	},
+	UpdateDownloading: func(name string) string {
+		return fmt.Sprintf("Downloading %s...", name)
+	},
+	UpdateVerified: "Integrity verified.",
+	UpdateDone: func(tag string) string {
+		return fmt.Sprintf("PureSend was updated to %s!", tag)
+	},
+	UpdateFailed: "Update failed",
 
 	Goodbye: "Goodbye!",
 }

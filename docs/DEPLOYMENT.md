@@ -241,7 +241,7 @@ minisign -G -W -p puresend.pub -s puresend.key
 
 1. **Settings → Secrets and variables → Actions → Secrets:** `MINISIGN_SECRET_KEY` = `puresend.key` dosyasının tamamı.
 2. **Settings → Secrets and variables → Actions → Variables:** `FT_UPDATE_KEY` = `puresend.pub` dosyasının **ikinci satırı** (`RW...` ile başlar).
-3. Aynı `RW...` satırını `install.sh` içindeki `PUBKEY=""` değerine yazın.
+3. Aynı `RW...` satırını `install.sh` içindeki `PUBKEY=""` ve `install.ps1` içindeki `$pubKey = ""` değerlerine yazın. İki betik de imzayı yalnızca makinede `minisign` kuruluysa denetler; SHA-256 denetimi her durumda yapılır.
 4. `puresend.key` dosyasını parola yöneticinizde ya da çevrimdışı bir yerde saklayın ve depoya koymayın (`.gitignore` `*.key` dosyalarını zaten dışarıda tutar).
 
 Bundan sonra her yayın `checksums.txt.minisig` dosyasını da içerir ve istemcilere `FT_UPDATE_KEY` gömülür. İş akışı, iki değerden yalnızca biri ayarlıysa ya da gizli anahtar açık anahtarla eşleşmiyorsa hiçbir şey derlemeden durur; eşleşmeyen bir anahtarla çıkan istemciler bir daha kendiliğinden güncellenemezdi.
@@ -254,3 +254,9 @@ Bir sürümü elle doğrulamak için:
 minisign -Vm checksums.txt -P RW...
 sha256sum --ignore-missing -c checksums.txt
 ```
+
+### 6.3 Sunucu adresi ve `server.txt`
+
+Her istemciye buluşma noktasının adresi, Peer ID'siyle birlikte gömülür: `FT_SERVER` depo değişkeni ayarlıysa o, değilse `release.yml` içindeki varsayılan. Adres yanlışsa bu, ancak insanlar dosyaları indirdikten sonra fark edilir. Bu yüzden iş akışı, gömeceği adresin `FT_SERVER_LIST` (varsayılan `https://puresend.madebybaki.com/server.txt`) içinde listelendiğini denetler ve listede yoksa hiçbir şey derlemeden durur. İkisi uyuşmuyorsa biri eskimiştir; çoğu zaman sunucu anahtarı değiştikten sonra güncellenmemiş varsayılan. Liste o an indirilemezse iş akışı yalnızca uyarı verip devam eder.
+
+Sunucu anahtarı değiştiğinde (bkz. 5.3) sıra şudur: önce `server.txt`'e yeni adres eklenir; eski sürümler gömülü adrese ulaşamayınca oraya bakar. Sonra `FT_SERVER` değişkeni ya da iş akışındaki varsayılan güncellenir, en son yeni sürüm etiketlenir.

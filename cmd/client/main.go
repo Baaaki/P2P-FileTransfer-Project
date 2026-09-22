@@ -69,9 +69,15 @@ func main() {
 	)
 	flag.Parse()
 
+	userLang := *flagLang
+	if userLang == "" || userLang == "auto" {
+		userLang = string(i18n.DetectOS())
+	}
+
 	if *doUpdate {
-		if err := update.Apply(version, os.Stdout); err != nil {
-			fmt.Fprintf(os.Stderr, "Güncelleme hatası: %v\n", err)
+		lang := i18n.Normalize(userLang)
+		if err := update.Apply(version, lang, os.Stdout); err != nil {
+			fmt.Fprintf(os.Stderr, "%s: %v\n", i18n.Get(lang).UpdateFailed, err)
 			os.Exit(1)
 		}
 		return
@@ -89,11 +95,6 @@ func main() {
 			fmt.Printf("  list:    %s\n", defaultServerList)
 		}
 		return
-	}
-
-	userLang := *flagLang
-	if userLang == "" || userLang == "auto" {
-		userLang = string(i18n.DetectOS())
 	}
 
 	servers := p2p.SplitServers(*server)

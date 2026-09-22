@@ -6,8 +6,56 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [2.0.1] - 2026-09-23
+
+### Security
+
+- **A refused transfer no longer tells the sender where the receiver saves
+  files.** A failure to write to disk was passed on word for word, local
+  path included — and with it, on most machines, the account name. The
+  sender now hears the reason ("no space left on device"), not the path.
+- **The server never replaces an identity key it cannot read.** Any read
+  error other than a missing file used to mean "generate a new key", which
+  on a file that could still be written changed the peer ID and stranded
+  every client already released. It is now a reason to stop, and a new key
+  is only ever written to a file that does not exist yet.
+- `install.ps1` checks the release signature when minisign is installed,
+  as `install.sh` already did. Neither does until signing is set up
+  (`docs/DEPLOYMENT.md`).
+
 ### Fixed
 
+- **The security policy no longer says the relay hides IP addresses.** A
+  waiting sender's public and local addresses go to anyone who looks up its
+  nameplate, and libp2p's identify protocol shares them over a relayed
+  connection too. `SECURITY.md` now says so.
+- **Release notes come from this changelog.** `.goreleaser.yaml` carried
+  the 2.0.0 notes as a fixed header that every later release would have
+  repeated, with claims the code does not bear out: that the server's
+  ability to impersonate a peer was gone entirely (it is down to 3 guesses
+  in 65,536 per room), that the room table has no cap (it has,
+  `-max-rooms`), and that `install.ps1` checks signatures. The release
+  workflow now publishes the version's section of this file and refuses a
+  tag that has none.
+- **The release workflow checks the server address it bakes in.** The step
+  named "Check the server address is configured" only printed it. It now
+  refuses to build when the address is missing from the published
+  `server.txt`, which is how a default left behind after a key change
+  would show. The tests in that job no longer see the production address.
+- The installers no longer fall back to a hard-coded `v2.0.0` when the
+  GitHub API does not answer — the next release would have quietly
+  installed an old one. They ask the `/releases/latest` redirect instead,
+  and stop if that fails too.
+- `puresend -update` speaks the user's language instead of always Turkish,
+  and leaves a copy installed by the `.deb` or the AUR package to that
+  package manager instead of replacing a file it owns.
+- The AUR `PKGBUILD` downloads the versioned release archive from GitHub,
+  checked against the same digest as `checksums.txt`, instead of an
+  unversioned binary on the website that was still 1.0.0.
+- A sender connected through the relay is no longer told the relay's limit
+  is "0 B"; only the receiver learns the limit.
+- The 2.0.0 notes below said room scaling removed the cap on concurrent
+  rooms; it did not.
 - **Notices follow the language switch.** The wrong-code warning, the
   "attempt was interrupted" notice and the update banner were stored as
   finished sentences, so a sender who pressed `[L]` kept reading them in the
@@ -33,6 +81,7 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   flag handling and headless mode show up in coverage (72% → 77% overall).
   CI reports the same number.
 - A test that every message exists in both languages.
+- The folder picker warns immediately on screen when [s] is pressed on a forbidden destination (such as the home folder itself or drive root), instead of waiting for a transfer to fail.
 
 ### Changed
 
@@ -102,9 +151,9 @@ servers from 1.0.0 cannot talk to this version.
 
 ### Changed
 
-- **Dynamic room scaling.** Room nameplates scale dynamically to longer
-  numbers as the table fills (starting at 2 digits), removing any arbitrary
-  cap on concurrent rooms while keeping codes short under light load.
+- **Dynamic room scaling.** Room nameplates start at two digits and move
+  to longer numbers as the table fills, so codes stay short under light
+  load. The table itself is still capped (`-max-rooms`, 1000 by default).
 
 ### Fixed
 

@@ -210,7 +210,11 @@ func checkNoLinks(outDir, target string) error {
 			return err
 		}
 		if st.Mode()&fs.ModeSymlink != 0 {
-			return fmt.Errorf("refusing to save %s through the link %s", filepath.Base(target), dir)
+			// Named from the download folder down: the message also goes to
+			// the sender, who has no business learning the rest of the path.
+			link, _ := filepath.Rel(outDir, dir)
+			return fmt.Errorf("refusing to save %s through the link %s in the download folder",
+				filepath.Base(target), filepath.ToSlash(link))
 		}
 	}
 	return nil

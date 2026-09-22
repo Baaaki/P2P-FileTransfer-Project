@@ -268,17 +268,25 @@ func (m Model) pickFilesKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 func (m Model) outDirKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "s", "S":
+		if err := transfer.CheckDestination(m.dirPicker.CurrentDirectory); err != nil {
+			m.outDirErr = i18n.Get(m.lang).OutDirUnsafe
+			return m, nil
+		}
+		m.outDirErr = ""
 		m.outDir = m.dirPicker.CurrentDirectory
 		m.screen = m.backScreen
 	case "esc", "q", "Q":
+		m.outDirErr = ""
 		m.screen = m.backScreen
 	case "backspace", "left":
+		m.outDirErr = ""
 		parent := filepath.Dir(m.dirPicker.CurrentDirectory)
 		if parent != "" && parent != m.dirPicker.CurrentDirectory {
 			m.dirPicker.CurrentDirectory = parent
 			return m, m.dirPicker.Init()
 		}
 	case "up", "down", "pgup", "pgdown", "enter":
+		m.outDirErr = ""
 		var cmd tea.Cmd
 		m.dirPicker, cmd = m.dirPicker.Update(msg)
 		return m, cmd
@@ -352,6 +360,7 @@ func (m Model) finishedKey(key string) (tea.Model, tea.Cmd) {
 func (m Model) openOutDir(back screen) (tea.Model, tea.Cmd) {
 	m.backScreen = back
 	m.screen = screenOutDir
+	m.outDirErr = ""
 	m.dirPicker.CurrentDirectory = m.outDir
 	return m, m.dirPicker.Init()
 }

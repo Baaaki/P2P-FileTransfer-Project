@@ -65,14 +65,23 @@ esac
 
 info "Sistem tespiti: $OS_TAG ($ARCH_TAG)"
 
-# 3. Find latest release tag from GitHub API
+# 3. Find the latest release. The API allows 60 requests an hour per
+# address, which a shared address runs out of, so the redirect behind
+# /releases/latest is asked next. A guessed version is not an option: it
+# would quietly install an old release.
 info "En son surum kontrol ediliyor..."
-RELEASE_JSON=$(curl -s "https://api.github.com/repos/$REPO/releases/latest")
+RELEASE_JSON=$(curl -fsS "https://api.github.com/repos/$REPO/releases/latest" 2>/dev/null) || true
 LATEST_TAG=$(printf "%s" "$RELEASE_JSON" | grep '"tag_name":' | head -n 1 | sed -E 's/.*"tag_name": *"([^"]+)".*/\1/')
 
 if [ -z "$LATEST_TAG" ]; then
-    LATEST_TAG="v2.0.0"
+    LATEST_TAG=$(curl -fsS -o /dev/null -w '%{redirect_url}' "https://github.com/$REPO/releases/latest" 2>/dev/null |
+        sed -n 's#.*/releases/tag/##p') || true
 fi
+
+case "$LATEST_TAG" in
+    v[0-9]*) ;;
+    *) error "En son surum bulunamadi (GitHub'a ulasilamadi ya da istek siniri doldu). Biraz sonra tekrar deneyin." ;;
+esac
 
 VERSION="${LATEST_TAG#v}"
 ARCHIVE_NAME="puresend_${VERSION}_${OS_TAG}_${ARCH_TAG}.tar.gz"

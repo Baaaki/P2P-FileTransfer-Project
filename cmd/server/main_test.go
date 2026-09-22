@@ -1,7 +1,11 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
+	"os"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -106,5 +110,48 @@ func TestMetricsRegister(t *testing.T) {
 		if !strings.Contains(all, want) {
 			t.Errorf("metric %s is missing from %s", want, all)
 		}
+	}
+}
+
+// TestUnreadableKeyIsNotReplaced: the key decides the peer ID every
+// released client dials. A key file that is there but cannot be read has to
+// stop the server, not be swapped for a new key — which is what any read
+// error other than "no such file" used to do.
+func TestUnreadableKeyIsNotReplaced(t *testing.T) {
+	if runtime.GOOS == "windows" || os.Geteuid() == 0 {
+		t.Skip("needs file permissions that bind the file's owner")
+	}
+	t.Setenv("FT_IDENTITY_KEY", "")
+	path := filepath.Join(t.TempDir(), "server.key")
+
+	priv, _, err := loadOrCreateKey(path)
+	if err != nil {
+		t.Fatalf("first start: %v", err)
+	}
+	original, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Write-only: a read fails where an overwrite would still succeed.
+	if err := os.Chmod(path, 0o200); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := loadOrCreateKey(path); err == nil {
+		t.Error("an unreadable key file was taken as a reason to make a new key")
+	}
+	if err := os.Chmod(path, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if after, _ := os.ReadFile(path); !bytes.Equal(after, original) {
+		t.Fatal("the key file was replaced")
+	}
+
+	again, _, err := loadOrCreateKey(path)
+	if err != nil {
+		t.Fatalf("second start: %v", err)
+	}
+	if !again.Equals(priv) {
+		t.Error("the second start came up with a different identity")
 	}
 }

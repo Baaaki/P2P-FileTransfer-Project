@@ -9,7 +9,10 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
+
+	"puresend/internal/i18n"
 )
 
 func TestIsNewer(t *testing.T) {
@@ -164,13 +167,36 @@ func TestApplyUpToDate(t *testing.T) {
 	endpointURL = srv.URL
 	defer func() { endpointURL = origEndpoint }()
 
-	var buf bytes.Buffer
-	err := Apply("v0.2.0", &buf)
-	if err != nil {
-		t.Fatalf("Apply: %v", err)
+	// It answers in the language it is asked in.
+	for lang, want := range map[i18n.Lang]string{i18n.TR: "zaten güncel", i18n.EN: "is up to date"} {
+		var buf bytes.Buffer
+		if err := Apply("v0.2.0", lang, &buf); err != nil {
+			t.Fatalf("Apply(%s): %v", lang, err)
+		}
+		if !strings.Contains(buf.String(), want) {
+			t.Errorf("Apply(%s) said %q, want it to contain %q", lang, buf.String(), want)
+		}
 	}
-	if !bytes.Contains(buf.Bytes(), []byte("zaten güncel")) {
-		t.Errorf("Expected 'zaten güncel' message, got: %s", buf.String())
+}
+
+// TestManagedByPackage: the .deb and the AUR package own /usr/bin. What
+// install.sh installs, into /usr/local/bin or ~/.local/bin, updates itself.
+func TestManagedByPackage(t *testing.T) {
+	for _, tc := range []struct {
+		goos, exe string
+		want      bool
+	}{
+		{"linux", "/usr/bin/puresend", true},
+		{"linux", "/bin/puresend", true},
+		{"linux", "/usr/local/bin/puresend", false},
+		{"linux", "/home/ali/.local/bin/puresend", false},
+		{"linux", "/opt/puresend/puresend", false},
+		{"darwin", "/usr/bin/puresend", false},
+		{"windows", `C:\Users\ali\AppData\Local\PureSend\puresend.exe`, false},
+	} {
+		if got := managedByPackage(tc.goos, tc.exe); got != tc.want {
+			t.Errorf("managedByPackage(%s, %s) = %v, want %v", tc.goos, tc.exe, got, tc.want)
+		}
 	}
 }
 

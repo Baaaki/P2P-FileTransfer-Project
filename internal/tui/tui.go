@@ -117,6 +117,7 @@ type Model struct {
 
 	// choosing the download folder
 	dirPicker  filepicker.Model
+	outDirErr  string
 	backScreen screen
 
 	// transfer state

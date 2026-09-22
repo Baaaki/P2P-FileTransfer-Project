@@ -133,6 +133,9 @@ func (m Model) viewOutDir() string {
 	b.WriteString(helpStyle.Render(t.OutDirHelp3) + "\n\n")
 	b.WriteString(bodyStyle.Render(t.OutDirCurrent) + "\n")
 	b.WriteString(fileStyle.Render(m.dirPicker.CurrentDirectory) + "\n\n")
+	if m.outDirErr != "" {
+		b.WriteString(warnStyle.Render("! "+m.outDirErr) + "\n\n")
+	}
 	b.WriteString(m.dirPicker.View() + "\n")
 	b.WriteString(buttonSelStyle.Render(t.OutDirSelectBtn(filepath.Base(m.dirPicker.CurrentDirectory))) + "\n\n")
 	b.WriteString(formatFooter(t.OutDirFooter))
