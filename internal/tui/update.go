@@ -32,9 +32,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tea.KeyMsg:
 		if msg.Type == tea.KeyCtrlC {
-			m.quitted = true
-			m.cancel()
-			return m, tea.Quit
+			return m.quit()
 		}
 		return m.handleKey(msg)
 
@@ -176,181 +174,190 @@ func (m Model) handleEvent(ev p2p.Event) (tea.Model, tea.Cmd) {
 
 // handleKey routes a keypress to the active screen.
 func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	switch m.screen {
-
-	case screenWelcome:
-		switch msg.String() {
-		case "up":
-			m.menuIndex = max(m.menuIndex-1, 0)
-		case "down":
-			m.menuIndex = min(m.menuIndex+1, 2)
-		case "l", "L":
-			m.lang = i18n.Toggle(m.lang)
-			m.codeInput.Placeholder = i18n.Get(m.lang).EnterPlaceholder
-			return m, nil
-		case "enter":
-			switch m.menuIndex {
-			case 0:
-				m.mode = modeSend
-			case 1:
-				m.mode = modeReceive
-			default:
-				// Changing the download folder needs no network at all.
-				m.backScreen = screenWelcome
-				m.screen = screenOutDir
-				m.dirPicker.CurrentDirectory = m.outDir
-				return m, m.dirPicker.Init()
-			}
-			m.screen = screenConnecting
-			return m, connectCmd(m.ctx, m.servers, m.serverList, m.stunServers)
-		case "q", "Q":
-			m.quitted = true
-			m.cancel()
-			return m, tea.Quit
-		default:
-			return m, nil
-		}
-
-	case screenPickFiles:
-		switch msg.String() {
-		case "esc":
-			m.screen = screenWelcome
-			m.picked = nil
-			return m, nil
-		case "l", "L":
-			m.lang = i18n.Toggle(m.lang)
-			return m, nil
-		case "s", "S":
-			if len(m.picked) > 0 {
-				m.screen = screenConnecting
-				return m, hostCmd(m.ctx, m.node, m.picked)
-			}
-			return m, nil
-		case "f", "F":
-			m.addPath(m.picker.CurrentDirectory)
-			return m, nil
-		case "x", "X":
-			if len(m.picked) > 0 {
-				m.picked = m.picked[:len(m.picked)-1]
-			}
-			return m, nil
-		case "up", "down", "pgup", "pgdown", "enter", "backspace", "left":
-			var cmd tea.Cmd
-			m.picker, cmd = m.picker.Update(msg)
-			if ok, path := m.picker.DidSelectFile(msg); ok {
-				m.addPath(path)
-			}
-			return m, cmd
-		default:
-			// Non-technical user protection: Ignore any other key
-			return m, nil
-		}
-
-	case screenOutDir:
-		switch msg.String() {
-		case "s", "S":
-			m.outDir = m.dirPicker.CurrentDirectory
-			m.screen = m.backScreen
-			return m, nil
-		case "esc", "q", "Q":
-			m.screen = m.backScreen
-			return m, nil
-		case "l", "L":
-			m.lang = i18n.Toggle(m.lang)
-			return m, nil
-		case "backspace", "left":
-			parent := filepath.Dir(m.dirPicker.CurrentDirectory)
-			if parent != "" && parent != m.dirPicker.CurrentDirectory {
-				m.dirPicker.CurrentDirectory = parent
-				return m, m.dirPicker.Init()
-			}
-			return m, nil
-		case "up", "down", "pgup", "pgdown", "enter":
-			var cmd tea.Cmd
-			m.dirPicker, cmd = m.dirPicker.Update(msg)
-			return m, cmd
-		default:
-			// Ignore any other key
-			return m, nil
-		}
-
-	case screenWaiting:
-		switch msg.String() {
-		case "l", "L":
-			m.lang = i18n.Toggle(m.lang)
-		}
+	key := msg.String()
+	if (key == "l" || key == "L") && m.screen.switchesLanguage() {
+		m.lang = i18n.Toggle(m.lang)
+		m.codeInput.Placeholder = i18n.Get(m.lang).EnterPlaceholder
 		return m, nil
+	}
 
+	switch m.screen {
+	case screenWelcome:
+		return m.welcomeKey(key)
+	case screenPickFiles:
+		return m.pickFilesKey(msg)
+	case screenOutDir:
+		return m.outDirKey(msg)
 	case screenEnterCode:
-		switch msg.String() {
-		case "esc":
-			m.screen = screenWelcome
-			m.codeInput.Reset()
-			m.codeErr = ""
-			return m, nil
-		case "enter":
-			if strings.TrimSpace(m.codeInput.Value()) == "" {
-				return m, nil
-			}
-			// Check the code here, before the server sees it: a typo caught
-			// now costs nothing, one caught by the server costs one of the
-			// few tries it allows.
-			code, err := p2p.CheckCode(m.codeInput.Value())
-			if err != nil {
-				m.codeErr = codeProblem(err, m.lang)
-				return m, nil
-			}
-			m.codeInput.SetValue(code)
-			m.codeErr = ""
-			m.screen = screenFinding
-			m.status = "arkadaşın aranıyor"
-			// The event reader is already running; only start the fetch.
-			return m, fetchCmd(m.ctx, m.node, code, m.outDir)
-		case "ctrl+o":
-			m.backScreen = screenEnterCode
-			m.screen = screenOutDir
-			m.dirPicker.CurrentDirectory = m.outDir
-			return m, m.dirPicker.Init()
-		}
-		var cmd tea.Cmd
-		m.codeInput, cmd = m.codeInput.Update(msg)
-		m.codeErr = ""
-		return m, cmd
-
+		return m.enterCodeKey(msg)
 	case screenConfirm:
-		switch msg.String() {
-		case "left", "right":
-			m.confirmIndex = 1 - m.confirmIndex
-		case "l", "L":
-			m.lang = i18n.Toggle(m.lang)
-			return m, nil
-		case "y", "Y":
-			m.confirmIndex = 0
-			return m.answerConfirm(true)
-		case "n", "N":
-			return m.answerConfirm(false)
-		case "enter":
-			return m.answerConfirm(m.confirmIndex == 0)
-		default:
-			return m, nil
-		}
-
+		return m.confirmKey(key)
 	case screenDone, screenError:
-		switch msg.String() {
-		case "enter":
-			return m.reset(), nil
-		case "l", "L":
-			m.lang = i18n.Toggle(m.lang)
-			return m, nil
-		case "q", "Q":
-			m.quitted = true
-			m.cancel()
-			return m, tea.Quit
+		return m.finishedKey(key)
+	}
+	// The rest only show progress; Ctrl+C, handled in Update, is the one
+	// key they answer to.
+	return m, nil
+}
+
+// switchesLanguage reports whether [L] changes the language on s. On the
+// code entry screen it is a letter of the code, and the screens that only
+// show progress take no keys at all.
+func (s screen) switchesLanguage() bool {
+	switch s {
+	case screenWelcome, screenPickFiles, screenOutDir, screenWaiting,
+		screenConfirm, screenDone, screenError:
+		return true
+	}
+	return false
+}
+
+func (m Model) welcomeKey(key string) (tea.Model, tea.Cmd) {
+	switch key {
+	case "up":
+		m.menuIndex = max(m.menuIndex-1, 0)
+	case "down":
+		m.menuIndex = min(m.menuIndex+1, 2)
+	case "enter":
+		switch m.menuIndex {
+		case 0:
+			m.mode = modeSend
+		case 1:
+			m.mode = modeReceive
 		default:
-			return m, nil
+			// Changing the download folder needs no network at all.
+			return m.openOutDir(screenWelcome)
 		}
+		m.screen = screenConnecting
+		return m, connectCmd(m.ctx, m.servers, m.serverList, m.stunServers)
+	case "q", "Q":
+		return m.quit()
 	}
 	return m, nil
+}
+
+func (m Model) pickFilesKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "esc":
+		m.screen = screenWelcome
+		m.picked = nil
+	case "s", "S":
+		if len(m.picked) > 0 {
+			m.screen = screenConnecting
+			return m, hostCmd(m.ctx, m.node, m.picked)
+		}
+	case "f", "F":
+		m.addPath(m.picker.CurrentDirectory)
+	case "x", "X":
+		if len(m.picked) > 0 {
+			m.picked = m.picked[:len(m.picked)-1]
+		}
+	case "up", "down", "pgup", "pgdown", "enter", "backspace", "left":
+		var cmd tea.Cmd
+		m.picker, cmd = m.picker.Update(msg)
+		if ok, path := m.picker.DidSelectFile(msg); ok {
+			m.addPath(path)
+		}
+		return m, cmd
+	}
+	// Any other key is ignored rather than handed to the picker, whose
+	// defaults include vim bindings a non-technical user would trip over.
+	return m, nil
+}
+
+func (m Model) outDirKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "s", "S":
+		m.outDir = m.dirPicker.CurrentDirectory
+		m.screen = m.backScreen
+	case "esc", "q", "Q":
+		m.screen = m.backScreen
+	case "backspace", "left":
+		parent := filepath.Dir(m.dirPicker.CurrentDirectory)
+		if parent != "" && parent != m.dirPicker.CurrentDirectory {
+			m.dirPicker.CurrentDirectory = parent
+			return m, m.dirPicker.Init()
+		}
+	case "up", "down", "pgup", "pgdown", "enter":
+		var cmd tea.Cmd
+		m.dirPicker, cmd = m.dirPicker.Update(msg)
+		return m, cmd
+	}
+	return m, nil
+}
+
+func (m Model) enterCodeKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "esc":
+		m.screen = screenWelcome
+		m.codeInput.Reset()
+		m.codeErr = ""
+		return m, nil
+	case "enter":
+		if strings.TrimSpace(m.codeInput.Value()) == "" {
+			return m, nil
+		}
+		// Check the code here, before the server sees it: a typo caught
+		// now costs nothing, one caught by the server costs one of the
+		// few tries it allows.
+		code, err := p2p.CheckCode(m.codeInput.Value())
+		if err != nil {
+			m.codeErr = codeProblem(err, m.lang)
+			return m, nil
+		}
+		m.codeInput.SetValue(code)
+		m.codeErr = ""
+		m.screen = screenFinding
+		m.status = "arkadaşın aranıyor"
+		// The event reader is already running; only start the fetch.
+		return m, fetchCmd(m.ctx, m.node, code, m.outDir)
+	case "ctrl+o":
+		return m.openOutDir(screenEnterCode)
+	}
+	var cmd tea.Cmd
+	m.codeInput, cmd = m.codeInput.Update(msg)
+	m.codeErr = ""
+	return m, cmd
+}
+
+func (m Model) confirmKey(key string) (tea.Model, tea.Cmd) {
+	switch key {
+	case "left", "right":
+		m.confirmIndex = 1 - m.confirmIndex
+	case "y", "Y":
+		m.confirmIndex = 0
+		return m.answerConfirm(true)
+	case "n", "N":
+		return m.answerConfirm(false)
+	case "enter":
+		return m.answerConfirm(m.confirmIndex == 0)
+	}
+	return m, nil
+}
+
+// finishedKey handles the done and error screens.
+func (m Model) finishedKey(key string) (tea.Model, tea.Cmd) {
+	switch key {
+	case "enter":
+		return m.reset(), nil
+	case "q", "Q":
+		return m.quit()
+	}
+	return m, nil
+}
+
+// openOutDir shows the folder picker, returning to back when it closes.
+func (m Model) openOutDir(back screen) (tea.Model, tea.Cmd) {
+	m.backScreen = back
+	m.screen = screenOutDir
+	m.dirPicker.CurrentDirectory = m.outDir
+	return m, m.dirPicker.Init()
+}
+
+func (m Model) quit() (tea.Model, tea.Cmd) {
+	m.quitted = true
+	m.cancel()
+	return m, tea.Quit
 }
 
 // beginMode opens the first screen of the chosen mode, once the node is
