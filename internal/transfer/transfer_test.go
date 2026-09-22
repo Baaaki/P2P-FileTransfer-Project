@@ -423,6 +423,10 @@ func TestUnsafePaths(t *testing.T) {
 		"",
 		".",
 		partialDir + "/evil.txt",
+		// The same folder on the case-insensitive filesystems macOS and
+		// Windows use by default.
+		strings.ToUpper(partialDir) + "/evil.txt",
+		".PureSend-Partial/evil.txt",
 	} {
 		t.Run(name, func(t *testing.T) {
 			outDir := t.TempDir()
@@ -511,7 +515,7 @@ func TestReceiveFileDataWithEOF(t *testing.T) {
 	info := FileInfo{Path: "f.txt", Size: int64(len(payload)), SHA256: hex.EncodeToString(sum[:])}
 
 	p := partial{path: filepath.Join(outDir, "f.txt.part"), hasher: sha256.New()}
-	path, err := receiveFile(&eagerEOFReader{data: payload}, deadlines{}, filepath.Join(outDir, "f.txt"), info, p, nil, false)
+	path, err := receiveFile(&eagerEOFReader{data: payload}, deadlines{}, outDir, filepath.Join(outDir, "f.txt"), info, p, nil, false)
 	if err != nil {
 		t.Fatalf("receiveFile: %v", err)
 	}

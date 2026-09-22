@@ -6,6 +6,8 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -26,6 +28,24 @@ const (
 
 // Endpoint URL can be overridden in tests.
 var endpointURL = fmt.Sprintf("https://api.github.com/repos/%s/releases/latest", defaultRepo)
+
+// publicKey is the minisign key a release's checksums.txt must be signed
+// with, baked in at build time:
+//
+//	-ldflags "-X puresend/internal/update.publicKey=RWT..."
+//
+// Empty — a build from source, or a release made before signing was set
+// up — still requires and checks the checksums, just not their signature.
+// See minisign.go.
+var publicKey = ""
+
+// Bounds on what an update downloads, so a hostile or broken server cannot
+// make it hold an endless response in memory.
+const (
+	maxChecksumBytes  = 64 << 10
+	maxSignatureBytes = 4 << 10
+	maxArchiveBytes   = 256 << 20
+)
 
 // ReleaseInfo holds the details of a GitHub release.
 type ReleaseInfo struct {
@@ -158,6 +178,9 @@ func FindAsset(assets []Asset, targetOS, targetArch string) *Asset {
 	}
 
 	matchOS := func(name string) bool {
+		// "darwin" ends in "win": without this, the Windows alias would
+		// match a macOS archive named the Go way.
+		name = strings.ReplaceAll(name, "darwin", "macos")
 		for _, alias := range osAliases {
 			if strings.Contains(name, alias) {
 				return true
@@ -272,6 +295,14 @@ func Apply(currentVersion string, stdout io.Writer) error {
 		return nil
 	}
 
+	// Download and check everything before touching the installed binary.
+	fmt.Fprintf(stdout, "%s indiriliyor...\n", asset.Name)
+	archive, err := fetchVerified(ctx, info.Assets, *asset, "puresend/"+currentVersion)
+	if err != nil {
+		return fmt.Errorf("güncelleme doğrulanamadı, hiçbir şey değiştirilmedi: %w", err)
+	}
+	_, _ = fmt.Fprintln(stdout, "Bütünlük doğrulandı.")
+
 	exePath, err := os.Executable()
 	if err != nil {
 		return fmt.Errorf("çalışan dosya konumu belirlenemedi: %w", err)
@@ -292,27 +323,7 @@ func Apply(currentVersion string, stdout io.Writer) error {
 	tmpPath := tmpFile.Name()
 	defer os.Remove(tmpPath)
 
-	fmt.Fprintf(stdout, "%s indiriliyor...\n", asset.Name)
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, asset.BrowserDownloadURL, nil)
-	if err != nil {
-		tmpFile.Close()
-		return err
-	}
-	req.Header.Set("User-Agent", "puresend/"+currentVersion)
-
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		tmpFile.Close()
-		return fmt.Errorf("indirme başarısız: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		tmpFile.Close()
-		return fmt.Errorf("indirme sunucusu hata kodu döndürdü: %d", resp.StatusCode)
-	}
-
-	if err := extractBinary(asset.Name, resp.Body, tmpFile); err != nil {
+	if err := extractBinary(asset.Name, bytes.NewReader(archive), tmpFile); err != nil {
 		tmpFile.Close()
 		return fmt.Errorf("dosya yazılamadı: %w", err)
 	}
@@ -325,17 +336,128 @@ func Apply(currentVersion string, stdout io.Writer) error {
 	}
 
 	if runtime.GOOS == "windows" {
+		// A running .exe cannot be replaced, but it can be renamed out of
+		// the way.
 		oldPath := exePath + ".old"
 		_ = os.Remove(oldPath)
 		if err := os.Rename(exePath, oldPath); err != nil {
 			return fmt.Errorf("eski dosya yeniden adlandırılamadı: %w", err)
 		}
-	}
-
-	if err := os.Rename(tmpPath, exePath); err != nil {
+		if err := os.Rename(tmpPath, exePath); err != nil {
+			// Put the old one back: failing to update must not leave the
+			// user with no program at all.
+			if rerr := os.Rename(oldPath, exePath); rerr != nil {
+				return fmt.Errorf("yeni sürüm yüklenemedi (%w) ve eski sürüm geri konamadı; eski sürüm şurada: %s: %w", err, oldPath, rerr)
+			}
+			return fmt.Errorf("yeni sürüm yüklenemedi, eski sürüm yerinde bırakıldı: %w", err)
+		}
+	} else if err := os.Rename(tmpPath, exePath); err != nil {
 		return fmt.Errorf("yeni sürüm yüklenemedi: %w", err)
 	}
 
 	fmt.Fprintf(stdout, "PureSend başarıyla %s sürümüne güncellendi!\n", info.TagName)
 	return nil
+}
+
+// fetchVerified downloads an asset and returns it only once it matches the
+// digest the release's checksums.txt lists for it — and, in a build that
+// carries a public key, only once checksums.txt is signed with that key.
+// A release without a checksum file, or without a signature where one is
+// expected, is refused rather than installed unchecked.
+func fetchVerified(ctx context.Context, assets []Asset, asset Asset, userAgent string) ([]byte, error) {
+	sumsAsset := assetNamed(assets, "checksums.txt")
+	if sumsAsset == nil {
+		return nil, errors.New("sürüm checksums.txt yayımlamıyor")
+	}
+	sums, err := download(ctx, sumsAsset.BrowserDownloadURL, userAgent, maxChecksumBytes)
+	if err != nil {
+		return nil, fmt.Errorf("checksums.txt indirilemedi: %w", err)
+	}
+
+	if publicKey != "" {
+		key, err := parseMinisignKey(publicKey)
+		if err != nil {
+			return nil, fmt.Errorf("programa gömülü güncelleme anahtarı geçersiz: %w", err)
+		}
+		sigAsset := assetNamed(assets, "checksums.txt.minisig")
+		if sigAsset == nil {
+			return nil, errors.New("sürümün checksums.txt dosyası imzalı değil")
+		}
+		sig, err := download(ctx, sigAsset.BrowserDownloadURL, userAgent, maxSignatureBytes)
+		if err != nil {
+			return nil, fmt.Errorf("imza indirilemedi: %w", err)
+		}
+		if err := verifyMinisign(key, sums, sig); err != nil {
+			return nil, fmt.Errorf("checksums.txt imzası: %w", err)
+		}
+	}
+
+	want, err := checksumFor(sums, asset.Name)
+	if err != nil {
+		return nil, err
+	}
+	data, err := download(ctx, asset.BrowserDownloadURL, userAgent, maxArchiveBytes)
+	if err != nil {
+		return nil, fmt.Errorf("indirme başarısız: %w", err)
+	}
+	got := sha256.Sum256(data)
+	if hex.EncodeToString(got[:]) != want {
+		return nil, fmt.Errorf("%s, checksums.txt'deki özetle eşleşmiyor", asset.Name)
+	}
+	return data, nil
+}
+
+// assetNamed finds a release asset by its exact name.
+func assetNamed(assets []Asset, name string) *Asset {
+	for i := range assets {
+		if assets[i].Name == name {
+			return &assets[i]
+		}
+	}
+	return nil
+}
+
+// checksumFor finds a file's SHA-256 in a checksums.txt ("<hex>  <name>"
+// per line, as sha256sum and GoReleaser write it).
+func checksumFor(sums []byte, name string) (string, error) {
+	for _, line := range strings.Split(string(sums), "\n") {
+		fields := strings.Fields(line)
+		if len(fields) != 2 || strings.TrimPrefix(fields[1], "*") != name {
+			continue
+		}
+		digest := strings.ToLower(fields[0])
+		if len(digest) != 2*sha256.Size {
+			break
+		}
+		if _, err := hex.DecodeString(digest); err != nil {
+			break
+		}
+		return digest, nil
+	}
+	return "", fmt.Errorf("checksums.txt, %s için geçerli bir özet içermiyor", name)
+}
+
+// download fetches a URL into memory, refusing anything over limit bytes.
+func download(ctx context.Context, url, userAgent string, limit int64) ([]byte, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("User-Agent", userAgent)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("sunucu hata kodu döndürdü: %d", resp.StatusCode)
+	}
+	data, err := io.ReadAll(io.LimitReader(resp.Body, limit+1))
+	if err != nil {
+		return nil, err
+	}
+	if int64(len(data)) > limit {
+		return nil, fmt.Errorf("beklenenden büyük (en fazla %d bayt)", limit)
+	}
+	return data, nil
 }

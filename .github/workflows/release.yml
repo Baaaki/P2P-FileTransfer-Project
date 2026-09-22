@@ -11,13 +11,31 @@ jobs:
   release:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      # This job holds a token that can rewrite the repository's releases,
+      # so every action in it is pinned to a commit rather than to a tag its
+      # owner can move. Dependabot keeps the pins current.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           fetch-depth: 0 # GoReleaser needs the full history for the changelog
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
         with:
           go-version-file: go.mod
+
+      # A version, once published, never changes. People, the updater and
+      # the AUR PKGBUILD have checked its files against their digests; a
+      # re-release under the same tag makes every one of those checks lie.
+      # A fix is a new version.
+      - name: Refuse to replace a published release
+        run: |
+          if gh release view "$TAG" --repo "$REPO" >/dev/null 2>&1; then
+            echo "::error::$TAG is already released and releases are never replaced. Tag a new version instead."
+            exit 1
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+          REPO: ${{ github.repository }}
 
       - name: Check the server address is configured
         run: |
@@ -31,18 +49,47 @@ jobs:
           go vet ./...
           go test -race -short -timeout 15m ./...
 
-      - name: Clean existing release if present
-        run: gh release delete "${{ github.ref_name }}" --yes --repo "${{ github.repository }}" || true
+      # Signing checksums.txt with minisign is what lets `puresend -update`
+      # tell that the list of digests came from whoever holds the key, not
+      # merely from whoever can edit the release page. The public half
+      # (FT_UPDATE_KEY) is baked into the clients, which from then on refuse
+      # any release not signed with the secret half — so the two must be set
+      # together, and must belong together. See docs/DEPLOYMENT.md.
+      - name: Prepare release signing
+        id: sign
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          MINISIGN_SECRET_KEY: ${{ secrets.MINISIGN_SECRET_KEY }}
+          FT_UPDATE_KEY: ${{ vars.FT_UPDATE_KEY }}
+        run: |
+          if [ -z "$MINISIGN_SECRET_KEY" ] && [ -z "$FT_UPDATE_KEY" ]; then
+            echo "::warning::This release is not signed. Set the MINISIGN_SECRET_KEY secret and the FT_UPDATE_KEY variable to sign it (docs/DEPLOYMENT.md)."
+            echo "skip=--skip=sign" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [ -z "$MINISIGN_SECRET_KEY" ] || [ -z "$FT_UPDATE_KEY" ]; then
+            echo "::error::MINISIGN_SECRET_KEY and FT_UPDATE_KEY must be set together."
+            exit 1
+          fi
+          sudo apt-get update -qq && sudo apt-get install -y -qq minisign
+          umask 077
+          printf '%s\n' "$MINISIGN_SECRET_KEY" > "$RUNNER_TEMP/minisign.key"
+          # Clients built with a key that does not match the signer could
+          # never update again. Prove the pair before anything is built.
+          echo probe > "$RUNNER_TEMP/probe"
+          minisign -S -s "$RUNNER_TEMP/minisign.key" -m "$RUNNER_TEMP/probe" </dev/null
+          minisign -V -P "$FT_UPDATE_KEY" -m "$RUNNER_TEMP/probe"
+          echo "MINISIGN_KEY_FILE=$RUNNER_TEMP/minisign.key" >> "$GITHUB_ENV"
+          echo "skip=" >> "$GITHUB_OUTPUT"
 
-      - uses: goreleaser/goreleaser-action@v6
+      - uses: goreleaser/goreleaser-action@e435ccd777264be153ace6237001ef4d979d3a7a # v6.4.0
         with:
-          version: "~> v2"
-          args: release --clean
+          # An exact version, for the same reason the actions are pinned.
+          version: "v2.18.2"
+          args: release --clean ${{ steps.sign.outputs.skip }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           FT_SERVER: ${{ vars.FT_SERVER || '/dns4/rendezvous.madebybaki.com/tcp/443/tls/ws/p2p/12D3KooWJdXaT1FN4UGLCrrTpdqvpo7cqrJZK6tHvbUPQbJ6APtK' }}
           # Where copies of the client look when the server has moved.
           # Set the FT_SERVER_LIST variable to override the landing page.
           FT_SERVER_LIST: ${{ vars.FT_SERVER_LIST || 'https://puresend.madebybaki.com/server.txt' }}
+          FT_UPDATE_KEY: ${{ vars.FT_UPDATE_KEY }}

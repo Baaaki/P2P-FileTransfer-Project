@@ -48,7 +48,7 @@ func startWSServer(t *testing.T, priv crypto.PrivKey, listen string) (host.Host,
 		h   host.Host
 		err error
 	)
-	for i := 0; i < 50; i++ {
+	for i := 0; i < 200; i++ {
 		h, err = libp2p.New(opts...)
 		if err == nil {
 			break

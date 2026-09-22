@@ -2,12 +2,14 @@
 // peers find each other through a shared server.
 //
 // The flow:
-//  1. The sender connects to the server and registers its addresses
-//     under a room code.
-//  2. The receiver asks the server for the same room code and gets the
+//  1. The sender connects to the server and registers its addresses. The
+//     server hands back a nameplate, the number at the end of the room
+//     code; the sender puts its own secret words in front of it.
+//  2. The receiver asks the server for that nameplate and gets the
 //     sender's addresses back.
 //  3. From that point on the server is out of the picture; the receiver
-//     connects to the sender directly.
+//     connects to the sender directly, and the two prove to each other
+//     that they hold the whole code.
 //  4. When the transfer is over the sender drops the room, so the code
 //     stops working immediately instead of lingering until it expires.
 //
@@ -15,9 +17,9 @@
 // Request, the server replies with one Response, and the stream closes.
 //
 // The server is not a trusted party. It learns which peers are talking and
-// when, but it cannot read a transfer, and — since the transfer protocol
-// makes both ends prove they hold the room code — it cannot substitute a
-// peer of its own for the sender either.
+// when, but it never sees the secret words of a code, so it cannot read a
+// transfer, and it cannot put a peer of its own in the sender's place — or
+// in the receiver's — without guessing them. See code.go.
 package rendezvous
 
 import (
@@ -25,6 +27,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	mrand "math/rand/v2"
+	"strconv"
 	"sync"
 	"time"
 
@@ -39,7 +43,9 @@ import (
 // ProtocolID identifies the rendezvous protocol on libp2p.
 //
 //	1.1.0 added "unregister" and the relay limit in a lookup response.
-const ProtocolID = "/puresend/rendezvous/1.1.0"
+//	2.0.0 finds rooms by a nameplate the server hands out, instead of by
+//	      the whole room code, so the server never learns the secret half.
+const ProtocolID = "/puresend/rendezvous/2.0.0"
 
 // RoomTTL is how long a code lasts at most. The sender normally drops its
 // room as soon as the transfer finishes; this is the backstop for the
@@ -58,10 +64,6 @@ const MaxRooms = 1000
 // for free when filling the table.
 const DefaultMaxRoomsPerPeer = 1
 
-// DefaultRegisterBudget is how many new rooms the whole server opens per
-// minute. Refreshing a room one already holds does not count.
-const DefaultRegisterBudget = 120
-
 // ownerGrace is how long a room outlives its owner's connection to the
 // server. A room is only reachable while its owner is connected — the
 // relay needs that connection — so a room whose owner has gone is kept
@@ -69,36 +71,35 @@ const DefaultRegisterBudget = 120
 // a slot in the table for the rest of its hour.
 const ownerGrace = 1 * time.Minute
 
-// Guessing codes is the one attack the server can slow down. Two limits:
+// Nameplates are public, so a lookup no longer tests a guess at anything:
+// it says where a room is, which the nameplate never hid. What is worth
+// slowing down is walking them. Every room found is one a stranger can
+// knock on, and since a sender closes its room after a few wrong codes, a
+// stranger who knocks on every room can close them all. Two limits:
 //
-//   - Per peer: after maxFailedLookups misses within lookupFailWindow, a
-//     peer gets nothing more — hit or miss — until the window expires.
-//   - Server-wide: once maxGlobalFailedLookups misses have piled up within
-//     globalFailWindow, the server is "under pressure", and during that
-//     time a peer that has already missed once gets nothing more.
+//   - Per peer: maxLookups lookups, found or not, within lookupWindow.
+//   - Server-wide: once maxGlobalMisses lookups for nameplates nobody holds
+//     have piled up within the window, the server is "under pressure", and
+//     during that time a peer that has already looked once gets nothing
+//     more. Walking a sparse range is mostly misses, so that is what gives
+//     a walk away.
 //
-// The per-peer limit alone is soft: a client generates a fresh identity
-// on every start, so an attacker willing to reconnect can reset it. Rate
+// Both are soft: a client mints a fresh identity on every start. Rate
 // limiting by IP would be the obvious fix, but this server runs behind a
 // tunnel, where every client arrives from the same address — an IP limit
-// is the tunnel's job (see the README), not this server's.
+// is the tunnel's job (see docs/DEPLOYMENT.md), not this server's. What the
+// limits here do is make every few lookups cost a new connection, which is
+// what the tunnel counts.
 //
-// The server-wide limit used to refuse *everyone* once the budget was
-// spent, which made it a switch anyone could flip: a few random lookups a
-// second closed the door on every real user. Now it only takes away
-// second chances. Someone typing the code they were given, first time, is
-// never refused; a guesser gets one guess per identity, so every guess
-// costs a new connection.
-//
-// What must not happen is the other obvious fix, "answer hits, count only
-// misses": then a throttled guesser still learns which guesses hit — "not
-// found" and "try later" both mean miss — and the limit protects nothing.
-// Every refusal here is decided before the room is looked at.
+// Neither may become a switch that shuts real users out. An earlier
+// version refused *everyone* once a server-wide budget was spent, and a
+// few random requests a second then closed the door on every real user.
+// Someone typing the code they were given gets their first lookup
+// answered, however much else is going on.
 const (
-	lookupFailWindow       = 1 * time.Minute
-	maxFailedLookups       = 5
-	globalFailWindow       = 1 * time.Minute
-	maxGlobalFailedLookups = 200
+	lookupWindow    = 1 * time.Minute
+	maxLookups      = 5
+	maxGlobalMisses = 200
 )
 
 // Bounds on a single protocol message, so a malicious client cannot
@@ -122,17 +123,24 @@ const (
 
 // Request is the message sent from client to server.
 type Request struct {
-	Type  string   `json:"type"`            // "register", "lookup" or "unregister"
-	Room  string   `json:"room"`            // room code, e.g. "kiraz-liman-42"
+	Type string `json:"type"` // "register", "lookup" or "unregister"
+
+	// Nameplate names the room, e.g. "42" for the code "kiraz-liman-42".
+	// A register without one asks the server for a new room; with one, it
+	// refreshes a room the sender holds, or takes that nameplate back after
+	// the server has forgotten it.
+	Nameplate string `json:"nameplate,omitempty"`
+
 	Addrs []string `json:"addrs,omitempty"` // register: the sender's multiaddrs
 }
 
 // Response is the server's reply.
 type Response struct {
-	Type   string   `json:"type"` // "ok", "found", "not_found" or "error"
-	PeerID string   `json:"peer_id,omitempty"`
-	Addrs  []string `json:"addrs,omitempty"`
-	Error  string   `json:"error,omitempty"`
+	Type      string   `json:"type"`                // "ok", "found", "not_found" or "error"
+	Nameplate string   `json:"nameplate,omitempty"` // register: the room's nameplate
+	PeerID    string   `json:"peer_id,omitempty"`
+	Addrs     []string `json:"addrs,omitempty"`
+	Error     string   `json:"error,omitempty"`
 
 	// RelayLimit is how many bytes this server will relay for a single
 	// connection, sent with a lookup so the receiver can warn before
@@ -145,36 +153,44 @@ type Response struct {
 // Client side
 // ---------------------------------------------------------------------------
 
-// ErrInUse means someone else already holds the code; a sender simply
-// picks another one.
+// ErrInUse means someone else holds the nameplate a sender asked to have
+// back — after the server forgot its room, say, and handed the number out
+// again. The code built on it is gone.
 var ErrInUse = fmt.Errorf("server rejected registration: %s", msgInUse)
 
-// Register stores the given room code and addresses on the server.
-// The sending side calls this so the receiver can find it.
-func Register(ctx context.Context, h host.Host, server peer.ID, room string, addrs []multiaddr.Multiaddr) error {
+// Register stores the given addresses on the server and returns the room's
+// nameplate. The sending side calls this so the receiver can find it: with
+// an empty nameplate for a new room, and with the one it holds to refresh
+// it after reconnecting.
+func Register(ctx context.Context, h host.Host, server peer.ID, nameplate string, addrs []multiaddr.Multiaddr) (string, error) {
 	addrStrs := make([]string, len(addrs))
 	for i, a := range addrs {
 		addrStrs[i] = a.String()
 	}
 
-	resp, err := roundTrip(ctx, h, server, Request{Type: "register", Room: room, Addrs: addrStrs})
+	resp, err := roundTrip(ctx, h, server, Request{Type: "register", Nameplate: nameplate, Addrs: addrStrs})
 	if err != nil {
-		return err
+		return "", err
 	}
 	if resp.Type != "ok" {
 		if resp.Error == msgInUse {
-			return ErrInUse
+			return "", ErrInUse
 		}
-		return fmt.Errorf("server rejected registration: %s", safetext.Clean(resp.Error, maxServerText))
+		return "", fmt.Errorf("server rejected registration: %s", safetext.Clean(resp.Error, maxServerText))
 	}
-	return nil
+	// The nameplate becomes part of the code on the sender's screen, so it
+	// is held to its shape here rather than trusted.
+	if !ValidNameplate(resp.Nameplate) || (nameplate != "" && resp.Nameplate != nameplate) {
+		return "", fmt.Errorf("server gave an invalid room number")
+	}
+	return resp.Nameplate, nil
 }
 
 // Unregister drops a room the sender owns. Called as soon as a transfer
 // finishes, so the code stops working the moment it has done its job
 // rather than an hour later.
-func Unregister(ctx context.Context, h host.Host, server peer.ID, room string) error {
-	resp, err := roundTrip(ctx, h, server, Request{Type: "unregister", Room: room})
+func Unregister(ctx context.Context, h host.Host, server peer.ID, nameplate string) error {
+	resp, err := roundTrip(ctx, h, server, Request{Type: "unregister", Nameplate: nameplate})
 	if err != nil {
 		return err
 	}
@@ -184,10 +200,12 @@ func Unregister(ctx context.Context, h host.Host, server peer.ID, room string) e
 	return nil
 }
 
-// Lookup asks the server for a room code and returns the registered
-// peer's connection info. The receiving side calls this.
-func Lookup(ctx context.Context, h host.Host, server peer.ID, room string) (*peer.AddrInfo, int64, error) {
-	resp, err := roundTrip(ctx, h, server, Request{Type: "lookup", Room: room})
+// Lookup asks the server for a nameplate and returns the registered peer's
+// connection info. The receiving side calls this. The server's answer is
+// not trusted: the transfer handshake is what proves the peer is the one
+// holding the code.
+func Lookup(ctx context.Context, h host.Host, server peer.ID, nameplate string) (*peer.AddrInfo, int64, error) {
+	resp, err := roundTrip(ctx, h, server, Request{Type: "lookup", Nameplate: nameplate})
 	if err != nil {
 		return nil, 0, err
 	}
@@ -210,7 +228,7 @@ func Lookup(ctx context.Context, h host.Host, server peer.ID, room string) (*pee
 		}
 		return info, resp.RelayLimit, nil
 	case "not_found":
-		return nil, 0, fmt.Errorf("room %q not found — the code may be wrong or expired", room)
+		return nil, 0, fmt.Errorf("room %s not found — the code may be wrong or expired", nameplate)
 	default:
 		return nil, 0, fmt.Errorf("server error: %s", safetext.Clean(resp.Error, maxServerText))
 	}
@@ -266,29 +284,28 @@ func (w window) current(now time.Time, length time.Duration) window {
 // Stats is a snapshot of what the server has been doing, for the health
 // endpoint and the metrics exporter.
 type Stats struct {
-	ActiveRooms       int
-	Registered        uint64 // rooms opened since start
-	Unregistered      uint64 // rooms closed by their owner
-	Expired           uint64 // rooms dropped at the end of their hour
-	Abandoned         uint64 // rooms dropped because their owner disconnected
-	RegisterThrottled uint64 // new rooms refused by the per-minute budget
-	LookupsFound      uint64
-	LookupsNotFound   uint64
-	LookupsThrottled  uint64
-	Rejected          uint64 // requests refused for any other reason
+	ActiveRooms      int
+	Registered       uint64 // rooms opened since start
+	Unregistered     uint64 // rooms closed by their owner
+	Expired          uint64 // rooms dropped at the end of their hour
+	Abandoned        uint64 // rooms dropped because their owner disconnected
+	Evicted          uint64 // abandoned rooms dropped early to make space
+	LookupsFound     uint64
+	LookupsNotFound  uint64
+	LookupsThrottled uint64
+	Rejected         uint64 // requests refused for any other reason
 }
 
-// Registry is a simple in-memory ledger of active rooms.
+// Registry is a simple in-memory ledger of active rooms, by nameplate.
 type Registry struct {
-	maxPerPeer     int
-	registerBudget int
-	relayLimit     int64
+	maxPerPeer int
+	maxRooms   int // 0 means unlimited
+	relayLimit int64
 
 	mu         sync.Mutex
 	rooms      map[string]roomEntry
-	fails      map[peer.ID]window
-	globalFail window
-	newRooms   window
+	lookups    map[peer.ID]window
+	globalMiss window
 	stats      Stats
 }
 
@@ -304,12 +321,14 @@ func WithMaxRoomsPerPeer(n int) Option {
 	}
 }
 
-// WithRegisterBudget overrides how many new rooms the server opens per
-// minute.
-func WithRegisterBudget(n int) Option {
+// WithMaxRooms overrides the maximum concurrent rooms allowed on the server.
+// 0 or a negative value means unlimited.
+func WithMaxRooms(n int) Option {
 	return func(r *Registry) {
-		if n > 0 {
-			r.registerBudget = n
+		if n < 0 {
+			r.maxRooms = 0
+		} else {
+			r.maxRooms = n
 		}
 	}
 }
@@ -322,10 +341,10 @@ func WithRelayLimit(n int64) Option {
 
 func NewRegistry(opts ...Option) *Registry {
 	r := &Registry{
-		maxPerPeer:     DefaultMaxRoomsPerPeer,
-		registerBudget: DefaultRegisterBudget,
-		rooms:          make(map[string]roomEntry),
-		fails:          make(map[peer.ID]window),
+		maxPerPeer: DefaultMaxRoomsPerPeer,
+		maxRooms:   MaxRooms,
+		rooms:      make(map[string]roomEntry),
+		lookups:    make(map[peer.ID]window),
 	}
 	for _, opt := range opts {
 		opt(r)
@@ -389,10 +408,10 @@ func (r *Registry) register(from peer.ID, req Request) Response {
 		return Response{Type: "error", Error: msg}
 	}
 
-	// Room codes have one shape, and the server holds every client to it:
+	// Nameplates have one shape, and the server holds every client to it:
 	// otherwise a room name is up to 16 KB of whatever anyone likes.
-	if !ValidCode(req.Room) {
-		return reject("malformed room code")
+	if req.Nameplate != "" && !ValidNameplate(req.Nameplate) {
+		return reject("malformed room number")
 	}
 	if len(req.Addrs) == 0 {
 		return reject("an address list is required")
@@ -400,22 +419,6 @@ func (r *Registry) register(from peer.ID, req Request) Response {
 	if len(req.Addrs) > MaxAddrs {
 		return reject("too many addresses")
 	}
-	// A room may only be re-registered by the peer that owns it. Otherwise
-	// anyone who learns the code could take the room over and serve their
-	// own files to the receiver.
-	existing, taken := r.rooms[req.Room]
-	if taken && existing.info.ID != from {
-		return reject(msgInUse)
-	}
-	if !taken {
-		if len(r.rooms) >= MaxRooms {
-			return reject("server is full, try again later")
-		}
-		if r.roomsOf(from) >= r.maxPerPeer {
-			return reject("too many open rooms for one sender")
-		}
-	}
-
 	info := peer.AddrInfo{ID: from}
 	for _, s := range req.Addrs {
 		if a, err := multiaddr.NewMultiaddr(s); err == nil {
@@ -426,27 +429,100 @@ func (r *Registry) register(from peer.ID, req Request) Response {
 		return reject("no valid address in the request")
 	}
 
-	now := time.Now()
-	if taken {
+	// A room may only be re-registered by the peer that owns it. Otherwise
+	// anyone could take a room over and have the receiver dial them — which
+	// the handshake would catch, but only after the real sender had lost
+	// the room.
+	if existing, taken := r.rooms[req.Nameplate]; taken {
+		if existing.info.ID != from {
+			return reject(msgInUse)
+		}
 		// A refresh — typically after a reconnect — brings new addresses
 		// but keeps the original clock.
-		r.rooms[req.Room] = roomEntry{info: info, createdAt: existing.createdAt}
-		return Response{Type: "ok"}
+		r.rooms[req.Nameplate] = roomEntry{info: info, createdAt: existing.createdAt}
+		return Response{Type: "ok", Nameplate: req.Nameplate}
 	}
 
-	// New rooms draw on a server-wide budget, so identities that cost
-	// nothing to mint cannot churn through the table faster than rooms
-	// expire.
-	r.newRooms = r.newRooms.current(now, time.Minute)
-	if r.newRooms.count >= r.registerBudget {
-		r.stats.RegisterThrottled++
-		return Response{Type: "error", Error: "server is busy, try again in a minute"}
+	if r.roomsOf(from) >= r.maxPerPeer {
+		return reject("too many open rooms for one sender")
 	}
-	r.newRooms.count++
+	if r.maxRooms > 0 && len(r.rooms) >= r.maxRooms && !r.evictAbandoned() {
+		return reject("server is full, try again later")
+	}
 
-	r.rooms[req.Room] = roomEntry{info: info, createdAt: now}
+	// A named register for a room the server does not hold is a sender
+	// taking its nameplate back after the server forgot it (a restart), so
+	// the code its user has already read out keeps working.
+	nameplate := req.Nameplate
+	if nameplate == "" {
+		nameplate = r.freeNameplate()
+	}
+	r.rooms[nameplate] = roomEntry{info: info, createdAt: time.Now()}
 	r.stats.Registered++
-	return Response{Type: "ok"}
+	return Response{Type: "ok", Nameplate: nameplate}
+}
+
+const nameplateSparsity = 10
+
+// freeNameplate picks an unused nameplate at random from the shortest range
+// that is still sparse: at most one in nameplateSparsity of its numbers is
+// taken. It starts with two-digit numbers (10-99) and dynamically grows to
+// longer ones (100-999, 1000-9999, 10000-99999, etc.) as the server gets
+// crowded, keeping codes as short as load permits while preventing mistyped
+// numbers from colliding. Called with the lock held.
+func (r *Registry) freeNameplate() string {
+	lo, hi := 10, 99
+	for {
+		size := hi - lo + 1
+		used := 0
+		for np := range r.rooms {
+			if n, err := strconv.Atoi(np); err == nil && n >= lo && n <= hi {
+				used++
+			}
+		}
+		if (used+1)*nameplateSparsity <= size {
+			for {
+				np := strconv.Itoa(lo + mrand.IntN(size))
+				if _, taken := r.rooms[np]; !taken {
+					return np
+				}
+			}
+		}
+		nextLo := hi + 1
+		nextHi := hi*10 + 9
+		if nextHi <= nextLo {
+			break
+		}
+		lo, hi = nextLo, nextHi
+	}
+	for {
+		np := strconv.Itoa(10 + mrand.IntN(1_000_000_000-10))
+		if _, taken := r.rooms[np]; !taken {
+			return np
+		}
+	}
+}
+
+// evictAbandoned makes space in a full table by dropping the room whose
+// owner has been gone longest. Such a room is only waiting in case its
+// owner reconnects; a new sender who is here now needs the slot more.
+// Without this, connecting, registering and hanging up in a loop would
+// fill the table with rooms nobody can reach — each held for its grace
+// period — for the price of nothing but connections. Called with the lock
+// held; reports whether it found one.
+func (r *Registry) evictAbandoned() bool {
+	oldest, found := "", false
+	var since time.Time
+	for np, e := range r.rooms {
+		if !e.ownerGone.IsZero() && (!found || e.ownerGone.Before(since)) {
+			oldest, since, found = np, e.ownerGone, true
+		}
+	}
+	if found {
+		delete(r.rooms, oldest)
+		r.stats.Evicted++
+	}
+	return found
 }
 
 // unregister is called with the lock held. Closing a room one does not own
@@ -454,38 +530,37 @@ func (r *Registry) register(from peer.ID, req Request) Response {
 // only honest answer to "make sure this room of mine is gone" when it
 // already is, is yes.
 func (r *Registry) unregister(from peer.ID, req Request) Response {
-	if entry, ok := r.rooms[req.Room]; ok && entry.info.ID == from {
-		delete(r.rooms, req.Room)
+	if entry, ok := r.rooms[req.Nameplate]; ok && entry.info.ID == from {
+		delete(r.rooms, req.Nameplate)
 		r.stats.Unregistered++
 	}
 	return Response{Type: "ok"}
 }
 
-// lookup is called with the lock held. See the comment on the limits above
-// for why every refusal is decided before the room is looked at.
+// lookup is called with the lock held. See the comment on the limits above.
 func (r *Registry) lookup(from peer.ID, req Request) Response {
-	if !ValidCode(req.Room) {
-		// Cannot be anyone's room, so it teaches a guesser nothing and is
-		// not counted as a miss.
+	if !ValidNameplate(req.Nameplate) {
+		// Cannot be anyone's room, so it is not counted against the peer: a
+		// typo in its shape should not use up one of a user's tries.
 		r.stats.Rejected++
-		return Response{Type: "error", Error: "malformed room code"}
+		return Response{Type: "error", Error: "malformed room number"}
 	}
 
 	now := time.Now()
-	fc := r.fails[from].current(now, lookupFailWindow)
-	r.globalFail = r.globalFail.current(now, globalFailWindow)
-	underPressure := r.globalFail.count >= maxGlobalFailedLookups
+	lc := r.lookups[from].current(now, lookupWindow)
+	r.globalMiss = r.globalMiss.current(now, lookupWindow)
+	underPressure := r.globalMiss.count >= maxGlobalMisses
 
-	if fc.count >= maxFailedLookups || (underPressure && fc.count > 0) {
+	if lc.count >= maxLookups || (underPressure && lc.count > 0) {
 		r.stats.LookupsThrottled++
-		return Response{Type: "error", Error: "too many failed lookups, try again later"}
+		return Response{Type: "error", Error: "too many lookups, try again in a minute"}
 	}
+	lc.count++
+	r.lookups[from] = lc
 
-	entry, ok := r.rooms[req.Room]
+	entry, ok := r.rooms[req.Nameplate]
 	if !ok {
-		fc.count++
-		r.fails[from] = fc
-		r.globalFail.count++
+		r.globalMiss.count++
 		r.stats.LookupsNotFound++
 		return Response{Type: "not_found"}
 	}
@@ -587,8 +662,8 @@ func (r *Registry) AllowConnect(_ peer.ID, _ multiaddr.Multiaddr, dest peer.ID) 
 }
 
 // dropExpired removes rooms past their hour, rooms whose owner has been
-// gone longer than the grace period, and stale fail counters. Called with
-// the lock held.
+// gone longer than the grace period, and stale lookup counters. Called
+// with the lock held.
 func (r *Registry) dropExpired() {
 	now := time.Now()
 	for room, e := range r.rooms {
@@ -601,9 +676,9 @@ func (r *Registry) dropExpired() {
 			r.stats.Abandoned++
 		}
 	}
-	for p, fc := range r.fails {
-		if now.Sub(fc.start) > lookupFailWindow {
-			delete(r.fails, p)
+	for p, lc := range r.lookups {
+		if now.Sub(lc.start) > lookupWindow {
+			delete(r.lookups, p)
 		}
 	}
 }

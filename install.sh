@@ -7,6 +7,11 @@ set -e
 REPO="Baaaki/PureSend"
 BINARY="puresend"
 
+# The minisign public key releases are signed with: the same key as the
+# FT_UPDATE_KEY repository variable. Empty until release signing is set up
+# (docs/DEPLOYMENT.md); the SHA-256 check below runs either way.
+PUBKEY=""
+
 # Colors
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -50,7 +55,7 @@ case "$ARCH" in
         if [ "$OS_TAG" = "macOS" ]; then
             ARCH_TAG="arm64"
         else
-            error "ARM64 Linux icin onceden derlenmis ikili dosya bulunmuyor. Kaynak koddan derleyebilirsiniz: go install github.com/$REPO/cmd/client@latest"
+            error "ARM64 Linux icin onceden derlenmis ikili dosya bulunmuyor. Kaynak koddan derleyebilirsiniz: git clone https://github.com/$REPO.git && cd PureSend && go build -o puresend ./cmd/client (sunucu adresini -server ile vermen gerekir)"
         fi
         ;;
     *)
@@ -66,7 +71,7 @@ RELEASE_JSON=$(curl -s "https://api.github.com/repos/$REPO/releases/latest")
 LATEST_TAG=$(printf "%s" "$RELEASE_JSON" | grep '"tag_name":' | head -n 1 | sed -E 's/.*"tag_name": *"([^"]+)".*/\1/')
 
 if [ -z "$LATEST_TAG" ]; then
-    LATEST_TAG="v1.0.0"
+    LATEST_TAG="v2.0.0"
 fi
 
 VERSION="${LATEST_TAG#v}"
@@ -82,6 +87,37 @@ cleanup() {
 trap cleanup EXIT INT TERM
 
 curl -fsSL "$DOWNLOAD_URL" -o "$TMP_DIR/$ARCHIVE_NAME" || error "Indirme basarisiz oldu: $DOWNLOAD_URL"
+
+# Nothing is installed unchecked: no checksum file, no install.
+info "Dosya butunlugu dogrulaniyor..."
+BASE_URL="https://github.com/$REPO/releases/download/$LATEST_TAG"
+curl -fsSL "$BASE_URL/checksums.txt" -o "$TMP_DIR/checksums.txt" ||
+    error "checksums.txt indirilemedi; dogrulanamayan bir dosya kurulmayacak."
+
+if [ -n "$PUBKEY" ]; then
+    if command -v minisign >/dev/null 2>&1; then
+        curl -fsSL "$BASE_URL/checksums.txt.minisig" -o "$TMP_DIR/checksums.txt.minisig" ||
+            error "Imza dosyasi (checksums.txt.minisig) indirilemedi."
+        minisign -Vq -P "$PUBKEY" -m "$TMP_DIR/checksums.txt" ||
+            error "Guvenlik hatasi: checksums.txt imzasi gecersiz!"
+        success "Imza dogrulandi."
+    else
+        printf "Not: minisign kurulu degil; imza denetimi atlaniyor, SHA-256 ozeti yine denetleniyor.\n"
+    fi
+fi
+
+EXPECTED_SHA=$(awk -v f="$ARCHIVE_NAME" '$2 == f || $2 == "*" f { print $1 }' "$TMP_DIR/checksums.txt")
+[ -n "$EXPECTED_SHA" ] || error "checksums.txt icinde $ARCHIVE_NAME bulunamadi."
+if command -v sha256sum >/dev/null 2>&1; then
+    ACTUAL_SHA=$(sha256sum "$TMP_DIR/$ARCHIVE_NAME" | awk '{ print $1 }')
+elif command -v shasum >/dev/null 2>&1; then
+    ACTUAL_SHA=$(shasum -a 256 "$TMP_DIR/$ARCHIVE_NAME" | awk '{ print $1 }')
+else
+    error "SHA-256 hesaplayacak bir arac (sha256sum ya da shasum) bulunamadi."
+fi
+[ "$ACTUAL_SHA" = "$EXPECTED_SHA" ] ||
+    error "Guvenlik hatasi: indirilen dosyanin SHA-256 ozeti ($ACTUAL_SHA) beklenenle ($EXPECTED_SHA) eslesmiyor!"
+success "SHA-256 ozeti dogrulandi."
 
 info "Arsiv aciliyor..."
 tar -xzf "$TMP_DIR/$ARCHIVE_NAME" -C "$TMP_DIR"
@@ -132,5 +168,6 @@ case ":$PATH:" in
 esac
 
 printf "\nKullanim:\n"
-printf "  Dosya gondermek icin: puresend send <dosya_veya_klasor>\n"
-printf "  Dosya almak icin:     puresend receive <kod>\n\n"
+printf "  Arayuzu acmak icin:   puresend\n"
+printf "  Dosya gondermek icin: puresend -send <dosya_veya_klasor>\n"
+printf "  Dosya almak icin:     puresend -receive <kod>\n\n"

@@ -134,15 +134,18 @@ type Messages struct {
 	StatusDefault    string
 
 	// Confirm
-	ConfirmTitle     string
-	ConfirmMoreFiles func(n int) string
-	ConfirmTotal     func(files int, size string) string
-	ConfirmDest      string
-	ConfirmQuestion  string
-	ConfirmYes       string
-	ConfirmNo        string
-	ConfirmFooter    string
-	RelayWarning     func(limit string) string
+	ConfirmTitle       string
+	ConfirmMoreFiles   func(n int) string
+	ConfirmMoreEntries func(n int) string
+	ConfirmFolder      func(files int, size string) string
+	ConfirmHidden      func(names string) string
+	ConfirmTotal       func(files int, size string) string
+	ConfirmDest        string
+	ConfirmQuestion    string
+	ConfirmYes         string
+	ConfirmNo          string
+	ConfirmFooter      string
+	RelayWarning       func(limit string) string
 
 	// Transfer
 	TransferSendTitle  string
@@ -270,6 +273,16 @@ var trMessages = &Messages{
 	ConfirmTitle: "📥  Sana dosya gönderilmek isteniyor",
 	ConfirmMoreFiles: func(n int) string {
 		return fmt.Sprintf("  ... ve %d dosya daha", n)
+	},
+	ConfirmMoreEntries: func(n int) string {
+		return fmt.Sprintf("  ... ve %d öğe daha", n)
+	},
+	ConfirmFolder: func(files int, size string) string {
+		return fmt.Sprintf("%d dosya, %s", files, size)
+	},
+	ConfirmHidden: func(names string) string {
+		return "! Gizli öğeler var: " + names + "\n" +
+			"  Bunlar dosya yöneticisinde görünmez. Beklemiyorsan kabul etme."
 	},
 	ConfirmTotal: func(files int, size string) string {
 		return fmt.Sprintf("  Toplam: %d dosya, %s", files, size)
@@ -402,7 +415,7 @@ var enMessages = &Messages{
 	HostLostHelp2: "  have them retry in a few seconds.",
 
 	EnterTitle:       "📥  Enter the code from your friend",
-	EnterHelp1:       "Your friend generated a 3-word room code for you.",
+	EnterHelp1:       "Your friend generated a room code for you.",
 	EnterHelp2:       "It looks like: cherry-harbor-42",
 	EnterPlaceholder: "cherry-harbor-42",
 	EnterSavingTo:    "Incoming files will be saved to:",
@@ -420,6 +433,16 @@ var enMessages = &Messages{
 	ConfirmTitle: "📥  Incoming file transfer request",
 	ConfirmMoreFiles: func(n int) string {
 		return fmt.Sprintf("  ... and %d more files", n)
+	},
+	ConfirmMoreEntries: func(n int) string {
+		return fmt.Sprintf("  ... and %d more items", n)
+	},
+	ConfirmFolder: func(files int, size string) string {
+		return fmt.Sprintf("%d files, %s", files, size)
+	},
+	ConfirmHidden: func(names string) string {
+		return "! Includes hidden items: " + names + "\n" +
+			"  File managers do not show these. If you did not expect them, decline."
 	},
 	ConfirmTotal: func(files int, size string) string {
 		return fmt.Sprintf("  Total: %d files, %s", files, size)
@@ -513,14 +536,25 @@ func Explain(err error, lang Lang) (string, []string) {
 			return "Room code does not match.", []string{
 				"Make sure you typed the code character for character.",
 				"Ask your friend to read the code again — every letter matters.",
-				"Code is single-use: if already used, ask for a new code.",
+				"A code works once, and closes after 3 wrong attempts; if so, ask for a new one.",
+			}
+		case has("closed after too many wrong attempts"):
+			return "The code was closed after too many wrong attempts.", []string{
+				"Nothing was shared: files only go to someone who proves the code.",
+				"Someone may have tried to guess it, or it was mistyped several times.",
+				"Start a new transfer to get a fresh code.",
+			}
+		case has("straight into your home folder"):
+			return "Files cannot be saved straight into your home folder.", []string{
+				"Choose a folder inside it, such as Downloads/PureSend.",
+				"The sender names the folders inside a transfer; in your home folder those could be where programs keep their settings.",
 			}
 		case has("already sending"):
 			return "Another transfer is currently in progress with this code.", []string{
 				"Ask your friend what appears on their screen — files might be going to someone else.",
 				"If they didn't share the code with anyone else, have them start fresh with a new code.",
 			}
-		case has("not a room code", "malformed room code"):
+		case has("not a room code", "malformed room"):
 			return "This is not a valid room code.", []string{
 				"A room code consists of two words and a number, e.g. cherry-harbor-42.",
 			}
@@ -560,8 +594,8 @@ func Explain(err error, lang Lang) (string, []string) {
 			"no answer from receiver", "could not read manifest", "security handshake",
 			"no confirmation from the other side"):
 			return "Connection dropped during transfer.", retryTogether
-		case has("too many failed lookups"):
-			return "Too many invalid code attempts.", []string{
+		case has("too many lookups"):
+			return "Too many code lookups.", []string{
 				"Ask your friend for the code again and type carefully.",
 				"Wait a minute and try again from the main menu.",
 			}
@@ -569,7 +603,7 @@ func Explain(err error, lang Lang) (string, []string) {
 			return "Too many active send transfers.", []string{
 				"Close one of the open transfer windows and try again.",
 			}
-		case has("server is full", "server is busy"):
+		case has("server is full"):
 			return "The meeting point is currently busy.", []string{
 				"Please try again in a few minutes.",
 			}
@@ -635,14 +669,25 @@ func Explain(err error, lang Lang) (string, []string) {
 		return "Kod eşleşmedi.", []string{
 			"Kodu harfi harfine doğru yazdığından emin ol.",
 			"Arkadaşın sana kodu yeniden okusun — bir harf bile fark eder.",
-			"Kod tek kullanımlık: daha önce kullanıldıysa yenisini istemen gerekir.",
+			"Kod tek kullanımlık ve 3 yanlış denemede kapanır; öyleyse yenisini iste.",
+		}
+	case has("closed after too many wrong attempts"):
+		return "Kod çok fazla yanlış denemeden sonra kapatıldı.", []string{
+			"Hiçbir şey paylaşılmadı: dosyalar yalnızca kodu kanıtlayan kişiye gider.",
+			"Biri kodu tahmin etmeye çalışmış ya da kod birkaç kez yanlış yazılmış olabilir.",
+			"Yeni bir gönderim başlat; yeni bir kod alırsın.",
+		}
+	case has("straight into your home folder"):
+		return "Dosyalar doğrudan ev klasörüne kaydedilemez.", []string{
+			"İçinde bir klasör seç, örneğin İndirilenler/PureSend.",
+			"Transferin içindeki klasör adlarını gönderen belirler; ev klasöründe bunlar programların ayar dosyalarını tuttuğu yerler olabilir.",
 		}
 	case has("already sending"):
 		return "Bu kodla şu an başka bir transfer sürüyor.", []string{
 			"Arkadaşına ekranında ne yazdığını sor — dosyalar başka birine gidiyor olabilir.",
 			"Kodu senden başka kimseye vermediyse, yeni bir kodla baştan başlasın.",
 		}
-	case has("not a room code", "malformed room code"):
+	case has("not a room code", "malformed room"):
 		return "Bu bir oda kodu değil.", []string{
 			"Kod iki kelime ve bir sayıdan oluşur, örneğin kiraz-liman-42.",
 		}
@@ -682,8 +727,8 @@ func Explain(err error, lang Lang) (string, []string) {
 		"no answer from receiver", "could not read manifest", "security handshake",
 		"no confirmation from the other side"):
 		return "Bağlantı transfer sırasında koptu.", retryTogether
-	case has("too many failed lookups"):
-		return "Çok fazla hatalı kod denendi.", []string{
+	case has("too many lookups"):
+		return "Çok fazla kod sorgulandı.", []string{
 			"Kodu arkadaşından yeniden iste ve dikkatle yaz.",
 			"Bir dakika bekleyip ana menüden tekrar dene.",
 		}
@@ -691,7 +736,7 @@ func Explain(err error, lang Lang) (string, []string) {
 		return "Aynı anda çok fazla gönderim başlattın.", []string{
 			"Açık kalan pencerelerden birini kapatıp tekrar dene.",
 		}
-	case has("server is full", "server is busy"):
+	case has("server is full"):
 		return "Buluşma noktası şu an çok yoğun.", []string{
 			"Birkaç dakika sonra tekrar dene.",
 		}

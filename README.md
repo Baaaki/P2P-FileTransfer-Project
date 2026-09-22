@@ -1,6 +1,6 @@
 # PureSend 📦 · [English](README.en.md)
 
-> **Go (Golang) ile geliştirilmiş, uçtan uca şifreli (Zero-Trust) ve doğrudan eşler arası (P2P) dosya transfer sistemi.**  
+> **Go (Golang) ile geliştirilmiş, uçtan uca şifreli ve doğrudan eşler arası (P2P) dosya transfer sistemi.**  
 > Bulut sağlayıcılarına, üyeliklere veya üçüncü taraf sunuculara ihtiyaç duymadan; ev modemleri (NAT) ve kurumsal güvenlik duvarları arkasındaki cihazlar arasında doğrudan veri akışı sağlar.
 
 [![CI Pipeline](https://github.com/Baaaki/PureSend/actions/workflows/ci.yml/badge.svg)](https://github.com/Baaaki/PureSend/actions)
@@ -12,9 +12,9 @@
 
 ## 🎯 Öne Çıkan Özellikler
 
-* 🔒 **Sıfır Güven (Zero-Trust):** **SPAKE2** anahtar değişimi; sunucu veriyi göremez, dinleyemez ve taklit edemez.
+* 🔒 **Sunucuya Güvenmek Gerekmez:** Kodun gizli kelimeleri sunucuya hiç gitmez; **SPAKE2** el sıkışması sayesinde sunucu veriyi göremez ve araya giremez.
 * ⚡ **Akıllı NAT Delme (P2P):** **libp2p (DCUtR)** ile port açmadan doğrudan cihazdan cihaza aktarım (gerekirse Relay v2 yedeği).
-* 🔄 **Kesintisiz Devam (Resume):** Kopan transferler SHA-256 blok teyidiyle kaldığı bayttan devam eder.
+* 🔄 **Kesintisiz Devam (Resume):** Kopan transferler kaldığı bayttan devam eder; her dosya bitince SHA-256 ile doğrulanır.
 * 💻 **TUI & CLI Desteği:** Etkileşimli çift dilli terminal arayüzü (`Bubble Tea`) veya otomasyon için bayraklar (`-send`, `-receive`).
 
 ---
@@ -25,7 +25,7 @@
 | :--- | :--- |
 | **Programlama Dili** | Go (Golang 1.27) — `CGO_ENABLED=0` (tamamen bağımsız statik ikili dosyalar) |
 | **Ağ & Eşler Arası (P2P)** | libp2p (v0.49), WebSockets, TLS, DCUtR (Hole Punching), Circuit Relay v2, STUN (pion/stun v3.1.7), UPnP |
-| **Güvenlik & Kriptografi** | SPAKE2 (PAKE / pake v3), AES-GCM, SHA-256 blok doğrulama, Govulncheck |
+| **Güvenlik & Kriptografi** | SPAKE2 (PAKE / pake v3), Noise / TLS 1.3, dosya başına SHA-256, minisign imzalı sürümler, Govulncheck |
 | **Kullanıcı Arayüzü** | Charmbracelet Bubble Tea (v1.3 - Elm Mimarisi), Lipgloss (v1.1) |
 | **Dağıtım & DevOps** | GoReleaser (v2), GitHub Actions CI/CD, Debian (`.deb`), Arch Linux (`PKGBUILD`), Tek Satır Kurulumcu (`sh`/`ps1`) |
 
@@ -52,18 +52,18 @@ irm https://raw.githubusercontent.com/Baaaki/PureSend/main/install.ps1 | iex
 ```
 Gönderici (İstemci A)           Buluşma Sunucusu (Rendezvous)         Alıcı (İstemci B)
        │                                     │                               │
-       │ 1. Odayı aç ("kiraz-liman-42")      │                               │
-       │────────────────────────────────────►│◄──────────────────────────────│ 2. Odayı sor ("kiraz-liman-42")
+       │ 1. Oda aç → sunucu "42" verir       │                               │
+       │────────────────────────────────────►│◄──────────────────────────────│ 2. Yalnızca "42" numarasını sor
        │                                     │                               │
        │◄═══════════ 3. SPAKE2 Kriptografik Doğrulama & NAT Delme ══════════►│
        │                                                                     │
        │════════════ 4. Dosyalar DOĞRUDAN P2P Olarak Akar (SHA-256) ═════════►│
 ```
 
-1. **Buluşma (Discovery):** Gönderici 3 kelimelik geçici bir oda kodu türeterek sunucuya sinyal bırakır.
-2. **Kimlik Doğrulama:** Eşler, sunucuya güvenmeden oda kodunu ortak parola kullanarak **SPAKE2** ile şifreli tünel oluşturur.
+1. **Buluşma (Discovery):** Gönderici sunucudan bir oda numarası alır (`42`) ve önüne kendi seçtiği iki gizli kelimeyi koyar: `kiraz-liman-42`. Sunucu yalnızca numarayı bilir.
+2. **Kimlik Doğrulama:** Eşler kodun tamamını ortak parola olarak kullanıp **SPAKE2** ile birbirlerini doğrular; kelimeleri bilmeyen sunucu araya giremez. Yanlış kodla 3 denemeden sonra oda kapanır.
 3. **Doğrudan Bağlantı:** **DCUtR** koordinasyonu ile her iki tarafın NAT cihazı delinir ve eşler doğrudan birbirine bağlanır.
-4. **Doğrulanmış Aktarım:** Dosyalar blok blok şifreli olarak karşı tarafa iletilir; iniş tamamlandığında SHA-256 ile teyit edilir.
+4. **Doğrulanmış Aktarım:** Dosyalar şifreli bağlantı üzerinden dilim dilim iletilir; her dosya bitince SHA-256 ile doğrulanır.
 
 ---
 
@@ -73,8 +73,8 @@ Gönderici (İstemci A)           Buluşma Sunucusu (Rendezvous)         Alıcı
 ```bash
 puresend
 ```
-* **Gönder:** Dosya veya klasörleri seçin $\rightarrow$ Ekranda çıkan 3 kelimelik kodu alıcıya verin.
-* **Al:** 3 kelimelik kodu girin $\rightarrow$ Aktarımı onaylayın (dosyalar otomatik olarak `İndirilenler/PureSend` dizinine kaydedilir).
+* **Gönder:** Dosya veya klasörleri seçin $\rightarrow$ Ekranda çıkan kodu (örn. `kiraz-liman-42`) alıcıya verin.
+* **Al:** Kodu girin $\rightarrow$ Aktarımı onaylayın (dosyalar otomatik olarak `İndirilenler/PureSend` dizinine kaydedilir).
 * **Dil:** `[L]` tuşuna basarak anında Türkçe / İngilizce arasında geçiş yapın.
 
 ### 2. Otomasyon ve Betikler İçin CLI Modu
@@ -98,8 +98,8 @@ PureSend, üçüncü taraf bulut sağlayıcılarının yapay hız ve dosya boyut
 | Metrik / Alan | Başarım & Karakteristik | Teknik Detay |
 | :--- | :---: | :--- |
 | **Bellek Tüketimi (RAM)** | **Sabit ~35–45 MB ($O(1)$)** | 32 KB blok akışı (chunking); dosya 100 MB da olsa 50 GB da olsa RAM şişmez. |
-| **Dinamik Sıkıştırma** | **~800 MB/s** | Snappy algoritması ile metin ve kod arşivlerinde hat hızının üzerinde aktarım. |
-| **Sıfır Tahsisli Doğrulama** | **25 ns / 0 allocs** | SHA-256 bütünlük kontrolü Go çalışma zamanında sıfır ek bellek tahsisiyle çalışır. |
+| **Dinamik Sıkıştırma** | **~800 MB/s** | DEFLATE (`flate.HuffmanOnly`) ile metin ve kod arşivlerinde hat hızının üzerinde aktarım; küçülmeyen veri olduğu gibi gönderilir. |
+| **Sıfır Tahsisli Doğrulama** | **25 ns / 0 allocs** | Gelen SHA-256 özetlerinin biçim denetimi sıfır ek bellek tahsisiyle çalışır. |
 | **LAN Aktarım Hızı** | **Hat Doygunluğu (Line-Rate)** | Gigabit ağlarda **~112 MB/s**, 2.5G ağlarda **~280 MB/s** fiziksel sınır. |
 | **WAN (İnternet) Aktarımı** | **%100 Bant Genişliği** | DCUtR delik açma ile sunucusuz P2P; hız yalnızca iki ucun internet kapasitesiyle sınırlıdır. |
 | **Kriptografik El Sıkışma** | **< 5 ms** | SPAKE2 (P-256) sıfır-bilgi anahtar değişimi anında tamamlanır. |

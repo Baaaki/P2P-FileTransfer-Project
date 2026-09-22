@@ -29,6 +29,9 @@ builds:
       - -s -w
       - -X main.defaultServer={{ .Env.FT_SERVER }}
       - -X main.defaultServerList={{ envOrDefault "FT_SERVER_LIST" "https://puresend.madebybaki.com/server.txt" }}
+      # The minisign public key `puresend -update` checks releases against.
+      # Empty until release signing is set up; see docs/DEPLOYMENT.md.
+      - -X puresend/internal/update.publicKey={{ envOrDefault "FT_UPDATE_KEY" "" }}
       # Stamped so `puresend -version` can answer the first
       # question any bug report raises.
       - -X main.version={{ .Version }}
@@ -78,17 +81,36 @@ nfpms:
 checksum:
   name_template: "checksums.txt"
 
+# checksums.txt is signed with minisign, and the signature published next
+# to it. The release workflow passes --skip=sign until a key is configured.
+signs:
+  - id: checksums
+    artifacts: checksum
+    cmd: minisign
+    args:
+      - "-S"
+      - "-s"
+      - '{{ envOrDefault "MINISIGN_KEY_FILE" "" }}'
+      - "-m"
+      - "${artifact}"
+      - "-x"
+      - "${signature}"
+      - "-t"
+      - "puresend {{ .Tag }} checksums"
+    signature: "${artifact}.minisig"
+
 changelog:
   disable: true
 
+# A published release is never replaced or added to: the workflow refuses
+# to run for a tag that already has one, and existing files are not
+# overwritten if it somehow does.
 release:
   draft: false
-  mode: replace
-  replace_existing_artifacts: true
   header: |
     ## PureSend 🚀
 
-    Go ile geliştirilmiş, uçtan uca şifreli (Zero-Trust) ve doğrudan eşler arası (P2P) dosya ve klasör transfer sistemi.
+    Go ile geliştirilmiş, uçtan uca şifreli ve doğrudan eşler arası (P2P) dosya ve klasör transfer sistemi.
 
     ### ⚡ Hızlı Kurulum (Tek Satır)
 

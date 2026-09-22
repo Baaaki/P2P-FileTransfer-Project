@@ -13,7 +13,7 @@ try {
     $release = Invoke-RestMethod -Uri "https://api.github.com/repos/$repo/releases/latest"
     $tag = $release.tag_name
 } catch {
-    $tag = "v1.0.0"
+    $tag = "v2.0.0"
 }
 
 $version = $tag.TrimStart("v")
@@ -25,6 +25,34 @@ $zipPath = "$env:TEMP\$zipName"
 
 Write-Host "==> En son surum indiriliyor: $tag..." -ForegroundColor Cyan
 Invoke-WebRequest -Uri $downloadUrl -OutFile $zipPath
+
+# Nothing is installed unchecked: no checksum file, no install.
+Write-Host "==> Dosya butunlugu dogrulaniyor..." -ForegroundColor Cyan
+$checksumsPath = "$env:TEMP\puresend_checksums_$version.txt"
+try {
+    Invoke-WebRequest -Uri "https://github.com/$repo/releases/download/$tag/checksums.txt" -OutFile $checksumsPath
+} catch {
+    Remove-Item -Path $zipPath -Force -ErrorAction SilentlyContinue
+    throw "checksums.txt indirilemedi; dogrulanamayan bir dosya kurulmayacak."
+}
+$expected = $null
+foreach ($line in Get-Content -Path $checksumsPath) {
+    $fields = $line.Trim() -split '\s+'
+    if ($fields.Count -eq 2 -and $fields[1].TrimStart('*') -eq $zipName) {
+        $expected = $fields[0].ToLower()
+    }
+}
+Remove-Item -Path $checksumsPath -Force
+if (-not $expected) {
+    Remove-Item -Path $zipPath -Force
+    throw "checksums.txt icinde $zipName bulunamadi."
+}
+$actual = (Get-FileHash -Path $zipPath -Algorithm SHA256).Hash.ToLower()
+if ($actual -ne $expected) {
+    Remove-Item -Path $zipPath -Force
+    throw "Guvenlik hatasi: indirilen dosyanin SHA-256 ozeti ($actual) beklenenle ($expected) eslesmiyor!"
+}
+Write-Host "==> SHA-256 ozeti dogrulandi." -ForegroundColor Green
 
 if (-not (Test-Path $installDir)) {
     New-Item -ItemType Directory -Path $installDir -Force | Out-Null
@@ -45,6 +73,7 @@ if ($userPath -notlike "*$installDir*") {
 Write-Host "==> PureSend ($tag) basariyla kuruldu!" -ForegroundColor Green
 Write-Host ""
 Write-Host "Kullanim:"
-Write-Host "  Dosya gondermek icin: puresend send <dosya_veya_klasor>"
-Write-Host "  Dosya almak icin:     puresend receive <kod>"
+Write-Host "  Arayuzu acmak icin:   puresend"
+Write-Host "  Dosya gondermek icin: puresend -send <dosya_veya_klasor>"
+Write-Host "  Dosya almak icin:     puresend -receive <kod>"
 Write-Host ""

@@ -3,37 +3,40 @@ package transfer
 import (
 	"crypto/hmac"
 	"crypto/sha256"
+	"errors"
 	"fmt"
 
 	"github.com/schollz/pake/v3"
 )
 
-// The room code is a weak secret: about 5.9 million combinations (22.5
-// bits), small enough to guess offline if it ever leaked in a form an
-// attacker could test against. PAKE (password-authenticated key exchange)
-// turns it into a strong shared key without putting the code — or anything
-// derived from it that could be attacked offline — on the wire.
+// The room code is a weak secret. Its number is a public nameplate the
+// server finds the room by; only its two words are secret, 65,536
+// combinations (16 bits), small enough to guess offline if they ever
+// leaked in a form an attacker could test against. PAKE
+// (password-authenticated key exchange) turns the code into a strong
+// shared key without putting it — or anything derived from it that could
+// be attacked offline — on the wire.
 //
 // What this buys us concretely:
 //
-//   - The rendezvous server stops being a trusted party. It is the server
-//     that tells the receiver "the sender is peer X"; if it lied and named
-//     one of its own peers instead, the receiver used to connect to the
+//   - The rendezvous server is not a trusted party. It is the server that
+//     tells the receiver "the sender is peer X"; if it lied and named one
+//     of its own peers instead, the receiver used to connect to the
 //     impostor and accept whatever files it offered. Now the impostor has
-//     to know the room code to complete the handshake, and it does not.
+//     to know the code to complete the handshake. The server only ever
+//     sees the nameplate, so it would have to guess the words — one guess
+//     per attempt, each failure visible to the person it was tried on.
 //   - A passive listener on either link learns nothing it can test codes
 //     against.
+//   - The exchange binds both peer IDs into the session key, so an attacker
+//     cannot sit in the middle and pass the two sides' messages through to
+//     each other: the two ends would derive different keys and the
+//     confirmation step below would fail.
 //
-// What it does not buy: protection from someone who guesses the code
-// outright. The code is also what the server looks rooms up by, so a
-// lookup that hits *is* a correct guess. The defence against guessing is
-// the rate at which the server answers lookups (see rendezvous.Registry)
-// and, behind a tunnel, the per-address limit the tunnel enforces.
-//
-// The exchange binds both peer IDs into the session key, so an attacker
-// cannot sit in the middle and pass the two sides' messages through to each
-// other: the two ends would derive different keys and the confirmation step
-// below would fail.
+// What it does not buy: protection from someone who guesses the words
+// outright. Every guess costs a full handshake with a live sender, and a
+// sender closes its room after a few wrong ones (see p2p.Node), so the odds
+// are a few in 65,536 per room — but they are not zero.
 //
 // On the choice of library: schollz/pake is a SPAKE2-style exchange of its
 // own design, not RFC 9382 SPAKE2 or CPace, and has had far less review
@@ -184,17 +187,28 @@ func authenticate(role int, creds Credentials, read readMsgFunc, write writeMsgF
 		return key, nil
 	}
 
-	// The sender answers even when the check failed. Hanging up instead
+	// The sender only shows its own tag to a receiver that has shown the
+	// right one first. The tag is a test of the password: a guesser who got
+	// it could check its guess against it at leisure. It used to be sent
+	// whatever the check said, so a guesser who sent garbage instead of a
+	// tag — a failure that is not a wrong code, and not counted as one —
+	// learned whether its guess was right without it ever counting against
+	// the room.
+	//
+	// A wrong tag still gets an answer, an empty one. Hanging up instead
 	// would leave the receiver reading an empty connection, and it would
 	// report a dropped link when the real answer is "that is not the code".
 	failed := check()
-	if err := send(); err != nil && failed == nil {
-		return nil, err
+	switch {
+	case failed == nil:
+		if err := send(); err != nil {
+			return nil, err
+		}
+		return key, nil
+	case errors.Is(failed, ErrWrongCode):
+		_ = write(authMsg{})
 	}
-	if failed != nil {
-		return nil, failed
-	}
-	return key, nil
+	return nil, failed
 }
 
 // confirmTag is the proof that a side holds the session key.

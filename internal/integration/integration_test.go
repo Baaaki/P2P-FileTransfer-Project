@@ -62,10 +62,11 @@ func TestEndToEnd(t *testing.T) {
 		paths = append(paths, p)
 	}
 
-	room := rendezvous.NewRoomCode()
-	if err := rendezvous.Register(ctx, sender, server.ID(), room, sender.Addrs()); err != nil {
+	nameplate, err := rendezvous.Register(ctx, sender, server.ID(), "", sender.Addrs())
+	if err != nil {
 		t.Fatalf("register: %v", err)
 	}
+	room := rendezvous.JoinCode(rendezvous.NewSecret(), nameplate)
 	sendErr := make(chan error, 1)
 	sender.SetStreamHandler(transfer.ProtocolID, func(s network.Stream) {
 		sendErr <- transfer.SendPaths(s, paths, transfer.Credentials{
@@ -76,7 +77,7 @@ func TestEndToEnd(t *testing.T) {
 	})
 
 	// Receiver side: look up the room, connect, approve, receive.
-	info, _, err := rendezvous.Lookup(ctx, receiver, server.ID(), room)
+	info, _, err := rendezvous.Lookup(ctx, receiver, server.ID(), rendezvous.Nameplate(room))
 	if err != nil {
 		t.Fatalf("lookup: %v", err)
 	}

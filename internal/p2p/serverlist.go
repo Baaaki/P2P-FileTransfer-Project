@@ -24,8 +24,9 @@ import (
 //
 // The list is not trusted any more than the server is. Whoever controls it
 // can point clients at a meeting point of their own, which learns who
-// meets whom — but cannot read or alter a transfer, because both ends
-// prove the room code to each other.
+// meets whom — but cannot read or alter a transfer: a meeting point is
+// only ever told a code's nameplate, and both ends prove the whole code,
+// secret words included, to each other.
 const (
 	serverListTimeout  = 10 * time.Second
 	maxServerListBytes = 16 << 10

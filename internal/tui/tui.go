@@ -13,6 +13,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -419,9 +420,15 @@ func (m Model) handleEvent(ev p2p.Event) (tea.Model, tea.Cmd) {
 
 	case p2p.RejectedEvent:
 		if m.lang == i18n.EN {
-			m.notice = "Someone tried to connect with an invalid code. Nothing was shared with them."
+			attempts := "attempts"
+			if e.Left == 1 {
+				attempts = "attempt"
+			}
+			m.notice = fmt.Sprintf("Someone tried to connect with an invalid code. Nothing was shared with them. "+
+				"%d more wrong %s will close the code.", e.Left, attempts)
 		} else {
-			m.notice = "Birisi yanlış bir kodla bağlanmayı denedi. Ona hiçbir şey gösterilmedi."
+			m.notice = fmt.Sprintf("Birisi yanlış bir kodla bağlanmayı denedi. Ona hiçbir şey gösterilmedi. "+
+				"%d yanlış deneme daha olursa kod kapanır.", e.Left)
 		}
 		return m, waitEvent(m.node)
 
@@ -1031,17 +1038,36 @@ func (m Model) viewConfirm() string {
 	var b strings.Builder
 	b.WriteString(titleStyle.Render(t.ConfirmTitle) + "\n\n")
 
-	// A folder of a thousand files would bury the question, so show the
-	// first few and count the rest.
+	// A folder of a thousand files would bury the question. A short list
+	// is shown whole; a long one is shown as what it would put directly
+	// into the download folder — a few folders, usually — since that is
+	// where a file could matter, with hidden ones first so that none can
+	// sit unseen at the end of a list cut short.
 	const maxListed = 12
 	files := m.manifest.Files
-	for i, f := range files {
-		if i == maxListed {
-			b.WriteString(helpStyle.Render(t.ConfirmMoreFiles(len(files)-maxListed)) + "\n")
-			break
+	entries := topLevel(m.manifest)
+	if len(files) <= maxListed {
+		for _, f := range files {
+			b.WriteString(fileStyle.Render("• "+f.Path) + " " +
+				sizeStyle.Render("("+formatBytes(f.Size)+")") + "\n")
 		}
-		b.WriteString(fileStyle.Render("• "+f.Path) + " " +
-			sizeStyle.Render("("+formatBytes(f.Size)+")") + "\n")
+	} else {
+		for i, e := range entries {
+			if i == maxListed {
+				b.WriteString(helpStyle.Render(t.ConfirmMoreEntries(len(entries)-maxListed)) + "\n")
+				break
+			}
+			if e.dir {
+				b.WriteString(fileStyle.Render("• "+e.name+"/") + " " +
+					sizeStyle.Render("("+t.ConfirmFolder(e.files, formatBytes(e.size))+")") + "\n")
+			} else {
+				b.WriteString(fileStyle.Render("• "+e.name) + " " +
+					sizeStyle.Render("("+formatBytes(e.size)+")") + "\n")
+			}
+		}
+	}
+	if hidden := hiddenNames(entries); hidden != "" {
+		b.WriteString("\n" + warnStyle.Render(t.ConfirmHidden(hidden)) + "\n")
 	}
 
 	total := m.manifest.TotalSize()
@@ -1064,6 +1090,74 @@ func (m Model) viewConfirm() string {
 	b.WriteString(lipgloss.JoinHorizontal(lipgloss.Top, yes, no) + "\n\n")
 	b.WriteString(formatFooter(t.ConfirmFooter))
 	return b.String()
+}
+
+// topEntry is one thing a transfer would create directly in the download
+// folder: a file, or a folder with everything under it.
+type topEntry struct {
+	name  string
+	dir   bool
+	files int
+	size  int64
+}
+
+// topLevel groups a manifest by what it would create directly in the
+// download folder: hidden entries first, manifest order otherwise.
+func topLevel(m transfer.Manifest) []topEntry {
+	index := make(map[string]int)
+	var out []topEntry
+	for _, f := range m.Files {
+		// The first real part, the way the receiver will read the path:
+		// "./.config/x" lands in ".config".
+		var name string
+		nested := false
+		for part := range strings.SplitSeq(f.Path, "/") {
+			if part == "" || part == "." {
+				continue
+			}
+			if name != "" {
+				nested = true
+				break
+			}
+			name = part
+		}
+		i, ok := index[name]
+		if !ok {
+			i = len(out)
+			index[name] = i
+			out = append(out, topEntry{name: name})
+		}
+		out[i].dir = out[i].dir || nested
+		out[i].files++
+		out[i].size += f.Size
+	}
+	sort.SliceStable(out, func(a, b int) bool {
+		return isHidden(out[a].name) && !isHidden(out[b].name)
+	})
+	return out
+}
+
+func isHidden(name string) bool { return strings.HasPrefix(name, ".") }
+
+// hiddenNames lists the hidden entries for the warning, a few at most.
+func hiddenNames(entries []topEntry) string {
+	const most = 5
+	var names []string
+	for _, e := range entries {
+		if !isHidden(e.name) {
+			break // they come first
+		}
+		if len(names) == most {
+			names = append(names, "…")
+			break
+		}
+		if e.dir {
+			names = append(names, e.name+"/")
+		} else {
+			names = append(names, e.name)
+		}
+	}
+	return strings.Join(names, ", ")
 }
 
 // relayWarning is the one thing a user cannot work out for themselves: on

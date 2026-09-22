@@ -6,7 +6,7 @@ Bu kılavuz, PureSend buluşma (rendezvous) ve yedek aktarım (relay) sunucusunu
 
 ## 1. Mimarî ve Ön Koşullar
 
-Sunucu (`cmd/server`) istemcilerin dosya içeriklerine asla dokunmaz ve sıfır-bilgi (zero-knowledge) mantığıyla çalışır:
+Sunucu (`cmd/server`) istemcilerin dosya içeriklerine asla dokunmaz ve oda kodlarının yalnızca numarasını (`kiraz-liman-42` için `42`) görür; gizli kelimeler ona hiç gönderilmez:
 * **8080/TCP:** libp2p WebSocket sinyalleşme ve DCUtR delik açma portu.
 * **8081/TCP:** Sağlık kontrolü (`/health`) ve Prometheus metrik (`/metrics`) portu (yalnızca yerel erişim).
 
@@ -116,6 +116,56 @@ server {
 
 ---
 
+### Tüm Seçenekler İçin: Kenar Katmanında IP Başına Hız Sınırı
+
+Tünelin ya da ters vekilin arkasında bütün istemciler sunucuya aynı adresten (tünelin kendisinden) gelir. Bu yüzden `-trusted-proxies` ağlarından gelen bağlantılar libp2p'nin adres başına sınırlarından muaftır; muaf olmasalardı, dünyadaki bütün kullanıcılar tek bir adresin 8 bağlantılık payını paylaşırdı. Sunucunun kendi sınırları (eş başına bir oda, eş başına dakikada 5 sorgu, sunucu genelinde dakikada 200 boş sorgu) her yeni bağlantıyı biraz pahalılaştırır; ama istemci kimliği bedava olduğundan tek bir adresten gelen bir seli **durduramaz**. Oda numaraları herkese açık olduğu ve gönderici 3 yanlış koddan sonra odasını kapattığı için, sınırsız bağlantı açabilen biri numaraları tarayıp odaları kapatabilir. Adres başına sınırın yeri kenar katmanıdır.
+
+Her istemci oturumu tek bir WebSocket bağlantısıdır, yani saydığımız şey `/` yoluna gelen yeni bağlantı istekleridir.
+
+#### Cloudflare (Tunnel ile)
+
+Cloudflare Dashboard → alan adı → **Security** → **WAF** → **Rate limiting rules** → **Create rule**:
+
+| Ayar | Değer |
+| :--- | :--- |
+| Kural adı | `PureSend bağlantı sınırı` |
+| İfade | *URI Path* **equals** `/` (ifade düzenleyicide: `(http.request.uri.path eq "/")`) |
+| Sayılan özellik | IP |
+| Sınır | **10 saniyede 5 istek** |
+| Eylem | **Block**, süre **10 saniye** |
+
+Ücretsiz planda tek kural hakkı vardır; ifadede yalnızca yol (Path) alanı kullanılabilir, sayma ve engelleme süresi 10 saniyedir. Alan adı (Host) seçilemediği için kural, bu bölgede (zone) Cloudflare üzerinden geçen **bütün** alt alan adlarının `/` isteklerine uygulanır; aynı bölgede bir web sitesi de varsa, onun ana sayfasına gelen istekler de sayılır. 10 saniyede 5 istek bir insanın gezinmesine dokunmaz. Pro ve üstü planlarda ifadeye `http.host eq "rendezvous.alanadiniz.com"` ekleyip süreleri uzatabilirsiniz (örn. dakikada 20 istek, 10 dakika engel).
+
+#### Nginx
+
+```nginx
+# http bloğunda: IP başına dakikada 20 yeni bağlantı
+limit_req_zone $binary_remote_addr zone=puresend:10m rate=20r/m;
+
+server {
+    server_name p2p.alanadiniz.com;
+
+    location / {
+        limit_req zone=puresend burst=5 nodelay;
+        proxy_pass http://127.0.0.1:8080;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_read_timeout 86400s;
+        proxy_send_timeout 86400s;
+    }
+
+    listen 443 ssl;
+}
+```
+
+Caddy'nin standart sürümünde hız sınırı yoktur; gerekiyorsa [caddy-ratelimit](https://github.com/mholt/caddy-ratelimit) eklentisiyle derlenmiş bir Caddy ya da yukarıdaki Nginx yapılandırması kullanılmalıdır.
+
+`puresend_lookups_throttled_total` ve `libp2p_rcmgr_blocked_resources` metriklerindeki ani artışlar, kenar sınırının yetersiz kaldığını gösterir.
+
+---
+
 ## 4. Dağıtımı Doğrulama ve Sağlık Kontrolü
 
 ### 1. Yerel Sağlık Kontrolü
@@ -153,6 +203,7 @@ Sunucu `http://localhost:8081/metrics` üzerinden metrik yayınlar. Öne çıkan
 |---|---|
 | `puresend_active_rooms` | Anlık aktif transfer odası sayısı |
 | `puresend_rooms_expired_total` | Zaman aşımına uğrayıp kapatılan odalar |
+| `puresend_rooms_evicted_total` | Tablo dolduğunda yer açmak için erken düşürülen, sahibi ayrılmış odalar |
 | `puresend_lookups_throttled_total` | Hız sınırına (rate limit) takılan oda sorguları |
 | `libp2p_relaysvc_data_transferred_bytes_total` | Röle üzerinden akan veri miktarı (bayt) |
 | `libp2p_rcmgr_blocked_resources` | Kaynak yöneticisinin reddettiği aşırı istekler |
@@ -166,4 +217,40 @@ Yeni veya farklı bir sunucuda aynı kimliği kullanmak için compose ortamında
 ```yaml
 environment:
   - FT_IDENTITY_KEY=CAESQ...
+```
+
+---
+
+## 6. Sürüm Yayınlama ve İmzalama
+
+İstemciler `v*` etiketi itildiğinde `.github/workflows/release.yml` ile derlenip GitHub Releases'e yüklenir. İki kural geçerlidir:
+
+### 6.1 Yayınlanmış bir sürüm değiştirilmez
+
+İş akışı, etiketi için zaten bir sürüm bulunan bir yayını reddeder. Yayınlanmış dosyaların özetleri kullanıcılar, `puresend -update`, kurulum betikleri ve AUR `PKGBUILD` tarafından denetlenmiştir; aynı etiket altında yeniden yayın, bu denetimlerin hepsini geçersiz kılar. Bir düzeltme yeni bir sürüm numarasıdır (`v1.0.1`). Deponun **Settings → General → Releases** bölümünde GitHub'ın *release immutability* ayarı varsa açın; etiket ve dosyalar GitHub tarafında da kilitlenir.
+
+### 6.2 `checksums.txt` minisign ile imzalanır
+
+`puresend -update` ve kurulum betikleri indirdikleri arşivi her zaman `checksums.txt` ile karşılaştırır. Bu, bozuk ya da değiştirilmiş bir indirmeyi yakalar; ama sürüm sayfasını değiştirebilen biri listeyi de değiştirebilir. İmza, listeyi başka bir yerde saklanan bir anahtara bağlar.
+
+Bir kez yapılacak kurulum (anahtar parolasız üretilir, çünkü iş akışı parola giremez):
+
+```bash
+minisign -G -W -p puresend.pub -s puresend.key
+```
+
+1. **Settings → Secrets and variables → Actions → Secrets:** `MINISIGN_SECRET_KEY` = `puresend.key` dosyasının tamamı.
+2. **Settings → Secrets and variables → Actions → Variables:** `FT_UPDATE_KEY` = `puresend.pub` dosyasının **ikinci satırı** (`RW...` ile başlar).
+3. Aynı `RW...` satırını `install.sh` içindeki `PUBKEY=""` değerine yazın.
+4. `puresend.key` dosyasını parola yöneticinizde ya da çevrimdışı bir yerde saklayın ve depoya koymayın (`.gitignore` `*.key` dosyalarını zaten dışarıda tutar).
+
+Bundan sonra her yayın `checksums.txt.minisig` dosyasını da içerir ve istemcilere `FT_UPDATE_KEY` gömülür. İş akışı, iki değerden yalnızca biri ayarlıysa ya da gizli anahtar açık anahtarla eşleşmiyorsa hiçbir şey derlemeden durur; eşleşmeyen bir anahtarla çıkan istemciler bir daha kendiliğinden güncellenemezdi.
+
+> ⚠️ Anahtarı gömülü istemciler, imzasız ya da başka anahtarla imzalanmış bir sürüme güncellenmeyi reddeder. Gizli anahtarı kaybetmek, bu istemcilerin `-update` ile güncellenemeyeceği anlamına gelir; kullanıcıların kurulum betiğiyle yeniden kurması gerekir.
+
+Bir sürümü elle doğrulamak için:
+
+```bash
+minisign -Vm checksums.txt -P RW...
+sha256sum --ignore-missing -c checksums.txt
 ```

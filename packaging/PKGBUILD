@@ -2,7 +2,7 @@
 # Contributor: PureSend Contributors
 
 pkgname=puresend-bin
-pkgver=1.0.0
+pkgver=2.0.0
 pkgrel=1
 pkgdesc="Fast, secure, p2p terminal file transfer tool (WebRTC/P2P, End-to-End Encrypted)"
 arch=('x86_64')

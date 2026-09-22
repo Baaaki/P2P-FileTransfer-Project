@@ -2,7 +2,6 @@ package transfer
 
 import (
 	"bytes"
-	"crypto/rand"
 	"errors"
 	"testing"
 )
@@ -40,20 +39,6 @@ func TestCompressChunkEfficiency(t *testing.T) {
 	// Huffman compression on structured log text should yield at least 40% reduction
 	if len(compressed) >= len(source)*6/10 {
 		t.Errorf("Expected substantial compression, got %d from %d", len(compressed), len(source))
-	}
-
-	// Should be identified as compressible
-	if !IsProbablyCompressible(source[:512]) {
-		t.Errorf("IsProbablyCompressible returned false for log data")
-	}
-}
-
-func TestIsProbablyCompressibleRandom(t *testing.T) {
-	randomData := make([]byte, 1024)
-	_, _ = rand.Read(randomData)
-
-	if IsProbablyCompressible(randomData) {
-		t.Errorf("Random uncompressible data was marked as compressible")
 	}
 }
 

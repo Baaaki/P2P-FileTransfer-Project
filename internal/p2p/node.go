@@ -58,10 +58,24 @@ const (
 	// maxBackoff caps the pause between two attempts to get back to the
 	// meeting point after losing it.
 	maxBackoff = 30 * time.Second
+
+	// MaxWrongCodes is how many handshakes with a wrong code a room
+	// survives. The nameplate that finds a room is public, so anyone can
+	// reach a sender and guess at the two secret words; this is the number
+	// of guesses they get, a few in 65,536. It is more than one because an
+	// honest receiver can mistype a word into another word on the list —
+	// most typos never get this far, since the receiver checks the words
+	// against the list before dialling.
+	MaxWrongCodes = 3
 )
 
 // errRoomExpired ends a room that could not be put back in time.
 var errRoomExpired = errors.New("the room code expired")
+
+// ErrTooManyWrongCodes ends a room that has seen MaxWrongCodes handshakes
+// with a wrong code. Nothing was shown to any of them; the words are simply
+// not safe to keep offering, and a new code costs the sender one read-out.
+var ErrTooManyWrongCodes = errors.New("the code was closed after too many wrong attempts")
 
 // ---------------------------------------------------------------------------
 // Events
@@ -120,8 +134,9 @@ type DoneEvent struct {
 
 // RejectedEvent fires on the sending side when someone reached the room
 // but could not prove they hold the code. Nothing was revealed to them;
-// the room stays open for the real receiver.
-type RejectedEvent struct{}
+// the room stays open for the real receiver, for Left more wrong codes.
+// The one after that closes it with ErrTooManyWrongCodes.
+type RejectedEvent struct{ Left int }
 
 // ServerLostEvent fires on the sending side when the connection to the
 // meeting point drops while a room is open. The node is already working
@@ -133,8 +148,9 @@ type ServerLostEvent struct{}
 type ServerBackEvent struct{}
 
 // RoomLostEvent ends a hosting session for good: the code no longer works
-// and Err says why — the files could not be read, or the room could not
-// be put back after the connection to the meeting point was lost.
+// and Err says why — the files could not be read, the room could not be
+// put back after the connection to the meeting point was lost, or too many
+// wrong codes were tried against it.
 type RoomLostEvent struct{ Err error }
 
 func (StatusEvent) isEvent()          {}
@@ -176,7 +192,7 @@ type Node struct {
 	lost chan struct{}
 
 	mu       sync.Mutex
-	room     string // the room being hosted, empty once it is closed
+	room     string // the full code of the room being hosted, empty once it is closed
 	hostedAt time.Time
 
 	ctx       context.Context // cancelled by Close; ends background work
@@ -484,20 +500,13 @@ func (n *Node) Host(ctx context.Context, paths []string) (string, error) {
 		return "", err
 	}
 
-	// A fresh code is almost never taken, but when it is, another one is
-	// as good — the user has not seen it yet.
-	var room string
-	for attempt := 0; ; attempt++ {
-		room = rendezvous.NewRoomCode()
-		err = n.announce(ctx, room)
-		if errors.Is(err, rendezvous.ErrInUse) && attempt < 3 {
-			continue
-		}
-		if err != nil {
-			return "", err
-		}
-		break
+	// The server hands out the nameplate; the secret words are ours and
+	// are never sent anywhere.
+	nameplate, err := n.announce(ctx, "")
+	if err != nil {
+		return "", err
 	}
+	room := rendezvous.JoinCode(rendezvous.NewSecret(), nameplate)
 
 	n.mu.Lock()
 	n.room, n.hostedAt = room, time.Now()
@@ -513,8 +522,9 @@ func (n *Node) Host(ctx context.Context, paths []string) (string, error) {
 }
 
 // announce registers the room on the current meeting point and reserves
-// a relay slot there — everything a receiver needs to reach us.
-func (n *Node) announce(ctx context.Context, room string) error {
+// a relay slot there — everything a receiver needs to reach us. An empty
+// nameplate asks for a new room; the one the server settled on is returned.
+func (n *Node) announce(ctx context.Context, nameplate string) (string, error) {
 	server := n.currentServer()
 
 	// Prioritize addresses to advertise:
@@ -566,19 +576,22 @@ func (n *Node) announce(ctx context.Context, room string) error {
 	// Register the room before reserving the relay slot: the server's
 	// relay only serves peers with an active room, so the reservation
 	// would otherwise be refused by its ACL.
-	if err := rendezvous.Register(ctx, n.host, server.ID, room, addrs); err != nil {
-		return err
+	nameplate, err := rendezvous.Register(ctx, n.host, server.ID, nameplate, addrs)
+	if err != nil {
+		return "", err
 	}
 	if _, err := relayclient.Reserve(ctx, n.host, server); err != nil {
 		// Do not leave behind a room nobody can reach.
-		_ = rendezvous.Unregister(ctx, n.host, server.ID, room)
-		return fmt.Errorf("the meeting point refused to hold a slot for us: %w", err)
+		_ = rendezvous.Unregister(ctx, n.host, server.ID, nameplate)
+		return "", fmt.Errorf("the meeting point refused to hold a slot for us: %w", err)
 	}
-	return nil
+	return nameplate, nil
 }
 
 // serve is the transfer protocol handler for a room.
 func (n *Node) serve(room string, offer *transfer.Offer) network.StreamHandler {
+	// Wrong codes are counted per room, across every handshake it sees.
+	var wrongCodes atomic.Int32
 	return func(s network.Stream) {
 		// A handshake is cheap to start and anyone who knows our address
 		// can start one; only so many run at a time.
@@ -628,9 +641,18 @@ func (n *Node) serve(room string, offer *transfer.Offer) network.StreamHandler {
 
 		if !claimed {
 			// Nobody's transfer started, so there is nothing to finish.
-			// A wrong code is worth mentioning; a dropped handshake is not.
+			// A wrong code is worth mentioning; a dropped handshake is not,
+			// and does not count: it tells whoever dropped it nothing about
+			// the code (see transfer.authenticate).
 			if errors.Is(err, transfer.ErrWrongCode) {
-				n.emit(RejectedEvent{})
+				switch left := MaxWrongCodes - int(wrongCodes.Add(1)); {
+				case left > 0:
+					n.emit(RejectedEvent{Left: left})
+				case left == 0:
+					// Exactly one handshake gets here, however many
+					// failed at once.
+					n.abandonRoom(ErrTooManyWrongCodes)
+				}
 			}
 			return
 		}
@@ -722,14 +744,16 @@ func (n *Node) restore() error {
 		server, err := n.connectAny(ctx, n.reconnectOrder())
 		if err == nil {
 			n.server.Store(&server)
-			err = n.announce(ctx, room)
+			// The same nameplate, or the code on the user's screen would
+			// stop working.
+			_, err = n.announce(ctx, rendezvous.Nameplate(room))
 		}
 		cancel()
 		switch {
 		case err == nil:
 			return nil
 		case errors.Is(err, rendezvous.ErrInUse):
-			return err // someone else holds our code now; it is gone
+			return err // someone else holds our nameplate now; the code is gone
 		}
 
 		select {
@@ -786,7 +810,7 @@ func (n *Node) closeRoom() {
 	// send into a failure. The room's one-hour expiry is the backstop.
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	_ = rendezvous.Unregister(ctx, n.host, n.currentServer().ID, room)
+	_ = rendezvous.Unregister(ctx, n.host, n.currentServer().ID, rendezvous.Nameplate(room))
 }
 
 // abandonRoom ends hosting for good and says why.
@@ -845,8 +869,15 @@ func (n *Node) fetch(ctx context.Context, typed, outDir string) ([]string, error
 		return nil, err
 	}
 
+	// Refuse a dangerous destination before asking anyone for anything.
+	if err := transfer.CheckDestination(outDir); err != nil {
+		return nil, err
+	}
+
+	// Only the nameplate goes to the server; the words stay here, for the
+	// handshake with whoever the server points us at.
 	n.emit(StatusEvent{Text: "looking up the code"})
-	sender, relayLimit, err := rendezvous.Lookup(ctx, n.host, n.currentServer().ID, room)
+	sender, relayLimit, err := rendezvous.Lookup(ctx, n.host, n.currentServer().ID, rendezvous.Nameplate(room))
 	if err != nil {
 		return nil, err
 	}

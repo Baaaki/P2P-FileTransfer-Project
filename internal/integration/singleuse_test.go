@@ -3,6 +3,7 @@ package integration
 import (
 	"bytes"
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -266,7 +267,7 @@ func TestWrongCodeGetsNothing(t *testing.T) {
 	if err := impostor.Connect(ctx, *host.InfoFromHost(server)); err != nil {
 		t.Fatal(err)
 	}
-	info, _, err := rendezvous.Lookup(ctx, impostor, server.ID(), room)
+	info, _, err := rendezvous.Lookup(ctx, impostor, server.ID(), rendezvous.Nameplate(room))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -308,4 +309,87 @@ func TestWrongCodeGetsNothing(t *testing.T) {
 	case <-ctx.Done():
 		t.Error("the sender was never told about the wrong code")
 	}
+}
+
+// TestTooManyWrongCodesCloseTheRoom: the nameplate that finds a room is
+// public, so anyone can reach the sender and guess at the words. Each
+// guess is a handshake the sender sees, and after MaxWrongCodes of them the
+// room is closed — the code stops working, and the sender is told why.
+func TestTooManyWrongCodesCloseTheRoom(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	server, _, serverAddr := newWSServer(t)
+	sender, err := p2p.New(ctx, []string{serverAddr})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer sender.Close()
+
+	srcPath := filepath.Join(t.TempDir(), "gizli.txt")
+	if err := os.WriteFile(srcPath, []byte("secret"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	events := collect(sender)
+	room, err := sender.Host(ctx, []string{srcPath})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	guesser := newHost(t)
+	if err := guesser.Connect(ctx, *host.InfoFromHost(server)); err != nil {
+		t.Fatal(err)
+	}
+	info, _, err := rendezvous.Lookup(ctx, guesser, server.ID(), rendezvous.Nameplate(room))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := guesser.Connect(ctx, *info); err != nil {
+		t.Fatal(err)
+	}
+	guess := func(words string) error {
+		s, err := guesser.NewStream(ctx, info.ID, transfer.ProtocolID)
+		if err != nil {
+			return err
+		}
+		_, err = transfer.Receive(s, t.TempDir(), transfer.Credentials{
+			Code:     rendezvous.JoinCode(words, rendezvous.Nameplate(room)),
+			Sender:   info.ID.String(),
+			Receiver: guesser.ID().String(),
+		}, func(transfer.Manifest) bool { return true }, transfer.Hooks{})
+		return err
+	}
+
+	for want := p2p.MaxWrongCodes - 1; want > 0; want-- {
+		if err := guess("zebra-zebra"); !errors.Is(err, transfer.ErrWrongCode) {
+			t.Fatalf("a wrong guess got %v", err)
+		}
+		if got := waitForEvent[p2p.RejectedEvent](t, events, 10*time.Second); got.Left != want {
+			t.Errorf("after a wrong guess the sender was told %d are left, want %d", got.Left, want)
+		}
+	}
+	_ = guess("zebra-zebra")
+	lost := waitForEvent[p2p.RoomLostEvent](t, events, 10*time.Second)
+	if !errors.Is(lost.Err, p2p.ErrTooManyWrongCodes) {
+		t.Fatalf("the room was lost with %v, want ErrTooManyWrongCodes", lost.Err)
+	}
+
+	// Even the right words are too late now: the room is gone from the
+	// server and the sender no longer answers.
+	if _, _, err := rendezvous.Lookup(ctx, newHostConnectedTo(t, ctx, server), server.ID(), rendezvous.Nameplate(room)); err == nil {
+		t.Error("the closed room can still be looked up")
+	}
+	if err := guess(strings.TrimSuffix(room, "-"+rendezvous.Nameplate(room))); err == nil {
+		t.Error("the right code still works after the room was closed")
+	}
+}
+
+// newHostConnectedTo is a fresh peer, already connected to the server.
+func newHostConnectedTo(t *testing.T, ctx context.Context, server host.Host) host.Host {
+	t.Helper()
+	h := newHost(t)
+	if err := h.Connect(ctx, *host.InfoFromHost(server)); err != nil {
+		t.Fatal(err)
+	}
+	return h
 }

@@ -3,7 +3,10 @@ package transfer
 import (
 	"bytes"
 	"context"
+	"crypto/hmac"
+	"crypto/rand"
 	"crypto/sha256"
+	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -15,6 +18,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/schollz/pake/v3"
 )
 
 // shortTimeouts makes every deadline expire quickly, so the tests that
@@ -195,6 +200,73 @@ func TestWrongCodeNeverClaims(t *testing.T) {
 	}
 	if claimed.Load() {
 		t.Error("a receiver with the wrong code claimed the room")
+	}
+}
+
+// guessingReceiver runs the receiver's half of the exchange with a guessed
+// code up to the point where it should prove the key, and then does
+// whatever misbehave does instead. It returns the key its guess produced
+// and the decoder, so a test can see what the sender says next.
+func guessingReceiver(t *testing.T, conn net.Conn, guess string, misbehave func(*json.Encoder)) ([]byte, *json.Decoder) {
+	t.Helper()
+	creds := testCreds()
+	creds.Code = guess
+	idA, idB := creds.identities()
+	p, err := pake.InitCurveWithIdentities([]byte(creds.Code), roleReceiver, pakeCurve, idA, idB)
+	if err != nil {
+		t.Fatal(err)
+	}
+	enc, dec := json.NewEncoder(conn), json.NewDecoder(conn)
+	if err := enc.Encode(authMsg{PAKE: p.Bytes()}); err != nil {
+		t.Fatal(err)
+	}
+	var theirs authMsg
+	if err := dec.Decode(&theirs); err != nil {
+		t.Fatal(err)
+	}
+	if err := p.Update(theirs.PAKE); err != nil {
+		t.Fatal(err)
+	}
+	key, err := p.SessionKey()
+	if err != nil {
+		t.Fatal(err)
+	}
+	misbehave(enc)
+	return key, dec
+}
+
+// TestSenderTagNeedsTheReceiversFirst: the sender's confirmation tag tells
+// whoever holds it whether their guess at the code was right. A receiver
+// that skips its own proof — sends garbage, or a wrong tag — must not be
+// handed the sender's. The garbage case matters most: it is not a wrong
+// code, so it never counts against the room, and it used to get the tag
+// anyway.
+func TestSenderTagNeedsTheReceiversFirst(t *testing.T) {
+	for name, misbehave := range map[string]func(*json.Encoder){
+		"garbage instead of a tag": func(enc *json.Encoder) { _ = enc.Encode("not a confirmation") },
+		"a wrong tag":              func(enc *json.Encoder) { _ = enc.Encode(authMsg{Confirm: []byte("forged")}) },
+	} {
+		t.Run(name, func(t *testing.T) {
+			sender, attacker := net.Pipe()
+			defer attacker.Close()
+			go func() {
+				defer sender.Close()
+				dec, enc := json.NewDecoder(sender), json.NewEncoder(sender)
+				_, _ = authenticate(roleSender, testCreds(),
+					func(m *authMsg) error { return dec.Decode(m) },
+					func(m authMsg) error { return enc.Encode(m) })
+			}()
+
+			// The right code: the worst case, where the tag would confirm it.
+			key, dec := guessingReceiver(t, attacker, testCode, misbehave)
+			var reply authMsg
+			if err := dec.Decode(&reply); err == nil && len(reply.Confirm) > 0 {
+				if hmac.Equal(reply.Confirm, confirmTag(key, confirmSenderLabel)) {
+					t.Fatal("the sender confirmed the code to a receiver that never proved it")
+				}
+				t.Fatalf("the sender sent a tag to a receiver that never proved the key: %x", reply.Confirm)
+			}
+		})
 	}
 }
 
@@ -432,8 +504,10 @@ func TestResumeWithIdenticalFiles(t *testing.T) {
 func TestResumeKeepsFinishedFiles(t *testing.T) {
 	srcDir := t.TempDir()
 	outDir := t.TempDir()
-	first := bytes.Repeat([]byte("1"), 50_000)
-	second := bytes.Repeat([]byte("2"), 300_000)
+	// Random, so compression cannot shrink the transfer to below the cut.
+	first, second := make([]byte, 50_000), make([]byte, 300_000)
+	_, _ = rand.Read(first)
+	_, _ = rand.Read(second)
 	writeTempFile(t, srcDir, "album/a.bin", first)
 	writeTempFile(t, srcDir, "album/b.bin", second)
 	root := filepath.Join(srcDir, "album")
@@ -444,6 +518,9 @@ func TestResumeKeepsFinishedFiles(t *testing.T) {
 	Receive(receiver, outDir, testCreds(), nil, Hooks{})
 	if got, _ := os.ReadFile(filepath.Join(outDir, "album", "a.bin")); !bytes.Equal(got, first) {
 		t.Fatal("setup: the first file should have been finished by the first attempt")
+	}
+	if _, err := os.Stat(filepath.Join(outDir, "album", "b.bin")); !os.IsNotExist(err) {
+		t.Fatal("setup: the second file should not have been finished by the first attempt")
 	}
 
 	var resumedFrom []int64
@@ -479,6 +556,233 @@ func TestResumeKeepsFinishedFiles(t *testing.T) {
 	}
 }
 
+// fakeHome points the home folder at a fresh temporary one for the test.
+func fakeHome(t *testing.T) string {
+	t.Helper()
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	return home
+}
+
+// TestDestinationIsNotTheHomeFolder: straight into the home folder, a
+// sender could plant ".config/autostart/x.desktop" or
+// ".ssh/authorized_keys" — nothing overwritten, and something runs, or
+// someone gets in, at the next login.
+func TestDestinationIsNotTheHomeFolder(t *testing.T) {
+	home := fakeHome(t)
+
+	for _, bad := range []string{home, filepath.Dir(home), filepath.VolumeName(home) + string(filepath.Separator)} {
+		if err := CheckDestination(bad); !errors.Is(err, ErrUnsafeDestination) {
+			t.Errorf("CheckDestination(%q) = %v, want ErrUnsafeDestination", bad, err)
+		}
+	}
+	link := filepath.Join(t.TempDir(), "home-link")
+	if err := os.Symlink(home, link); err == nil {
+		if err := CheckDestination(link); !errors.Is(err, ErrUnsafeDestination) {
+			t.Errorf("a link to the home folder got through: %v", err)
+		}
+	}
+	for _, good := range []string{
+		filepath.Join(home, "Downloads", "PureSend"),
+		filepath.Join(home, "Desktop"),
+		t.TempDir(),
+	} {
+		if err := CheckDestination(good); err != nil {
+			t.Errorf("CheckDestination(%q) = %v, want nil", good, err)
+		}
+	}
+
+	// And through the real receiving path: refused before the handshake,
+	// with nothing written.
+	payload := []byte("[Desktop Entry]")
+	m := Manifest{Files: []FileInfo{{Path: ".config/autostart/x.desktop", Size: int64(len(payload)), SHA256: digestOf(payload)}}}
+	sender, receiver := net.Pipe()
+	go fakeSend(t, sender, m, payload)
+	if _, err := Receive(receiver, home, testCreds(), nil, Hooks{}); !errors.Is(err, ErrUnsafeDestination) {
+		t.Fatalf("receiving into the home folder got %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(home, ".config")); !os.IsNotExist(err) {
+		t.Error("something was written into the home folder")
+	}
+}
+
+// TestNoWritingThroughLinks: a link already in the destination — "docs"
+// pointing somewhere else entirely — must not carry a file out of it.
+func TestNoWritingThroughLinks(t *testing.T) {
+	outDir, elsewhere := t.TempDir(), t.TempDir()
+	if err := os.Symlink(elsewhere, filepath.Join(outDir, "docs")); err != nil {
+		t.Skipf("symbolic links are not available: %v", err)
+	}
+
+	payload := []byte("gotcha")
+	m := Manifest{Files: []FileInfo{{Path: "docs/x.txt", Size: int64(len(payload)), SHA256: digestOf(payload)}}}
+	sender, receiver := net.Pipe()
+	go fakeSend(t, sender, m, payload)
+	if _, err := Receive(receiver, outDir, testCreds(), nil, Hooks{}); err == nil || !strings.Contains(err.Error(), "link") {
+		t.Fatalf("a file went through a link: %v", err)
+	}
+	if entries, _ := os.ReadDir(elsewhere); len(entries) != 0 {
+		t.Errorf("something landed where the link points: %v", entries)
+	}
+}
+
+// TestOversizedChunkRejected: a compressed chunk that runs past the end of
+// the file it belongs to is refused as it arrives, not after the whole lie
+// has been written to disk and failed its digest.
+func TestOversizedChunkRejected(t *testing.T) {
+	data := bytes.Repeat([]byte("more than promised "), 100)
+	m := Manifest{
+		Files:      []FileInfo{{Path: "short.txt", Size: 10, SHA256: digestOf(data[:10])}},
+		Compressed: true,
+	}
+	comp := CompressChunk(nil, data)
+	frame := make([]byte, 4, 4+len(comp))
+	binary.BigEndian.PutUint32(frame, uint32(len(comp))|compressionFlag)
+	frame = append(frame, comp...)
+
+	outDir := t.TempDir()
+	sender, receiver := net.Pipe()
+	go fakeSend(t, sender, m, frame)
+	if _, err := Receive(receiver, outDir, testCreds(), nil, Hooks{}); err == nil || !strings.Contains(err.Error(), "more of") {
+		t.Fatalf("an oversized chunk got %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(outDir, "short.txt")); !os.IsNotExist(err) {
+		t.Error("the oversized file was saved")
+	}
+}
+
+// TestSenderStopsAtTheDeclaredSize: a file that grew after it was read
+// must not put its extra bytes on the wire, where the receiver would take
+// them for the next file.
+func TestSenderStopsAtTheDeclaredSize(t *testing.T) {
+	content := bytes.Repeat([]byte("x"), 3*chunkSize+123)
+	src := writeTempFile(t, t.TempDir(), "growing.log", content)
+	declared := int64(chunkSize + 7) // what the manifest said, before it grew
+
+	for _, compressed := range []bool{false, true} {
+		var wire bytes.Buffer
+		info := FileInfo{Path: "growing.log", Size: declared}
+		if err := sendFile(&wire, deadlines{}, src, info, 0, nil, compressed); err != nil {
+			t.Fatalf("compressed=%v: sendFile: %v", compressed, err)
+		}
+		got := wire.Bytes()
+		if compressed {
+			var plain []byte
+			for len(got) > 0 {
+				hdr := binary.BigEndian.Uint32(got[:4])
+				n := int(hdr &^ compressionFlag)
+				chunk := got[4 : 4+n]
+				if hdr&compressionFlag != 0 {
+					var err error
+					if chunk, err = DecompressChunk(nil, chunk, 2*chunkSize); err != nil {
+						t.Fatal(err)
+					}
+				}
+				plain = append(plain, chunk...)
+				got = got[4+n:]
+			}
+			got = plain
+		}
+		if int64(len(got)) != declared {
+			t.Errorf("compressed=%v: %d bytes on the wire, want the declared %d", compressed, len(got), declared)
+		}
+	}
+}
+
+// TestPlaceNeverReplaces covers the moment between finding a free name and
+// taking it: whatever is at the target by then — a file, or a link that
+// points nowhere — stays as it is.
+func TestPlaceNeverReplaces(t *testing.T) {
+	dir := t.TempDir()
+	target := filepath.Join(dir, "doc.txt")
+	writeTempFile(t, dir, "doc.txt", []byte("existing"))
+	dangling := filepath.Join(dir, "doc (1).txt")
+	want := filepath.Join(dir, "doc (2).txt")
+	if err := os.Symlink(filepath.Join(dir, "nowhere"), dangling); err != nil {
+		t.Logf("no symbolic links here, checking files only: %v", err)
+		dangling, want = "", filepath.Join(dir, "doc (1).txt")
+	}
+	src := writeTempFile(t, dir, "doc.part", []byte("new"))
+
+	final, err := place(src, target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if final != want {
+		t.Errorf("placed at %s, want %s", final, want)
+	}
+	if got, _ := os.ReadFile(target); string(got) != "existing" {
+		t.Error("the existing file was replaced")
+	}
+	if dangling != "" {
+		if st, err := os.Lstat(dangling); err != nil || st.Mode()&os.ModeSymlink == 0 {
+			t.Error("the dangling link was replaced")
+		}
+	}
+	if got, _ := os.ReadFile(final); string(got) != "new" {
+		t.Errorf("the new file at %s holds %q", final, got)
+	}
+	if _, err := os.Stat(src); !os.IsNotExist(err) {
+		t.Error("the partial file was left behind")
+	}
+}
+
+// TestResumeRevealsNoOtherFiles: the offsets a receiver sends back say
+// which files it already has. Only files an interrupted transfer finished
+// may be claimed — otherwise a sender could offer a file by its digest and
+// learn from the answer whether the receiver's folder holds it.
+func TestResumeRevealsNoOtherFiles(t *testing.T) {
+	outDir := t.TempDir()
+	private := []byte("a file that was already in the folder")
+	writeTempFile(t, outDir, "private.txt", private)
+	m := Manifest{Files: []FileInfo{{Path: "private.txt", Size: int64(len(private)), SHA256: digestOf(private)}}}
+
+	sender, receiver := net.Pipe()
+	offsets := make(chan []int64, 1)
+	go func() {
+		defer sender.Close()
+		enc, dec := json.NewEncoder(sender), json.NewDecoder(sender)
+		if _, err := authenticate(roleSender, testCreds(),
+			func(m *authMsg) error { return dec.Decode(m) },
+			func(m authMsg) error { return enc.Encode(m) }); err != nil {
+			return
+		}
+		_ = enc.Encode(offerMsg{Manifest: &m})
+		var goAhead ack
+		if dec.Decode(&goAhead) != nil {
+			return
+		}
+		offsets <- goAhead.Offsets
+		if len(goAhead.Offsets) == 1 && goAhead.Offsets[0] == 0 {
+			_, _ = sender.Write(private)
+		}
+		var done ack
+		_ = dec.Decode(&done)
+	}()
+
+	saved, err := Receive(receiver, outDir, testCreds(), nil, Hooks{})
+	if got := <-offsets; len(got) != 1 || got[0] != 0 {
+		t.Fatalf("the receiver told the sender it had %v of a file it never received", got)
+	}
+	if err != nil {
+		t.Fatalf("Receive: %v", err)
+	}
+	// Downloaded all the same, and recognised as the file already there
+	// rather than saved a second time next to it.
+	if len(saved) != 1 || saved[0] != filepath.Join(outDir, "private.txt") {
+		t.Errorf("saved %v, want the existing private.txt", saved)
+	}
+	entries, _ := os.ReadDir(outDir)
+	if len(entries) != 1 {
+		var names []string
+		for _, e := range entries {
+			names = append(names, e.Name())
+		}
+		t.Errorf("the folder holds %v, want just private.txt", names)
+	}
+}
+
 func FuzzSafeJoin(f *testing.F) {
 	seeds := []string{
 		"belge.txt",
@@ -499,6 +803,7 @@ func FuzzSafeJoin(f *testing.F) {
 		"foto\u202Egpj.exe",
 		"\x1b[2Jtemiz.txt",
 		".puresend-partial/sinsi.bin",
+		".PURESEND-PARTIAL/sinsi.bin",
 		"",
 	}
 	for _, s := range seeds {
@@ -524,9 +829,10 @@ func FuzzSafeJoin(f *testing.F) {
 			t.Fatalf("safeJoin(%q) escaped outDir: target=%q, diff=%q", rel, target, diff)
 		}
 
-		// Invariant 2: Target must never begin with reserved partial download directory.
-		cleanRel := filepath.ToSlash(diff)
-		if strings.HasPrefix(cleanRel, partialDir+"/") || cleanRel == partialDir {
+		// Invariant 2: Target must never begin with reserved partial download
+		// directory, in any case — on macOS and Windows those are one folder.
+		first, _, _ := strings.Cut(filepath.ToSlash(diff), "/")
+		if strings.EqualFold(first, partialDir) {
 			t.Fatalf("safeJoin(%q) allowed reserved partialDir in target=%q", rel, target)
 		}
 	})

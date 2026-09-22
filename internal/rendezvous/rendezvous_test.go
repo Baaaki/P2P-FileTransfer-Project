@@ -2,6 +2,7 @@ package rendezvous
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -18,34 +19,45 @@ var (
 	receiver = peer.ID("receiver")
 )
 
-const room = "kiraz-liman-42"
-
-func register(r *Registry, from peer.ID, room string) Response {
+func register(r *Registry, from peer.ID, nameplate string) Response {
 	return r.handle(from, Request{
-		Type:  "register",
-		Room:  room,
-		Addrs: []string{"/ip4/127.0.0.1/tcp/4001"},
+		Type:      "register",
+		Nameplate: nameplate,
+		Addrs:     []string{"/ip4/127.0.0.1/tcp/4001"},
 	})
 }
 
-func lookup(r *Registry, from peer.ID, room string) Response {
-	return r.handle(from, Request{Type: "lookup", Room: room})
+// open registers a new room for from and returns its nameplate.
+func open(t *testing.T, r *Registry, from peer.ID) string {
+	t.Helper()
+	resp := register(r, from, "")
+	if resp.Type != "ok" {
+		t.Fatalf("register failed: %+v", resp)
+	}
+	return resp.Nameplate
 }
 
-// code returns the i-th of an endless supply of distinct, well-formed
-// codes, for tests that need more rooms than the word list suggests.
-func code(i int) string {
-	return fmt.Sprintf("oda%c-test%c-%02d", 'a'+rune(i/100%26), 'a'+rune(i/2600%26), i%100)
+func lookup(r *Registry, from peer.ID, nameplate string) Response {
+	return r.handle(from, Request{Type: "lookup", Nameplate: nameplate})
+}
+
+// unused returns a well-formed nameplate nobody holds.
+func unused(r *Registry) string {
+	for n := 9999; ; n-- {
+		if _, taken := r.rooms[strconv.Itoa(n)]; !taken {
+			return strconv.Itoa(n)
+		}
+	}
 }
 
 func TestRegisterAndLookup(t *testing.T) {
 	r := NewRegistry()
-
-	if resp := register(r, sender, room); resp.Type != "ok" {
-		t.Fatalf("register failed: %+v", resp)
+	np := open(t, r, sender)
+	if !ValidNameplate(np) {
+		t.Fatalf("the server handed out %q", np)
 	}
 
-	resp := lookup(r, receiver, room)
+	resp := lookup(r, receiver, np)
 	if resp.Type != "found" {
 		t.Fatalf("lookup failed: %+v", resp)
 	}
@@ -57,16 +69,67 @@ func TestRegisterAndLookup(t *testing.T) {
 	}
 }
 
+// TestNameplatesStayShortAndSparse: two digits while few rooms are open,
+// longer ones once the short range would get crowded — crowded meaning a
+// mistyped number would too often land in someone else's room.
+func TestNameplatesStayShortAndSparse(t *testing.T) {
+	r := NewRegistry()
+	seen := map[string]bool{}
+	for i := range 200 {
+		np := open(t, r, peer.ID(fmt.Sprintf("p%d", i)))
+		if seen[np] {
+			t.Fatalf("nameplate %s handed out twice", np)
+		}
+		seen[np] = true
+	}
+	lengths := map[int]int{}
+	for np := range seen {
+		lengths[len(np)]++
+	}
+	if lengths[2] == 0 || lengths[2] > 90/nameplateSparsity {
+		t.Errorf("%d two-digit nameplates among 200 rooms, want 1..%d", lengths[2], 90/nameplateSparsity)
+	}
+	if lengths[3] == 0 || lengths[3] > 900/nameplateSparsity {
+		t.Errorf("%d three-digit nameplates among 200 rooms, want 1..%d", lengths[3], 900/nameplateSparsity)
+	}
+	if lengths[4] == 0 {
+		t.Error("no four-digit nameplates once the shorter ranges were crowded")
+	}
+}
+
+// TestNameplatesScaleDynamically verifies that when the table grows beyond
+// 4-digit capacity, nameplates scale dynamically to 5 digits and beyond
+// without panic or arbitrary limit.
+func TestNameplatesScaleDynamically(t *testing.T) {
+	r := NewRegistry(WithMaxRooms(0))
+	for i := 10; i < 19; i++ {
+		r.rooms[strconv.Itoa(i)] = roomEntry{}
+	}
+	for i := 100; i < 190; i++ {
+		r.rooms[strconv.Itoa(i)] = roomEntry{}
+	}
+	for i := 1000; i < 1900; i++ {
+		r.rooms[strconv.Itoa(i)] = roomEntry{}
+	}
+	np := r.freeNameplate()
+	if len(np) != 5 {
+		t.Fatalf("expected 5-digit nameplate when shorter ranges are crowded, got %s (len %d)", np, len(np))
+	}
+	if !ValidNameplate(np) {
+		t.Fatalf("5-digit nameplate %s is not valid according to ValidNameplate", np)
+	}
+}
+
 func TestLookupUnknownRoom(t *testing.T) {
 	r := NewRegistry()
-	if resp := lookup(r, receiver, "elma-deniz-11"); resp.Type != "not_found" {
+	if resp := lookup(r, receiver, "11"); resp.Type != "not_found" {
 		t.Fatalf("got %+v, want not_found", resp)
 	}
 }
 
 func TestRegisterValidation(t *testing.T) {
 	r := NewRegistry()
-	if resp := r.handle(sender, Request{Type: "register", Room: room}); resp.Type != "error" {
+	if resp := r.handle(sender, Request{Type: "register"}); resp.Type != "error" {
 		t.Errorf("register without addresses accepted: %+v", resp)
 	}
 	if resp := r.handle(sender, Request{Type: "bogus"}); resp.Type != "error" {
@@ -77,33 +140,36 @@ func TestRegisterValidation(t *testing.T) {
 	for i := range tooMany {
 		tooMany[i] = "/ip4/127.0.0.1/tcp/4001"
 	}
-	if resp := r.handle(sender, Request{Type: "register", Room: room, Addrs: tooMany}); resp.Type != "error" {
+	if resp := r.handle(sender, Request{Type: "register", Addrs: tooMany}); resp.Type != "error" {
 		t.Errorf("register with too many addresses accepted: %+v", resp)
 	}
-	if resp := r.handle(sender, Request{Type: "register", Room: room, Addrs: []string{"garbage"}}); resp.Type != "error" {
+	if resp := r.handle(sender, Request{Type: "register", Addrs: []string{"garbage"}}); resp.Type != "error" {
 		t.Errorf("register without a single valid address accepted: %+v", resp)
+	}
+	if r.ActiveRooms() != 0 {
+		t.Errorf("a refused register left %d rooms behind", r.ActiveRooms())
 	}
 }
 
-// TestRegisterRejectsMalformedCodes: a room name used to be up to 16 KB of
-// anything at all. Now it has exactly the shape a real code has.
-func TestRegisterRejectsMalformedCodes(t *testing.T) {
+// TestRegisterRejectsMalformedNameplates: a room name used to be up to 16 KB
+// of anything at all. Now it is a number of at least two digits — and in
+// particular never a whole room code, whose words the server must not see.
+func TestRegisterRejectsMalformedNameplates(t *testing.T) {
 	for _, bad := range []string{
-		"",
-		"a-b-1",
-		"kiraz-liman-4",
-		"kiraz-liman-420",
-		"Kiraz-liman-42",
-		"kiraz liman 42",
-		"kiraz-liman-42\n",
-		"kıraz-liman-42",
-		"kiraz-liman-kule-42",
-		strings.Repeat("a", 30) + "-" + strings.Repeat("b", 30) + "-42",
-		strings.Repeat("x", 16<<10),
+		"kiraz-liman-42",
+		"7",
+		"042",
+		"4a",
+		"42\n",
+		" 42",
+		strings.Repeat("9", 16<<10),
 	} {
 		r := NewRegistry()
 		if resp := register(r, sender, bad); resp.Type != "error" {
-			t.Errorf("register accepted the code %q", bad)
+			t.Errorf("register accepted the nameplate %q", bad)
+		}
+		if resp := lookup(r, receiver, bad); resp.Type != "error" {
+			t.Errorf("lookup accepted the nameplate %q", bad)
 		}
 		if r.ActiveRooms() != 0 {
 			t.Errorf("a room was created for %q", bad)
@@ -113,27 +179,40 @@ func TestRegisterRejectsMalformedCodes(t *testing.T) {
 
 func TestRoomTakeoverRejected(t *testing.T) {
 	r := NewRegistry()
-	register(r, sender, room)
+	np := open(t, r, sender)
 
-	if resp := register(r, peer.ID("attacker"), room); resp.Type != "error" {
-		t.Fatalf("takeover by another peer accepted: %+v", resp)
+	if resp := register(r, peer.ID("attacker"), np); resp.Type != "error" || resp.Error != msgInUse {
+		t.Fatalf("takeover by another peer got %+v", resp)
 	}
-	// The owner itself may refresh its own room.
-	if resp := register(r, sender, room); resp.Type != "ok" {
-		t.Fatalf("owner re-register rejected: %+v", resp)
+	// The owner itself may refresh its own room, and keeps its number.
+	if resp := register(r, sender, np); resp.Type != "ok" || resp.Nameplate != np {
+		t.Fatalf("owner re-register got %+v", resp)
+	}
+}
+
+// TestNameplateTakenBack: a server that restarts forgets every room. The
+// sender registers its nameplate again, and the code its user has already
+// read out keeps working.
+func TestNameplateTakenBack(t *testing.T) {
+	r := NewRegistry()
+	if resp := register(r, sender, "427"); resp.Type != "ok" || resp.Nameplate != "427" {
+		t.Fatalf("taking back a free nameplate got %+v", resp)
+	}
+	if resp := lookup(r, receiver, "427"); resp.Type != "found" {
+		t.Fatalf("the room taken back is not found: %+v", resp)
 	}
 }
 
 func TestRoomExpiry(t *testing.T) {
 	r := NewRegistry()
-	register(r, sender, room)
+	np := open(t, r, sender)
 
 	// Age the entry past its TTL by editing it directly.
-	e := r.rooms[room]
+	e := r.rooms[np]
 	e.createdAt = time.Now().Add(-RoomTTL - time.Minute)
-	r.rooms[room] = e
+	r.rooms[np] = e
 
-	if resp := lookup(r, receiver, room); resp.Type != "not_found" {
+	if resp := lookup(r, receiver, np); resp.Type != "not_found" {
 		t.Fatalf("expired room still found: %+v", resp)
 	}
 	if got := r.Stats().Expired; got != 1 {
@@ -145,29 +224,76 @@ func TestRoomExpiry(t *testing.T) {
 // every reconnect — must not stretch a code past its hour.
 func TestRefreshKeepsTheClock(t *testing.T) {
 	r := NewRegistry()
-	register(r, sender, room)
-	e := r.rooms[room]
+	np := open(t, r, sender)
+	e := r.rooms[np]
 	e.createdAt = time.Now().Add(-RoomTTL + time.Second)
-	r.rooms[room] = e
+	r.rooms[np] = e
 
-	if resp := register(r, sender, room); resp.Type != "ok" {
+	if resp := register(r, sender, np); resp.Type != "ok" {
 		t.Fatalf("refresh failed: %+v", resp)
 	}
 	time.Sleep(1100 * time.Millisecond)
-	if resp := lookup(r, receiver, room); resp.Type != "not_found" {
+	if resp := lookup(r, receiver, np); resp.Type != "not_found" {
 		t.Fatalf("a refresh extended the room past its hour: %+v", resp)
 	}
 }
 
 func TestServerFull(t *testing.T) {
-	r := NewRegistry(WithMaxRoomsPerPeer(MaxRooms), WithRegisterBudget(MaxRooms+10))
+	r := NewRegistry()
 	for i := range MaxRooms {
-		if resp := register(r, sender, code(i)); resp.Type != "ok" {
+		if resp := register(r, peer.ID(fmt.Sprintf("p%d", i)), ""); resp.Type != "ok" {
 			t.Fatalf("register %d failed: %+v", i, resp)
 		}
 	}
-	if resp := register(r, sender, code(MaxRooms)); resp.Type != "error" {
-		t.Fatalf("register beyond MaxRooms accepted: %+v", resp)
+	if resp := register(r, sender, ""); resp.Type != "error" || !strings.Contains(resp.Error, "full") {
+		t.Fatalf("register beyond MaxRooms got %+v", resp)
+	}
+}
+
+// TestFullTableMakesRoomFromAbandonedRooms: registering and hanging up in
+// a loop leaves rooms nobody can reach. They must not keep a sender who is
+// actually here out of a full table.
+func TestFullTableMakesRoomFromAbandonedRooms(t *testing.T) {
+	r := NewRegistry()
+	for i := range MaxRooms {
+		open(t, r, peer.ID(fmt.Sprintf("p%d", i)))
+	}
+	r.ownerGone(peer.ID("p7"))
+
+	np := open(t, r, peer.ID("latecomer"))
+	if resp := lookup(r, receiver, np); resp.Type != "found" {
+		t.Fatalf("the latecomer's room is not there: %+v", resp)
+	}
+	if got := r.Stats().Evicted; got != 1 {
+		t.Errorf("Evicted = %d, want 1", got)
+	}
+	if r.HasPeer(peer.ID("p7")) {
+		t.Error("the abandoned room was kept instead of the latecomer's")
+	}
+	if got := r.ActiveRooms(); got != MaxRooms {
+		t.Errorf("ActiveRooms = %d, want %d", got, MaxRooms)
+	}
+
+	// With every owner still connected there is nothing to give up.
+	if resp := register(r, peer.ID("one-too-many"), ""); resp.Type != "error" {
+		t.Errorf("a full table with no abandoned rooms took another: %+v", resp)
+	}
+}
+
+// TestNoRegisterKillSwitch is the finding that removed the server-wide
+// budget of new rooms per minute. Identities cost nothing, so spending the
+// budget with fresh ones told every real sender "server is busy". As long
+// as the table has space, a new room is never refused for being one too
+// many this minute.
+func TestNoRegisterKillSwitch(t *testing.T) {
+	r := NewRegistry()
+	for i := range 500 {
+		if resp := register(r, peer.ID(fmt.Sprintf("fresh-identity-%d", i)), ""); resp.Type != "ok" {
+			t.Fatalf("register %d within the minute got %+v", i, resp)
+		}
+	}
+	if resp := register(r, peer.ID("the-real-sender"), ""); resp.Type != "ok" {
+		t.Fatalf("after a burst of registrations a real sender got %+v", resp)
 	}
 }
 
@@ -175,26 +301,21 @@ func TestServerFull(t *testing.T) {
 // table and leave every other user with "server is full".
 func TestRoomsPerPeerLimit(t *testing.T) {
 	r := NewRegistry(WithMaxRoomsPerPeer(2))
-	for i := range 2 {
-		if resp := register(r, sender, code(i)); resp.Type != "ok" {
-			t.Fatalf("register %d failed: %+v", i, resp)
-		}
-	}
-	if resp := register(r, sender, code(2)); resp.Type != "error" {
+	first := open(t, r, sender)
+	open(t, r, sender)
+	if resp := register(r, sender, ""); resp.Type != "error" {
 		t.Fatalf("register beyond the per-peer limit accepted: %+v", resp)
 	}
 	// Another sender is unaffected, and so is refreshing a room already held.
-	if resp := register(r, receiver, code(3)); resp.Type != "ok" {
-		t.Errorf("the limit leaked to another peer: %+v", resp)
-	}
-	if resp := register(r, sender, code(0)); resp.Type != "ok" {
+	open(t, r, receiver)
+	if resp := register(r, sender, first); resp.Type != "ok" {
 		t.Errorf("refreshing an owned room was refused: %+v", resp)
 	}
 	// Closing one frees the slot again.
-	if resp := r.handle(sender, Request{Type: "unregister", Room: code(0)}); resp.Type != "ok" {
+	if resp := r.handle(sender, Request{Type: "unregister", Nameplate: first}); resp.Type != "ok" {
 		t.Fatalf("unregister failed: %+v", resp)
 	}
-	if resp := register(r, sender, code(4)); resp.Type != "ok" {
+	if resp := register(r, sender, ""); resp.Type != "ok" {
 		t.Errorf("a freed slot was not reusable: %+v", resp)
 	}
 }
@@ -203,36 +324,9 @@ func TestRoomsPerPeerLimit(t *testing.T) {
 // that is all a peer gets unless the operator says otherwise.
 func TestOneRoomPerPeerByDefault(t *testing.T) {
 	r := NewRegistry()
-	register(r, sender, code(0))
-	if resp := register(r, sender, code(1)); resp.Type != "error" {
+	open(t, r, sender)
+	if resp := register(r, sender, ""); resp.Type != "error" {
 		t.Errorf("a second room for the same peer was accepted: %+v", resp)
-	}
-}
-
-// TestRegisterBudget covers the other half of keeping the table from being
-// filled: identities are free, so the number of new rooms per minute is
-// bounded server-wide. A refresh is not a new room and is never refused.
-func TestRegisterBudget(t *testing.T) {
-	r := NewRegistry(WithRegisterBudget(3))
-	for i := range 3 {
-		if resp := register(r, peer.ID(fmt.Sprintf("p%d", i)), code(i)); resp.Type != "ok" {
-			t.Fatalf("register %d failed: %+v", i, resp)
-		}
-	}
-	resp := register(r, peer.ID("one-too-many"), code(3))
-	if resp.Type != "error" || !strings.Contains(resp.Error, "busy") {
-		t.Fatalf("register beyond the budget got %+v", resp)
-	}
-	if resp := register(r, peer.ID("p0"), code(0)); resp.Type != "ok" {
-		t.Errorf("a refresh was charged to the budget: %+v", resp)
-	}
-	if got := r.Stats().RegisterThrottled; got != 1 {
-		t.Errorf("RegisterThrottled = %d, want 1", got)
-	}
-
-	r.newRooms.start = time.Now().Add(-2 * time.Minute)
-	if resp := register(r, peer.ID("next-minute"), code(3)); resp.Type != "ok" {
-		t.Errorf("the budget did not refill: %+v", resp)
 	}
 }
 
@@ -242,32 +336,32 @@ func TestRegisterBudget(t *testing.T) {
 // a slot for the rest of its hour.
 func TestOwnerGone(t *testing.T) {
 	r := NewRegistry()
-	register(r, sender, room)
+	np := open(t, r, sender)
 
 	r.ownerGone(sender)
-	resp := lookup(r, receiver, room)
+	resp := lookup(r, receiver, np)
 	if resp.Type != "error" || !strings.Contains(resp.Error, "reconnecting") {
 		t.Fatalf("lookup while the owner is away got %+v", resp)
 	}
 
 	r.ownerBack(sender)
-	if resp := lookup(r, receiver, room); resp.Type != "found" {
+	if resp := lookup(r, receiver, np); resp.Type != "found" {
 		t.Fatalf("the room did not come back with its owner: %+v", resp)
 	}
 
 	r.ownerGone(sender)
-	e := r.rooms[room]
+	e := r.rooms[np]
 	e.ownerGone = time.Now().Add(-ownerGrace - time.Second)
-	r.rooms[room] = e
+	r.rooms[np] = e
 	if got := r.ActiveRooms(); got != 0 {
 		t.Fatalf("an abandoned room outlived its grace period: %d rooms", got)
 	}
 	if got := r.Stats().Abandoned; got != 1 {
 		t.Errorf("Abandoned = %d, want 1", got)
 	}
-	// And the owner, back later, can simply register it again.
-	if resp := register(r, sender, room); resp.Type != "ok" {
-		t.Errorf("re-registering after a long absence failed: %+v", resp)
+	// And the owner, back later, can simply take its nameplate back.
+	if resp := register(r, sender, np); resp.Type != "ok" || resp.Nameplate != np {
+		t.Errorf("re-registering after a long absence got %+v", resp)
 	}
 }
 
@@ -275,19 +369,19 @@ func TestOwnerGone(t *testing.T) {
 // immediately, and that nobody else can retire it for them.
 func TestUnregister(t *testing.T) {
 	r := NewRegistry()
-	register(r, sender, room)
+	np := open(t, r, sender)
 
-	if resp := r.handle(peer.ID("attacker"), Request{Type: "unregister", Room: room}); resp.Type != "ok" {
+	if resp := r.handle(peer.ID("attacker"), Request{Type: "unregister", Nameplate: np}); resp.Type != "ok" {
 		t.Fatalf("unregister by a stranger returned %+v, want a plain ok", resp)
 	}
-	if resp := lookup(r, receiver, room); resp.Type != "found" {
+	if resp := lookup(r, receiver, np); resp.Type != "found" {
 		t.Fatal("a stranger managed to close someone else's room")
 	}
 
-	if resp := r.handle(sender, Request{Type: "unregister", Room: room}); resp.Type != "ok" {
+	if resp := r.handle(sender, Request{Type: "unregister", Nameplate: np}); resp.Type != "ok" {
 		t.Fatalf("owner unregister failed: %+v", resp)
 	}
-	if resp := lookup(r, receiver, room); resp.Type != "not_found" {
+	if resp := lookup(r, receiver, np); resp.Type != "not_found" {
 		t.Fatalf("the room survived its owner closing it: %+v", resp)
 	}
 	if got := r.ActiveRooms(); got != 0 {
@@ -300,9 +394,9 @@ func TestUnregister(t *testing.T) {
 // cannot fit through the fallback route.
 func TestLookupReportsRelayLimit(t *testing.T) {
 	r := NewRegistry(WithRelayLimit(256 << 20))
-	register(r, sender, room)
+	np := open(t, r, sender)
 
-	resp := lookup(r, receiver, room)
+	resp := lookup(r, receiver, np)
 	if resp.RelayLimit != 256<<20 {
 		t.Errorf("lookup reported a relay limit of %d, want %d", resp.RelayLimit, 256<<20)
 	}
@@ -312,10 +406,10 @@ func TestLookupReportsRelayLimit(t *testing.T) {
 // exporter are built on.
 func TestStats(t *testing.T) {
 	r := NewRegistry()
-	register(r, sender, room)
-	lookup(r, receiver, room)
-	lookup(r, receiver, "elma-deniz-11")
-	r.handle(sender, Request{Type: "unregister", Room: room})
+	np := open(t, r, sender)
+	lookup(r, receiver, np)
+	lookup(r, receiver, unused(r))
+	r.handle(sender, Request{Type: "unregister", Nameplate: np})
 
 	got := r.Stats()
 	want := Stats{Registered: 1, Unregistered: 1, LookupsFound: 1, LookupsNotFound: 1}
@@ -330,7 +424,7 @@ func TestRelayACL(t *testing.T) {
 	if r.AllowReserve(sender, nil) {
 		t.Error("reservation allowed for a peer without a room")
 	}
-	register(r, sender, room)
+	open(t, r, sender)
 	if !r.AllowReserve(sender, nil) {
 		t.Error("reservation refused for a room owner")
 	}
@@ -342,51 +436,58 @@ func TestRelayACL(t *testing.T) {
 	}
 }
 
+// TestLookupRateLimit: nameplates are public, so what is limited is how
+// fast one peer can walk them — rooms found count as much as misses.
 func TestLookupRateLimit(t *testing.T) {
 	r := NewRegistry()
-	register(r, sender, room)
+	np := open(t, r, sender)
 
-	for range maxFailedLookups {
-		if resp := lookup(r, receiver, "yanlis-tahmin-11"); resp.Type != "not_found" {
-			t.Fatalf("miss not reported: %+v", resp)
+	for i := range maxLookups {
+		target, want := np, "found"
+		if i%2 == 1 {
+			target, want = unused(r), "not_found"
+		}
+		if resp := lookup(r, receiver, target); resp.Type != want {
+			t.Fatalf("lookup %d got %+v, want %s", i, resp, want)
 		}
 	}
-	// Once over the limit, even a valid code is rejected for this peer —
-	// otherwise the refusal would tell a guesser which guesses hit.
-	if resp := lookup(r, receiver, room); resp.Type != "error" {
+	if resp := lookup(r, receiver, np); resp.Type != "error" {
 		t.Fatalf("rate limit not applied: %+v", resp)
 	}
+	if got := r.Stats().LookupsThrottled; got != 1 {
+		t.Errorf("LookupsThrottled = %d, want 1", got)
+	}
 	// Other peers are unaffected.
-	if resp := lookup(r, peer.ID("other"), room); resp.Type != "found" {
+	if resp := lookup(r, peer.ID("other"), np); resp.Type != "found" {
 		t.Fatalf("rate limit leaked to another peer: %+v", resp)
 	}
 	// The block lifts once the window expires.
-	r.fails[receiver] = window{count: maxFailedLookups, start: time.Now().Add(-2 * lookupFailWindow)}
-	if resp := lookup(r, receiver, room); resp.Type != "found" {
+	r.lookups[receiver] = window{count: maxLookups, start: time.Now().Add(-2 * lookupWindow)}
+	if resp := lookup(r, receiver, np); resp.Type != "found" {
 		t.Fatalf("rate limit did not expire: %+v", resp)
 	}
 }
 
-// TestMalformedLookupIsNotAMiss: a code that cannot exist teaches nothing,
-// and a typo in its shape should not use up one of a user's tries.
-func TestMalformedLookupIsNotAMiss(t *testing.T) {
+// TestMalformedLookupIsNotCounted: a nameplate that cannot exist teaches
+// nothing, and a typo in its shape should not use up one of a user's tries.
+func TestMalformedLookupIsNotCounted(t *testing.T) {
 	r := NewRegistry()
-	for range maxFailedLookups + 2 {
-		lookup(r, receiver, "not a code")
+	for range maxLookups + 2 {
+		lookup(r, receiver, "not a number")
 	}
-	register(r, sender, room)
-	if resp := lookup(r, receiver, room); resp.Type != "found" {
+	np := open(t, r, sender)
+	if resp := lookup(r, receiver, np); resp.Type != "found" {
 		t.Fatalf("malformed lookups counted against the peer: %+v", resp)
 	}
 }
 
 // fillGlobalBudget spends the server-wide miss budget with fresh
-// identities — the attacker who reconnects between guesses.
+// identities — the walker who reconnects between lookups.
 func fillGlobalBudget(t *testing.T, r *Registry) {
 	t.Helper()
-	for i := range maxGlobalFailedLookups {
-		guesser := peer.ID(fmt.Sprintf("fresh-identity-%d", i))
-		if resp := lookup(r, guesser, "yanlis-tahmin-11"); resp.Type != "not_found" {
+	for i := range maxGlobalMisses {
+		walker := peer.ID(fmt.Sprintf("fresh-identity-%d", i))
+		if resp := lookup(r, walker, unused(r)); resp.Type != "not_found" {
 			t.Fatalf("miss %d not reported: %+v", i, resp)
 		}
 	}
@@ -394,41 +495,37 @@ func fillGlobalBudget(t *testing.T, r *Registry) {
 
 // TestGlobalLimitIsNotAKillSwitch is the finding that reshaped this
 // limit. It used to refuse every lookup once the budget was spent, so a
-// few random guesses a second closed the door on every real user. Someone
+// few random requests a second closed the door on every real user. Someone
 // typing the code they were given must still get through.
 func TestGlobalLimitIsNotAKillSwitch(t *testing.T) {
 	r := NewRegistry()
-	register(r, sender, room)
+	np := open(t, r, sender)
 	fillGlobalBudget(t, r)
 
-	if resp := lookup(r, peer.ID("the-real-friend"), room); resp.Type != "found" {
-		t.Fatalf("under a guessing flood, a first-try lookup was refused: %+v", resp)
+	if resp := lookup(r, peer.ID("the-real-friend"), np); resp.Type != "found" {
+		t.Fatalf("under a flood of lookups, a first lookup was refused: %+v", resp)
 	}
 }
 
 // TestGlobalLimitTakesAwaySecondChances covers what the limit still does
-// under pressure: a peer gets one guess, answered honestly, and nothing
-// after it — hit or miss, so the refusal gives nothing away.
+// under pressure: a peer gets one lookup, answered honestly, and nothing
+// after it.
 func TestGlobalLimitTakesAwaySecondChances(t *testing.T) {
 	r := NewRegistry()
-	register(r, sender, room)
+	np := open(t, r, sender)
 	fillGlobalBudget(t, r)
 
-	guesser := peer.ID("guesser")
-	if resp := lookup(r, guesser, "baska-tahmin-22"); resp.Type != "not_found" {
-		t.Fatalf("a first guess under pressure got %+v, want an honest not_found", resp)
+	walker := peer.ID("walker")
+	if resp := lookup(r, walker, unused(r)); resp.Type != "not_found" {
+		t.Fatalf("a first lookup under pressure got %+v, want an honest not_found", resp)
 	}
-	if resp := lookup(r, guesser, room); resp.Type != "error" {
-		t.Fatalf("a second guess under pressure was answered: %+v", resp)
-	}
-	if resp := lookup(r, guesser, "ucuncu-tahmin-33"); resp.Type != "error" {
-		t.Fatalf("a third guess under pressure was answered: %+v", resp)
+	if resp := lookup(r, walker, np); resp.Type != "error" {
+		t.Fatalf("a second lookup under pressure was answered: %+v", resp)
 	}
 
 	// The pressure lifts with the window.
-	r.globalFail = window{count: maxGlobalFailedLookups, start: time.Now().Add(-2 * globalFailWindow)}
-	r.fails[guesser] = window{count: 1, start: time.Now()}
-	if resp := lookup(r, guesser, room); resp.Type != "found" {
+	r.globalMiss = window{count: maxGlobalMisses, start: time.Now().Add(-2 * lookupWindow)}
+	if resp := lookup(r, walker, np); resp.Type != "found" {
 		t.Fatalf("the server-wide limit did not expire: %+v", resp)
 	}
 }

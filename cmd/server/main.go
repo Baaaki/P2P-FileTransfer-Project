@@ -9,9 +9,11 @@
 //     entirely.
 //
 // It is deliberately not a trusted party. It never sees file contents, and
-// because the two clients prove to each other that they hold the room code
-// before anything moves, it cannot pass off a peer of its own as the
-// sender either. What it does see is metadata: which peers meet, and when.
+// it is only ever told the nameplate of a room code — the number — never
+// its secret words. The two clients prove to each other that they hold the
+// whole code before anything moves, so the server cannot pass off a peer
+// of its own as either of them without guessing the words. What it does
+// see is metadata: which peers meet, and when.
 //
 // # Running behind Cloudflare Tunnel
 //
@@ -98,7 +100,7 @@ func main() {
 	relayData := flag.Int64("relay-data", 256<<20, "max bytes relayed per connection when hole punching fails")
 	relayDuration := flag.Duration("relay-duration", 10*time.Minute, "max lifetime of a relayed connection")
 	roomsPerPeer := flag.Int("rooms-per-peer", rendezvous.DefaultMaxRoomsPerPeer, "how many rooms one sender may hold at once")
-	registerBudget := flag.Int("register-budget", rendezvous.DefaultRegisterBudget, "how many new rooms the server opens per minute")
+	maxRooms := flag.Int("max-rooms", rendezvous.MaxRooms, "maximum concurrent rooms the server will hold (0 for unlimited)")
 	showVersion := flag.Bool("version", false, "print version information and exit")
 	flag.Parse()
 
@@ -138,7 +140,7 @@ func main() {
 	registry := rendezvous.NewRegistry(
 		rendezvous.WithRelayLimit(*relayData),
 		rendezvous.WithMaxRoomsPerPeer(*roomsPerPeer),
-		rendezvous.WithRegisterBudget(*registerBudget),
+		rendezvous.WithMaxRooms(*maxRooms),
 	)
 
 	// One registry for everything /metrics serves: ours, and libp2p's own —
@@ -459,11 +461,11 @@ func registerMetrics(r *prometheus.Registry, peerID string, reg *rendezvous.Regi
 		func(s rendezvous.Stats) uint64 { return s.Expired })
 	counter("rooms_abandoned_total", "Rooms dropped because their owner disconnected and did not come back.",
 		func(s rendezvous.Stats) uint64 { return s.Abandoned })
-	counter("registrations_throttled_total", "New rooms refused by the per-minute budget.",
-		func(s rendezvous.Stats) uint64 { return s.RegisterThrottled })
+	counter("rooms_evicted_total", "Rooms whose owner had disconnected, dropped early to make space in a full table.",
+		func(s rendezvous.Stats) uint64 { return s.Evicted })
 	counter("lookups_found_total", "Lookups that matched a live room.",
 		func(s rendezvous.Stats) uint64 { return s.LookupsFound })
-	counter("lookups_not_found_total", "Lookups for a code that was wrong or expired.",
+	counter("lookups_not_found_total", "Lookups for a room number nobody holds: a wrong or expired code.",
 		func(s rendezvous.Stats) uint64 { return s.LookupsNotFound })
 	counter("lookups_throttled_total", "Lookups refused by the rate limiter.",
 		func(s rendezvous.Stats) uint64 { return s.LookupsThrottled })

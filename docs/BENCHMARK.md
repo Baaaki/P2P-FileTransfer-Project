@@ -8,7 +8,7 @@ Bu belge, PureSend (FileTransferilla) motorunun mikro-benchmark sonuçlarını, 
 
 PureSend, yüksek performanslı ve düşük kaynak tüketen bir P2P dosya aktarım aracı olarak tasarlanmıştır:
 * **Akış Tabanlı Mimari ($O(1)$ Bellek):** Dosya boyutu ne kadar büyük olursa olsun (örneğin 100 MB veya 50 GB), bellek tüketimi 32 KB'lık sabit bloklama (chunking) sayesinde ~30-45 MB bandında sabit kalır.
-* **Yüksek Hızlı Sıkıştırma:** Snappy tabanlı dinamik sıkıştırma motoru saniyede **~792 MB/s** veri işleme kapasitesine sahiptir.
+* **Yüksek Hızlı Sıkıştırma:** DEFLATE (`flate.HuffmanOnly`) tabanlı dinamik sıkıştırma motoru saniyede **~792 MB/s** veri işleme kapasitesine sahiptir.
 * **Düşük Gecikmeli Güvenlik:** PAKE2 el sıkışması ve SHA-256 doğrulamaları milisaniyeler seviyesinde tamamlanır.
 * **Sıfır Tahsisli (Zero-Alloc) Doğrulama:** SHA-256 format kontrolleri işlem başına **0 byte** bellek tahsisiyle çalışır.
 
@@ -27,7 +27,7 @@ Aşağıdaki metrikler, PureSend çekirdek motorunda bulunan `testing.B` benchma
 | `BenchmarkCompressChunk-16` | 28,274 | 40,392 ns/op | **792.24 MB/s** | 59 B/op | 1 allocs/op |
 | `BenchmarkDecompressChunk-16` | 8,480 | 153,669 ns/op | **208.24 MB/s** | 125 B/op | 3 allocs/op |
 
-* **Yorum:** PureSend, verinin sıkıştırılabilirliğini (entropy) önceden kontrol eder. Rastgele veya zaten sıkıştırılmış (ZIP, MP4, JPEG) dosyalarda sıkıştırmayı pas geçerek CPU tasarrufu sağlar; metin/kod/log dosyalarında ise 790+ MB/s hızında anlık sıkıştırma uygular.
+* **Yorum:** PureSend her 32 KB dilimi `flate.HuffmanOnly` ile sıkıştırmayı dener ve sonuç küçülmediyse dilimi olduğu gibi gönderir. Rastgele veya zaten sıkıştırılmış (ZIP, MP4, JPEG) dosyalarda böylece hat üzerinde hiçbir şey büyümez; metin/kod/log dosyalarında ise 790+ MB/s hızında anlık sıkıştırma uygulanır.
 
 ### 2.2 Güvenlik ve Doğrulama (`internal/transfer` & `internal/safetext`)
 

@@ -97,7 +97,7 @@ This builds and runs `cmd/server` on `127.0.0.1:4001` with a temporary identity 
 ```bash
 ./bin/puresend -server /ip4/127.0.0.1/tcp/4001/p2p/<ServerPeerID>
 ```
-Select "Send", pick a file, and note the generated 3-word room code (e.g. `kiraz-liman-42`).
+Select "Send", pick a file, and note the generated room code (e.g. `kiraz-liman-42`: two secret words and the room number the server handed out).
 
 **Terminal 3 — Receiver client:**
 ```bash
@@ -161,7 +161,7 @@ The receiving client must assume the sending peer might be compromised, buggy, o
 ### 4. The rendezvous server is not trusted either
 The meeting point server coordinates connections and relays traffic if hole punching fails, but it must never be trusted with secrets:
 - Peer authentication is handled end-to-end via PAKE2 over the room code.
-- The server never learns the room code or session keys.
+- The server only ever sees a code's nameplate (the number), never its secret words, and never session keys. Nothing that goes to the server may contain the words — `TestServerNeverSeesTheWords` checks it.
 - Both peer IDs are bound into the key exchange; a malicious server cannot impersonate either party or intercept file payloads.
 
 ---

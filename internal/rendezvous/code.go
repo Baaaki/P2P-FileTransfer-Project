@@ -2,7 +2,6 @@ package rendezvous
 
 import (
 	"crypto/rand"
-	"fmt"
 	"math/big"
 	"regexp"
 	"strings"
@@ -15,10 +14,23 @@ import (
 // keyboard has, none of them one letter away from another, none of them
 // the start of another.
 //
-// 256 words, twice, and 90 numbers make 256 × 256 × 90 ≈ 5.9 million
-// codes — about 22.5 bits. Not much on its own, which is why the transfer
-// protocol turns the code into a key both sides must prove they hold, and
-// why the server limits how fast anyone can guess: see Registry.lookup.
+// The two halves do different jobs. The number is the room's nameplate:
+// the meeting point hands it out and finds the room by it, so it is no
+// secret. The words are the secret. They are picked on the sender's
+// machine, never sent to the server, and only ever used as the password of
+// the handshake the two ends run (see transfer/auth.go). A meeting point —
+// or whoever controls the server list — that wants to pass off a peer of
+// its own as the sender, or to pose as the receiver, has to guess them,
+// once per attempt, and a sender closes its room after a few wrong ones.
+//
+// Were the server told the whole code, as it used to be, it could run the
+// handshake with both ends itself and sit in the middle of every transfer.
+// Hashing the code before sending it would not help: 5.9 million codes are
+// tried in milliseconds.
+//
+// 256 words, twice, make 65,536 secrets — 16 bits. That is small for a
+// password anyone could test offline, and plenty for one that can only be
+// tried against a live sender, three times.
 //
 // Changing this list changes which codes a client accepts. A word that is
 // dropped stops working in any code an older copy of the program hands out.
@@ -66,16 +78,37 @@ var wordSet = func() map[string]bool {
 	return m
 }()
 
-// codeFormat is the shape every code has. The server holds any code to it,
-// which caps what a room name can be at a few dozen bytes of letters.
-var codeFormat = regexp.MustCompile(`^[a-z]+-[a-z]+-[0-9]{2}$`)
+// codeFormat is the shape every code has: the two secret words, then the
+// nameplate.
+var codeFormat = regexp.MustCompile(`^[a-z]+-[a-z]+-[1-9][0-9]+$`)
+
+// nameplateFormat is the part of a code the server sees, and all a room
+// name on the server can be: at least two digits, never a leading zero, so
+// "042" and "42" cannot name two different rooms.
+var nameplateFormat = regexp.MustCompile(`^[1-9][0-9]+$`)
 
 // maxCodeLen is comfortably more than two of the longest words and a number.
-const maxCodeLen = 32
+const maxCodeLen = 64
 
-// NewRoomCode returns an easy-to-read room code like "kiraz-liman-42".
-func NewRoomCode() string {
-	return fmt.Sprintf("%s-%s-%d", pickWord(), pickWord(), pickNumber())
+// maxNameplateLen bounds what a room number can be on the server.
+const maxNameplateLen = 16
+
+// NewSecret picks the two words of a new code. They never leave this
+// machine except as a password the other end has to prove it knows.
+func NewSecret() string {
+	return pickWord() + "-" + pickWord()
+}
+
+// JoinCode puts the secret words and the nameplate the server handed out
+// together into the code a person reads out.
+func JoinCode(secret, nameplate string) string {
+	return secret + "-" + nameplate
+}
+
+// Nameplate is the part of a code the server is told: the number at its
+// end. Call it on a code ValidCode accepts.
+func Nameplate(code string) string {
+	return code[strings.LastIndexByte(code, '-')+1:]
 }
 
 func pickWord() string {
@@ -83,14 +116,14 @@ func pickWord() string {
 	return words[n.Int64()]
 }
 
-func pickNumber() int64 {
-	n, _ := rand.Int(rand.Reader, big.NewInt(90))
-	return n.Int64() + 10 // range 10-99
-}
-
 // ValidCode reports whether s has the shape of a room code.
 func ValidCode(s string) bool {
 	return len(s) <= maxCodeLen && codeFormat.MatchString(s)
+}
+
+// ValidNameplate reports whether s has the shape of a nameplate.
+func ValidNameplate(s string) bool {
+	return len(s) <= maxNameplateLen && nameplateFormat.MatchString(s)
 }
 
 // UnknownWord returns the first word of a well-formed code that is not in

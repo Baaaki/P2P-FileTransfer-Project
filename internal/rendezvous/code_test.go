@@ -6,15 +6,32 @@ import (
 	"testing"
 )
 
-func TestNewRoomCodeFormat(t *testing.T) {
-	for range 200 {
-		code := NewRoomCode()
-		if !ValidCode(code) {
-			t.Fatalf("NewRoomCode made an invalid code: %q", code)
+func TestNewSecretMakesValidCodes(t *testing.T) {
+	for _, nameplate := range []string{"10", "42", "427", "9999"} {
+		for range 50 {
+			code := JoinCode(NewSecret(), nameplate)
+			if !ValidCode(code) {
+				t.Fatalf("NewSecret made an invalid code: %q", code)
+			}
+			if w := UnknownWord(code); w != "" {
+				t.Fatalf("NewSecret used a word not in the list: %q in %q", w, code)
+			}
+			if got := Nameplate(code); got != nameplate {
+				t.Fatalf("Nameplate(%q) = %q, want %q", code, got, nameplate)
+			}
 		}
-		if w := UnknownWord(code); w != "" {
-			t.Fatalf("NewRoomCode used a word not in the list: %q in %q", w, code)
-		}
+	}
+}
+
+// TestSecretStaysOffTheNameplate: the nameplate is what the server is
+// told, so nothing of the secret may end up in it.
+func TestSecretStaysOffTheNameplate(t *testing.T) {
+	code := JoinCode("kiraz-liman", "427")
+	if got := Nameplate(code); got != "427" {
+		t.Fatalf("Nameplate(%q) = %q, want %q", code, got, "427")
+	}
+	if strings.Contains(Nameplate(code), "kiraz") || strings.Contains(Nameplate(code), "liman") {
+		t.Fatalf("the nameplate %q carries the secret", Nameplate(code))
 	}
 }
 
@@ -104,15 +121,41 @@ func TestNormalizeCode(t *testing.T) {
 
 func TestValidCode(t *testing.T) {
 	for code, want := range map[string]bool{
-		"kiraz-liman-42":  true,
-		"kiraz-liman-4":   false,
-		"kiraz-liman":     false,
-		"kiraz-liman-42-": false,
-		"Kiraz-liman-42":  false,
-		"kiraz-liman-4a":  false,
+		"kiraz-liman-42":     true,
+		"kiraz-liman-427":    true,
+		"kiraz-liman-9999":   true,
+		"kiraz-liman-10000":  true,
+		"kiraz-liman-123456": true,
+		"kiraz-liman-4":      false,
+		"kiraz-liman-042":    false,
+		"kiraz-liman":        false,
+		"kiraz-liman-42-":    false,
+		"Kiraz-liman-42":     false,
+		"kiraz-liman-4a":     false,
 	} {
 		if got := ValidCode(code); got != want {
 			t.Errorf("ValidCode(%q) = %v, want %v", code, got, want)
+		}
+	}
+}
+
+func TestValidNameplate(t *testing.T) {
+	for np, want := range map[string]bool{
+		"10":     true,
+		"427":    true,
+		"9999":   true,
+		"10000":  true,
+		"123456": true,
+		"":       false,
+		"7":      false,
+		"042":    false,
+		"4a":     false,
+		"-42":    false,
+		"42\n":   false,
+		"kiraz":  false,
+	} {
+		if got := ValidNameplate(np); got != want {
+			t.Errorf("ValidNameplate(%q) = %v, want %v", np, got, want)
 		}
 	}
 }

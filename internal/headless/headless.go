@@ -130,7 +130,7 @@ func pump(ctx context.Context, node *p2p.Node, confirm func(transfer.Manifest) b
 				}
 
 			case p2p.RejectedEvent:
-				logf("someone tried a wrong code; nothing was shown to them")
+				logf("someone tried a wrong code; nothing was shown to them (%d more closes the code)", e.Left)
 
 			case p2p.ServerLostEvent:
 				logf("lost the meeting point, reconnecting; the code stays the same")

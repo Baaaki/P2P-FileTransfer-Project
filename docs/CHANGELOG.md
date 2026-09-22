@@ -4,7 +4,74 @@ Notable changes to PureSend. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project
 follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [2.0.0] - 2026-09-22
+
+This release works through a security review of 1.0.0. The rendezvous
+protocol changes incompatibly (`/puresend/rendezvous/2.0.0`): clients and
+servers from 1.0.0 cannot talk to this version.
+
+### Security
+
+- **The server no longer sees the room code.** 1.0.0 claimed the rendezvous
+  server did not need to be trusted, but it received every code in full
+  and could therefore run the handshake with both ends and read or swap
+  any transfer. A code is now two secret words chosen by the sender and a
+  nameplate — the number — handed out by the server. Only the nameplate is
+  ever sent to it; the words go into the PAKE handshake alone. The same
+  holds for whoever controls the server list.
+- **Dynamic room scaling.** Room nameplates scale dynamically to longer
+  numbers as the table fills (starting at 2 digits), removing any arbitrary
+  cap on concurrent rooms while keeping codes short under light load.
+- **Wrong codes close the room.** A sender closes its room after 3
+  handshakes that fail on the code and tells its user why; each attempt is
+  shown as it happens, with how many are left. Nameplates are public, so
+  this is what bounds guessing: at most 3 in 65,536 per room.
+- **The sender's confirmation tag is only sent to a receiver that proved
+  the key first.** A guesser that sent garbage instead of its own tag used
+  to receive the sender's anyway — enough to check a guess offline without
+  it ever counting as a wrong code.
+- **No more server-wide budget of new rooms per minute** (`-register-budget`
+  is gone). Identities cost nothing, so spending the budget told every real
+  sender "server is busy". A full table now makes space by dropping rooms
+  whose owner has disconnected. Per-address limits belong at the edge;
+  `docs/DEPLOYMENT.md` now shows how to set them up on Cloudflare and Nginx.
+- **Updates and installs are verified.** `puresend -update`, `install.sh`
+  and `install.ps1` refuse an archive that does not match the release's
+  `checksums.txt`, or a release without one. Releases can be signed with
+  minisign; builds that carry the public key (`FT_UPDATE_KEY`) require the
+  signature. On Windows a failed replacement puts the old binary back.
+- **Releases are immutable.** The release workflow no longer deletes and
+  re-creates an existing release; it refuses to run for a tag that already
+  has one. Its actions are pinned to commit SHAs and GoReleaser to an exact
+  version.
+- **Receiving into the home folder is refused**, as is any folder above it
+  or a drive root: a sender decides the paths inside a transfer, and there
+  `.config/autostart/…` or `.ssh/authorized_keys` would take effect at the
+  next login.
+- **The approval screen can no longer hide an entry.** A long file list is
+  shown as what lands directly in the destination, hidden entries first and
+  called out, instead of the first twelve files.
+- **No writing through symbolic links** already inside the destination, and
+  finished files are moved into place with a hard link, so a file that
+  appears at the target between the check and the move is never replaced.
+- **The reserved `.puresend-partial` folder is matched in any case**, as the
+  case-insensitive filesystems of macOS and Windows see it.
+- **Resume no longer reveals what the destination holds.** Only files an
+  interrupted transfer finished are reported to the sender as present.
+- **Chunks that run past a file's declared size are refused as they
+  arrive**, and a sender never sends more of a file than its manifest said.
+
+### Fixed
+
+- Documentation: compression is DEFLATE (`flate.HuffmanOnly`), not Snappy;
+  rooms live for an hour, not ten minutes; SHA-256 is per file, not per
+  chunk; the relay defaults are 256 MB and 10 minutes; the installers now
+  suggest `puresend -send` / `-receive`, and the ARM64 Linux hint builds
+  from a clone instead of a `go install` path that never existed.
+- `FindAsset` no longer takes a `darwin` archive for Windows ("dar**win**").
+- Removed the unused `IsProbablyCompressible`.
+
+## [1.0.0] - 2026-09-21
 
 This release works through the findings of the initial end-to-end test report
 (now documented under [`BENCHMARK.md`](BENCHMARK.md)) — every issue it raised and every

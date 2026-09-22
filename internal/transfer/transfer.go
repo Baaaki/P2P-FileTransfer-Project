@@ -437,7 +437,11 @@ func sendFile(w io.Writer, dl deadlines, local string, info FileInfo, offset int
 	var hdr [4]byte
 	sent := offset
 	for sent < info.Size {
-		n, err := f.Read(buf)
+		// Never read past the size the manifest promised. A file that grew
+		// since it was read would otherwise put its extra bytes on the
+		// wire, where the receiver takes them for the start of the next
+		// file. The first info.Size bytes are what the digest covers.
+		n, err := f.Read(buf[:min(int64(len(buf)), info.Size-sent)])
 		if n > 0 {
 			dl.write(timeouts.idle)
 			if compressed {
@@ -492,6 +496,9 @@ func sendFile(w io.Writer, dl deadlines, local string, info FileInfo, offset int
 // confirm accepts everything).
 func Receive(s io.ReadWriteCloser, outDir string, creds Credentials, confirm func(Manifest) bool, hooks Hooks) ([]string, error) {
 	defer s.Close()
+	if err := CheckDestination(outDir); err != nil {
+		return nil, err
+	}
 	dl := deadlinesOf(s)
 
 	// Careful: json.Decoder cannot be used on this side. It buffers extra
@@ -557,7 +564,7 @@ func Receive(s io.ReadWriteCloser, outDir string, creds Credentials, confirm fun
 	var saved []string
 	var base int64
 	for i, f := range manifest.Files {
-		final, err := receiveFile(r, dl, targets[i], f, partials[i],
+		final, err := receiveFile(r, dl, outDir, targets[i], f, partials[i],
 			progressReporter(hooks, i, len(manifest.Files), base, total), useCompression)
 		if err != nil {
 			// Let the sender know, then propagate the error.
@@ -571,6 +578,8 @@ func Receive(s io.ReadWriteCloser, outDir string, creds Credentials, confirm fun
 	if err := enc.Encode(ack{OK: true}); err != nil {
 		return saved, fmt.Errorf("could not send acknowledgement: %w", describe(err))
 	}
+	// Everything arrived, so there is nothing left to resume.
+	forgetFinished(outDir, manifest)
 
 	// Linger until the sender closes the stream — it only does that after
 	// reading our ack. Returning (and closing) right away lets the process
@@ -631,8 +640,16 @@ type partial struct {
 // its place among the copies, so the first one finishing does not pull the
 // ground out from under the second.
 //
-// Files an earlier attempt finished are not fetched again: if the target
-// already holds exactly the file on offer, it is kept as it is.
+// Files an earlier, interrupted attempt finished are not fetched again: if
+// that attempt left a mark for the file and the target still holds exactly
+// it, it is kept as it is.
+//
+// Only files this program finished count, never any file that happens to
+// be at the target. The offsets go back to the sender, and "I already have
+// this one" for an arbitrary file would let a sender ask, file by file and
+// digest by digest, what the receiver's folder holds. The mark limits that
+// to what an interrupted transfer into this folder left there — and a
+// transfer that completes clears its marks.
 //
 // The digest of a partial cannot be checked against the manifest until the
 // file is complete, so a partial that does not actually match (the sender
@@ -655,7 +672,8 @@ func resumeFrom(outDir string, m Manifest, targets []string, hooks Hooks) ([]par
 		copies[f.SHA256]++
 		p := partial{path: filepath.Join(dir, name), hasher: sha256.New()}
 
-		if haveAlready(targets[i], f, func() { hooks.prepare(f.Path, i+1, len(m.Files)) }) {
+		if finishedBefore(outDir, f.SHA256) && checkNoLinks(outDir, targets[i]) == nil &&
+			haveAlready(targets[i], f, func() { hooks.prepare(f.Path, i+1, len(m.Files)) }) {
 			p.complete, p.offset = targets[i], f.Size
 			os.Remove(p.path)
 			out[i] = p
@@ -698,6 +716,28 @@ func haveAlready(target string, f FileInfo, announce func()) bool {
 	return hex.EncodeToString(h.Sum(nil)) == f.SHA256
 }
 
+// finishedMark is the file an attempt leaves behind in partialDir for each
+// file it finished, keyed by digest like the partial downloads themselves.
+func finishedMark(outDir, digest string) string {
+	return filepath.Join(outDir, partialDir, digest+".done")
+}
+
+// finishedBefore reports whether an earlier attempt finished a file with
+// this digest.
+func finishedBefore(outDir, digest string) bool {
+	st, err := os.Lstat(finishedMark(outDir, digest))
+	return err == nil && st.Mode().IsRegular()
+}
+
+// forgetFinished clears the marks of a transfer that completed, and the
+// folder they were kept in if nothing else is waiting there.
+func forgetFinished(outDir string, m Manifest) {
+	for _, f := range m.Files {
+		os.Remove(finishedMark(outDir, f.SHA256))
+	}
+	os.Remove(filepath.Join(outDir, partialDir)) // fails, harmlessly, unless empty
+}
+
 // hashInto feeds a file's whole content into h.
 func hashInto(h hash.Hash, path string) error {
 	f, err := os.Open(path)
@@ -731,7 +771,7 @@ func sweepPartials(outDir string) {
 // digest matches, so an interrupted transfer can never leave a corrupt file
 // that looks complete — and what it does leave behind is exactly what the
 // next attempt resumes from.
-func receiveFile(r io.Reader, dl deadlines, target string, info FileInfo, p partial, onProgress func(string, int64, int64), compressed bool) (string, error) {
+func receiveFile(r io.Reader, dl deadlines, outDir, target string, info FileInfo, p partial, onProgress func(string, int64, int64), compressed bool) (string, error) {
 	if p.complete != "" {
 		if onProgress != nil {
 			onProgress(info.Path, info.Size, info.Size)
@@ -797,6 +837,13 @@ func receiveFile(r io.Reader, dl deadlines, target string, info FileInfo, p part
 				plain = wireBuf
 			}
 
+			// A chunk that runs past the end of the file is a lie about its
+			// size; the digest would catch it at the end, after the disk
+			// had taken all of it.
+			if int64(len(plain)) > info.Size-received {
+				return "", fmt.Errorf("the other side sent more of %s than it said it would", info.Name())
+			}
+
 			if _, werr := f.Write(plain); werr != nil {
 				return "", fmt.Errorf("could not write to disk: %w", werr)
 			}
@@ -839,13 +886,26 @@ func receiveFile(r io.Reader, dl deadlines, target string, info FileInfo, p part
 	if err := f.Close(); err != nil {
 		return "", fmt.Errorf("could not finish writing %s: %w", info.Name(), err)
 	}
+	if err := checkNoLinks(outDir, target); err != nil {
+		return "", err
+	}
 	if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
 		return "", fmt.Errorf("could not create the folder for %s: %w", info.Name(), err)
 	}
-	final := availablePath(target)
-	if err := os.Rename(p.path, final); err != nil {
+
+	// The very same file already at the target — the same folder sent
+	// twice — is kept rather than joined by a numbered copy of itself. The
+	// bytes came over the wire all the same, so the sender cannot tell.
+	final := target
+	if haveAlready(target, info, func() {}) {
+		os.Remove(p.path)
+	} else if final, err = place(p.path, target); err != nil {
 		return "", fmt.Errorf("could not finalize %s: %w", info.Name(), err)
 	}
+	// Mark it finished, so that if a later file fails, the retry does not
+	// fetch this one again. Best effort: without the mark it is fetched
+	// again, which costs time, not correctness.
+	_ = os.WriteFile(finishedMark(outDir, info.SHA256), nil, 0o600)
 	return final, nil
 }
 

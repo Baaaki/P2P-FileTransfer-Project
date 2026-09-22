@@ -7,6 +7,8 @@
 # FT_SERVER is the meeting point address baked into a client build. Leave
 # it empty for local work and pass -server on the command line instead.
 # FT_SERVER_LIST is where a client looks if FT_SERVER stops answering.
+# FT_UPDATE_KEY is the minisign public key `puresend -update` checks
+# releases against; empty skips the signature check (not the checksums).
 
 SHELL := /bin/bash
 GO ?= go
@@ -24,13 +26,15 @@ COMMIT  ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
 DATE    ?= $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
 FT_SERVER ?=
 FT_SERVER_LIST ?=
+FT_UPDATE_KEY ?=
 
 LDFLAGS := -s -w \
 	-X main.version=$(VERSION) \
 	-X main.commit=$(COMMIT) \
 	-X main.date=$(DATE)
 CLIENT_LDFLAGS := $(LDFLAGS) -X main.defaultServer=$(FT_SERVER) \
-	-X main.defaultServerList=$(FT_SERVER_LIST)
+	-X main.defaultServerList=$(FT_SERVER_LIST) \
+	-X puresend/internal/update.publicKey=$(FT_UPDATE_KEY)
 
 BIN := bin
 

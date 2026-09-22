@@ -1,7 +1,9 @@
 package transfer
 
 import (
+	"errors"
 	"fmt"
+	"io/fs"
 	"math"
 	"os"
 	"path/filepath"
@@ -121,10 +123,97 @@ func safeJoin(outDir, rel string) (string, error) {
 	if len(parts) == 0 {
 		return unsafe()
 	}
-	if parts[0] == partialDir {
+	// Folded: on the case-insensitive filesystems macOS and Windows use by
+	// default, ".PureSend-Partial" is the very same folder.
+	if strings.EqualFold(parts[0], partialDir) {
 		return "", fmt.Errorf("the other side sent a reserved file name: %q", rel)
 	}
 	return filepath.Join(append([]string{outDir}, parts...)...), nil
+}
+
+// ErrUnsafeDestination refuses a download folder a sender could use to
+// plant files where programs look for their settings.
+var ErrUnsafeDestination = errors.New("files cannot be saved straight into your home folder or a folder above it; choose a folder inside it")
+
+// CheckDestination refuses to receive into the home folder itself, any
+// folder above it, or the root of a drive.
+//
+// A sender decides the paths inside the transfer, and safeJoin only keeps
+// them inside the destination. Inside the home folder that is not enough:
+// ".config/autostart/x.desktop", ".ssh/authorized_keys" or
+// "Library/LaunchAgents/x.plist" are all inside it, none of them exists on
+// many machines — so nothing is overwritten — and each runs something, or
+// lets someone in, the next time the user logs in. No list of dangerous
+// names can be complete, but a folder of its own, such as the default
+// Downloads/PureSend, holds none of them.
+func CheckDestination(outDir string) error {
+	dest, err := canonical(outDir)
+	if err != nil {
+		return fmt.Errorf("could not resolve the download folder: %w", err)
+	}
+	if filepath.Dir(dest) == dest || atOrAboveHome(dest) {
+		return fmt.Errorf("%w (%s)", ErrUnsafeDestination, outDir)
+	}
+	return nil
+}
+
+// atOrAboveHome reports whether dest, already canonical, is the home folder
+// or a folder above it. Without a home folder there is nothing to protect.
+func atOrAboveHome(dest string) bool {
+	home, err := os.UserHomeDir()
+	if err != nil || home == "" {
+		return false
+	}
+	if home, err = canonical(home); err != nil {
+		return false
+	}
+	if runtime.GOOS == "windows" || runtime.GOOS == "darwin" {
+		// Case-insensitive by default: /users/ali is /Users/ali.
+		dest, home = strings.ToLower(dest), strings.ToLower(home)
+	}
+	// dest is at or above home exactly when home is at or below dest.
+	rel, err := filepath.Rel(dest, home)
+	return err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
+}
+
+// canonical is p made absolute, with any symbolic links in it resolved as
+// far as they exist, so that a link to the home folder is the home folder.
+func canonical(p string) (string, error) {
+	abs, err := filepath.Abs(p)
+	if err != nil {
+		return "", err
+	}
+	if resolved, err := filepath.EvalSymlinks(abs); err == nil {
+		return resolved, nil
+	}
+	return abs, nil
+}
+
+// checkNoLinks refuses a target whose folders below outDir include a
+// symbolic link. safeJoin keeps the path inside outDir as written, but a
+// link already sitting in the destination — "docs" pointing at /etc —
+// would carry the file wherever it points. The transfer never creates
+// links, so an honest sender has no use for one.
+func checkNoLinks(outDir, target string) error {
+	rel, err := filepath.Rel(outDir, filepath.Dir(target))
+	if err != nil || rel == "." {
+		return err
+	}
+	dir := outDir
+	for _, part := range strings.Split(rel, string(filepath.Separator)) {
+		dir = filepath.Join(dir, part)
+		st, err := os.Lstat(dir)
+		if errors.Is(err, fs.ErrNotExist) {
+			return nil // everything from here down is ours to create
+		}
+		if err != nil {
+			return err
+		}
+		if st.Mode()&fs.ModeSymlink != 0 {
+			return fmt.Errorf("refusing to save %s through the link %s", filepath.Base(target), dir)
+		}
+	}
+	return nil
 }
 
 // windowsReserved are the device names Windows will not let a file take,
@@ -158,19 +247,51 @@ func windowsCanStore(name string) bool {
 	return !windowsReserved[strings.ToUpper(strings.TrimRight(base, " "))]
 }
 
-// availablePath picks a free name like "photo (1).jpg" if a file with the
-// same name already exists; we never overwrite existing files.
-func availablePath(target string) string {
-	if _, err := os.Stat(target); os.IsNotExist(err) {
+// maxNameTries bounds the search for a free name, so a folder with every
+// "photo (n).jpg" taken ends in an error instead of a loop.
+const maxNameTries = 10_000
+
+// place moves a finished download to its target, or to a free name like
+// "photo (1).jpg" when the target is taken; an existing file is never
+// replaced.
+//
+// It hard-links rather than renames where it can. Checking that a name is
+// free and then renaming onto it leaves a moment in which something else
+// can appear there, and a rename replaces whatever it finds; creating a
+// link fails if the name exists, so the check and the move are one step.
+// Where links are not supported (FAT, exFAT, some network shares) it falls
+// back to checking and renaming, and that moment is back.
+func place(src, target string) (string, error) {
+	for i := range maxNameTries {
+		candidate := numbered(target, i)
+		err := os.Link(src, candidate)
+		if err == nil {
+			_ = os.Remove(src)
+			return candidate, nil
+		}
+		if errors.Is(err, fs.ErrExist) {
+			continue
+		}
+		// No hard links here.
+		if _, err := os.Lstat(candidate); err == nil {
+			continue
+		} else if !errors.Is(err, fs.ErrNotExist) {
+			return "", err
+		}
+		if err := os.Rename(src, candidate); err != nil {
+			return "", err
+		}
+		return candidate, nil
+	}
+	return "", fmt.Errorf("no free name left for %s", filepath.Base(target))
+}
+
+// numbered is target for i == 0, and "name (i).ext" after that.
+func numbered(target string, i int) string {
+	if i == 0 {
 		return target
 	}
 	dir, name := filepath.Split(target)
 	ext := filepath.Ext(name)
-	base := name[:len(name)-len(ext)]
-	for i := 1; ; i++ {
-		candidate := filepath.Join(dir, fmt.Sprintf("%s (%d)%s", base, i, ext))
-		if _, err := os.Stat(candidate); os.IsNotExist(err) {
-			return candidate
-		}
-	}
+	return filepath.Join(dir, fmt.Sprintf("%s (%d)%s", name[:len(name)-len(ext)], i, ext))
 }

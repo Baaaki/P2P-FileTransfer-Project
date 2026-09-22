@@ -80,13 +80,3 @@ func DecompressChunk(dst, src []byte, maxLen int) ([]byte, error) {
 	}
 	return buf.Bytes(), nil
 }
-
-// IsProbablyCompressible tests the first few kilobytes of data to check if compression
-// is worthwhile (e.g. not random/already compressed).
-func IsProbablyCompressible(sample []byte) bool {
-	if len(sample) < 64 {
-		return false
-	}
-	comp := CompressChunk(nil, sample)
-	return float64(len(comp)) < float64(len(sample))*0.92
-}

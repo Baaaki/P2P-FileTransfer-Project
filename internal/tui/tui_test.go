@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -125,6 +126,48 @@ func TestConfirmRepliesToTransfer(t *testing.T) {
 				t.Errorf("screen = %v, want %v", next.screen, tc.screen)
 			}
 		})
+	}
+}
+
+// TestConfirmShowsEverythingThatLandsInTheFolder: the approval screen used
+// to list the first twelve files and count the rest, so a hostile sender
+// could put ".config/autostart/x.desktop" thirteenth. A long list is now
+// shown as what it puts directly into the download folder, hidden entries
+// first, and hidden entries are called out whatever their position.
+func TestConfirmShowsEverythingThatLandsInTheFolder(t *testing.T) {
+	var files []transfer.FileInfo
+	for i := range 20 {
+		files = append(files, transfer.FileInfo{Path: fmt.Sprintf("decoy%02d/photo.jpg", i), Size: 1 << 20})
+	}
+	files = append(files,
+		transfer.FileInfo{Path: "./.config/autostart/x.desktop", Size: 100},
+		transfer.FileInfo{Path: "decoy00/more.jpg", Size: 1 << 20},
+	)
+
+	m := New(Config{Servers: []string{"x"}})
+	m.mode = modeReceive
+	m.screen = screenConfirm
+	m.manifest = transfer.Manifest{Files: files}
+	view := m.View()
+
+	if !strings.Contains(view, ".config/") {
+		t.Errorf("the hidden folder is not shown:\n%s", view)
+	}
+	if !strings.Contains(view, "Gizli öğeler var") {
+		t.Errorf("the hidden folder is not called out:\n%s", view)
+	}
+	if strings.Index(view, ".config/") > strings.Index(view, "decoy00/") {
+		t.Errorf("the hidden folder is not listed first:\n%s", view)
+	}
+	if !strings.Contains(view, "decoy00/") || !strings.Contains(view, "2 dosya") {
+		t.Errorf("a folder is not summarised with its file count:\n%s", view)
+	}
+
+	// A short list is still shown file by file, with no warning to cry wolf.
+	m.manifest = transfer.Manifest{Files: files[:3]}
+	view = m.View()
+	if !strings.Contains(view, "decoy02/photo.jpg") || strings.Contains(view, "Gizli") {
+		t.Errorf("a short list is not shown as it is:\n%s", view)
 	}
 }
 
@@ -430,7 +473,7 @@ func TestErrorsAreExplainedInPlainLanguage(t *testing.T) {
 		err  error
 		want string
 	}{
-		{errString(`room "kiraz-liman-42" not found — the code may be wrong or expired`), "bulunamadı"},
+		{errString(`room 42 not found — the code may be wrong or expired`), "bulunamadı"},
 		{errString("could not reach the meeting point: dial timeout"), "ulaşılamadı"},
 		{errString("could not connect to the other computer: no good addresses"), "bağlanılamadı"},
 		{errString("checksum mismatch for tatil.jpg"), "bozuk"},
@@ -439,7 +482,10 @@ func TestErrorsAreExplainedInPlainLanguage(t *testing.T) {
 		{errString("no acknowledgement from receiver: EOF"), "koptu"},
 		{errString("server rejected registration: too many open rooms for one sender"), "çok fazla"},
 		{errString(`the other side sent an unsafe file name: "../evil.txt"`), "kabul edilemez"},
-		{errString("server error: too many failed lookups, try again later"), "hatalı kod"},
+		{errString("server error: too many lookups, try again in a minute"), "çok fazla kod"},
+		{errString("server error: malformed room number"), "oda kodu değil"},
+		{errString("the code was closed after too many wrong attempts"), "kapatıldı"},
+		{errString("files cannot be saved straight into your home folder or a folder above it; choose a folder inside it (/home/ali)"), "ev klasörüne"},
 		{errString("too many files: 9000, at most 5000 can be sent at once"), "çok dosya"},
 		{errString("no files to send"), "seçilmedi"},
 		{errString("the other side is already sending these files to someone else"), "başka bir transfer"},
@@ -450,7 +496,7 @@ func TestErrorsAreExplainedInPlainLanguage(t *testing.T) {
 		{errString("the other side sent an invalid file list: malformed checksum"), "geçersiz"},
 		{errString(`the other side sent a file name this computer cannot store: "CON.txt"`), "kullanılamıyor"},
 		{errString("server error: the sender is reconnecting, try again in a moment"), "yeniden bağlanıyor"},
-		{errString("server rejected registration: server is busy, try again in a minute"), "yoğun"},
+		{errString("server rejected registration: server is full, try again later"), "yoğun"},
 		{errString("the room code expired"), "süresi doldu"},
 		{errString(`"kiraz-liman" is not a room code`), "oda kodu değil"},
 		{errString(`the word "kirez" is not used in room codes`), "tanınmayan"},
@@ -592,12 +638,17 @@ func TestWrongCodeAttemptIsMentioned(t *testing.T) {
 	m.screen = screenWaiting
 	m.room = "kiraz-liman-42"
 
-	m = event(t, m, p2p.RejectedEvent{})
+	m = event(t, m, p2p.RejectedEvent{Left: 2})
 	if m.screen != screenWaiting {
 		t.Errorf("a rejected stranger moved the screen to %v", m.screen)
 	}
 	if !strings.Contains(m.View(), "yanlış bir kodla") {
 		t.Errorf("the attempt is not mentioned:\n%s", m.View())
+	}
+	// And how many more the code survives, so a sender watching the screen
+	// knows what the next one means.
+	if !strings.Contains(m.View(), "2 yanlış deneme") {
+		t.Errorf("the attempts left are not mentioned:\n%s", m.View())
 	}
 }
 
