@@ -656,18 +656,16 @@ func TestLegacyUncompressedReceiver(t *testing.T) {
 func BenchmarkSafeJoin(b *testing.B) {
 	outDir := "/home/user/Downloads/PureSend"
 	rel := "klasor/alt_klasor/belge_2026.pdf"
-	b.ResetTimer()
 	b.ReportAllocs()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		_, _ = safeJoin(outDir, rel)
 	}
 }
 
 func BenchmarkValidDigest(b *testing.B) {
 	digest := "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
-	b.ResetTimer()
 	b.ReportAllocs()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		_ = validDigest(digest)
 	}
 }

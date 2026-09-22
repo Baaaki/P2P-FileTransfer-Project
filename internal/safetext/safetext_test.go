@@ -72,18 +72,16 @@ func FuzzClean(f *testing.F) {
 
 func BenchmarkClean_CleanText(b *testing.B) {
 	text := "tatil-fotograflari_2026_istanbul_arsivi.tar.gz"
-	b.ResetTimer()
 	b.ReportAllocs()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		_ = Clean(text, 100)
 	}
 }
 
 func BenchmarkClean_UnsafeText(b *testing.B) {
 	text := "\x1b[2J\x1b[Hphoto\u202Egpj.exe\u2066\u2069\r\n"
-	b.ResetTimer()
 	b.ReportAllocs()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		_ = Clean(text, 100)
 	}
 }
