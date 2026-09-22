@@ -1,0 +1,489 @@
+package tui
+
+import (
+	"fmt"
+	"io/fs"
+	"os"
+	"path/filepath"
+	"strings"
+
+	"puresend/internal/i18n"
+	"puresend/internal/p2p"
+	"puresend/internal/transfer"
+
+	tea "github.com/charmbracelet/bubbletea"
+)
+
+func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+
+	case updateAvailableMsg:
+		m.updateTag = msg.tag
+		if m.lang == i18n.EN {
+			m.updateNotice = fmt.Sprintf("A new version is available (%s)! To update: puresend -update", msg.tag)
+		} else {
+			m.updateNotice = fmt.Sprintf("Yeni bir sürüm mevcut (%s)! Güncellemek için: puresend -update", msg.tag)
+		}
+		return m, nil
+
+	case tea.WindowSizeMsg:
+		m.width, m.height = msg.Width, msg.Height
+		m.picker.SetHeight(max(msg.Height-16, 5))
+		m.dirPicker.SetHeight(max(msg.Height-16, 5))
+		return m, nil
+
+	case tickMsg:
+		m.frame++
+		return m, tick()
+
+	case tea.KeyMsg:
+		if msg.Type == tea.KeyCtrlC {
+			m.quitted = true
+			m.cancel()
+			return m, tea.Quit
+		}
+		return m.handleKey(msg)
+
+	case nodeReadyMsg:
+		m.node = msg.node
+		next, cmd := m.beginMode()
+		// The one place the event reader is armed; handleEvent keeps it
+		// going from here on.
+		return next, tea.Batch(cmd, waitEvent(msg.node))
+
+	case roomReadyMsg:
+		m.room = msg.room
+		m.screen = screenWaiting
+		return m, nil
+
+	case eventMsg:
+		return m.handleEvent(msg.ev)
+
+	case errMsg:
+		m.err = msg.err
+		m.screen = screenError
+		return m, nil
+	}
+
+	// Anything else goes to the active component.
+	switch m.screen {
+	case screenPickFiles:
+		var cmd tea.Cmd
+		m.picker, cmd = m.picker.Update(msg)
+		return m, cmd
+	case screenOutDir:
+		var cmd tea.Cmd
+		m.dirPicker, cmd = m.dirPicker.Update(msg)
+		return m, cmd
+	}
+	return m, nil
+}
+
+// handleEvent folds a p2p event into the model.
+func (m Model) handleEvent(ev p2p.Event) (tea.Model, tea.Cmd) {
+	switch e := ev.(type) {
+
+	case p2p.StatusEvent:
+		m.status = e.Text
+		return m, waitEvent(m.node)
+
+	case p2p.ConnectedEvent:
+		m.direct = e.Direct
+		if e.Direct {
+			m.relayLimit = 0
+		} else {
+			m.relayLimit = e.RelayLimit
+		}
+		m.haveConn = true
+		m.warn = ""
+		if m.screen != screenConfirm && m.screen != screenDone {
+			m.screen = screenTransfer
+		}
+		return m, waitEvent(m.node)
+
+	case p2p.PreparingEvent:
+		m.prep, m.prepIndex, m.prepFiles = e.Name, e.Index, e.Files
+		// A sender reads its files in the background while the code is on
+		// screen; that must not take the code away.
+		if m.mode != modeSend || m.haveConn {
+			m.screen = screenTransfer
+		}
+		return m, waitEvent(m.node)
+
+	case p2p.PreparedEvent:
+		m.prepared = true
+		m.prep = ""
+		return m, waitEvent(m.node)
+
+	case p2p.RemotePreparingEvent:
+		m.remoteDone, m.remoteTotal = max(e.Done, 0), max(e.Total, 0)
+		return m, waitEvent(m.node)
+
+	case p2p.RejectedEvent:
+		if m.lang == i18n.EN {
+			attempts := "attempts"
+			if e.Left == 1 {
+				attempts = "attempt"
+			}
+			m.notice = fmt.Sprintf("Someone tried to connect with an invalid code. Nothing was shared with them. "+
+				"%d more wrong %s will close the code.", e.Left, attempts)
+		} else {
+			m.notice = fmt.Sprintf("Birisi yanlış bir kodla bağlanmayı denedi. Ona hiçbir şey gösterilmedi. "+
+				"%d yanlış deneme daha olursa kod kapanır.", e.Left)
+		}
+		return m, waitEvent(m.node)
+
+	case p2p.ServerLostEvent:
+		m.serverLost = true
+		return m, waitEvent(m.node)
+
+	case p2p.ServerBackEvent:
+		m.serverLost = false
+		return m, waitEvent(m.node)
+
+	case p2p.RoomLostEvent:
+		m.err = e.Err
+		m.screen = screenError
+		return m, waitEvent(m.node)
+
+	case p2p.ManifestEvent:
+		m.manifest = e.Manifest
+		m.reply = e.Reply
+		m.confirmIndex = 0
+		m.screen = screenConfirm
+		return m, waitEvent(m.node)
+
+	case p2p.ProgressEvent:
+		if m.prog.OverallTotal == 0 {
+			m.meter.reset(e.OverallDone)
+		}
+		m.prog = e.Progress
+		m.prep = ""
+		m.meter.observe(e.OverallDone)
+		if m.screen != screenTransfer {
+			m.screen = screenTransfer
+		}
+		return m, waitEvent(m.node)
+
+	case p2p.DoneEvent:
+		if e.Err != nil {
+			// While hosting, a failed attempt is not fatal: the room is
+			// still registered, so go back to waiting and let the
+			// receiver try the same code again.
+			if m.mode == modeSend && m.room != "" {
+				if m.lang == i18n.EN {
+					m.warn = "An attempt was interrupted. Your friend can retry with the same code."
+				} else {
+					m.warn = "Bir deneme yarıda kaldı. Arkadaşın aynı kodla tekrar deneyebilir."
+				}
+				m.haveConn = false
+				m.prog = transfer.Progress{}
+				m.meter = rateMeter{}
+				m.prep = ""
+				m.screen = screenWaiting
+				return m, waitEvent(m.node)
+			}
+			m.err = e.Err
+			m.screen = screenError
+			return m, nil
+		}
+		m.savedPaths = e.Paths
+		m.screen = screenDone
+		return m, nil
+	}
+	return m, waitEvent(m.node)
+}
+
+// handleKey routes a keypress to the active screen.
+func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch m.screen {
+
+	case screenWelcome:
+		switch msg.String() {
+		case "up":
+			m.menuIndex = max(m.menuIndex-1, 0)
+		case "down":
+			m.menuIndex = min(m.menuIndex+1, 2)
+		case "l", "L":
+			m.lang = i18n.Toggle(m.lang)
+			m.codeInput.Placeholder = i18n.Get(m.lang).EnterPlaceholder
+			if m.updateTag != "" {
+				if m.lang == i18n.EN {
+					m.updateNotice = fmt.Sprintf("A new version is available (%s)! To update: puresend -update", m.updateTag)
+				} else {
+					m.updateNotice = fmt.Sprintf("Yeni bir sürüm mevcut (%s)! Güncellemek için: puresend -update", m.updateTag)
+				}
+			}
+			return m, nil
+		case "enter":
+			switch m.menuIndex {
+			case 0:
+				m.mode = modeSend
+			case 1:
+				m.mode = modeReceive
+			default:
+				// Changing the download folder needs no network at all.
+				m.backScreen = screenWelcome
+				m.screen = screenOutDir
+				m.dirPicker.CurrentDirectory = m.outDir
+				return m, m.dirPicker.Init()
+			}
+			m.screen = screenConnecting
+			return m, connectCmd(m.ctx, m.servers, m.serverList, m.stunServers)
+		case "q", "Q":
+			m.quitted = true
+			m.cancel()
+			return m, tea.Quit
+		default:
+			return m, nil
+		}
+
+	case screenPickFiles:
+		switch msg.String() {
+		case "esc":
+			m.screen = screenWelcome
+			m.picked = nil
+			return m, nil
+		case "l", "L":
+			m.lang = i18n.Toggle(m.lang)
+			return m, nil
+		case "s", "S":
+			if len(m.picked) > 0 {
+				m.screen = screenConnecting
+				return m, hostCmd(m.ctx, m.node, m.picked)
+			}
+			return m, nil
+		case "f", "F":
+			m.addPath(m.picker.CurrentDirectory)
+			return m, nil
+		case "x", "X":
+			if len(m.picked) > 0 {
+				m.picked = m.picked[:len(m.picked)-1]
+			}
+			return m, nil
+		case "up", "down", "pgup", "pgdown", "enter", "backspace", "left":
+			var cmd tea.Cmd
+			m.picker, cmd = m.picker.Update(msg)
+			if ok, path := m.picker.DidSelectFile(msg); ok {
+				m.addPath(path)
+			}
+			return m, cmd
+		default:
+			// Non-technical user protection: Ignore any other key
+			return m, nil
+		}
+
+	case screenOutDir:
+		switch msg.String() {
+		case "s", "S":
+			m.outDir = m.dirPicker.CurrentDirectory
+			m.screen = m.backScreen
+			return m, nil
+		case "esc", "q", "Q":
+			m.screen = m.backScreen
+			return m, nil
+		case "l", "L":
+			m.lang = i18n.Toggle(m.lang)
+			return m, nil
+		case "backspace", "left":
+			parent := filepath.Dir(m.dirPicker.CurrentDirectory)
+			if parent != "" && parent != m.dirPicker.CurrentDirectory {
+				m.dirPicker.CurrentDirectory = parent
+				return m, m.dirPicker.Init()
+			}
+			return m, nil
+		case "up", "down", "pgup", "pgdown", "enter":
+			var cmd tea.Cmd
+			m.dirPicker, cmd = m.dirPicker.Update(msg)
+			return m, cmd
+		default:
+			// Ignore any other key
+			return m, nil
+		}
+
+	case screenRoomCode, screenWaiting:
+		switch msg.String() {
+		case "l", "L":
+			m.lang = i18n.Toggle(m.lang)
+		}
+		return m, nil
+
+	case screenEnterCode:
+		switch msg.String() {
+		case "esc":
+			m.screen = screenWelcome
+			m.codeInput.Reset()
+			m.codeErr = ""
+			return m, nil
+		case "enter":
+			if strings.TrimSpace(m.codeInput.Value()) == "" {
+				return m, nil
+			}
+			// Check the code here, before the server sees it: a typo caught
+			// now costs nothing, one caught by the server costs one of the
+			// few tries it allows.
+			code, err := p2p.CheckCode(m.codeInput.Value())
+			if err != nil {
+				m.codeErr = codeProblem(err, m.lang)
+				return m, nil
+			}
+			m.codeInput.SetValue(code)
+			m.codeErr = ""
+			m.screen = screenFinding
+			m.status = "arkadaşın aranıyor"
+			// The event reader is already running; only start the fetch.
+			return m, fetchCmd(m.ctx, m.node, code, m.outDir)
+		case "ctrl+o":
+			m.backScreen = screenEnterCode
+			m.screen = screenOutDir
+			m.dirPicker.CurrentDirectory = m.outDir
+			return m, m.dirPicker.Init()
+		}
+		var cmd tea.Cmd
+		m.codeInput, cmd = m.codeInput.Update(msg)
+		m.codeErr = ""
+		return m, cmd
+
+	case screenConfirm:
+		switch msg.String() {
+		case "left", "right":
+			m.confirmIndex = 1 - m.confirmIndex
+		case "l", "L":
+			m.lang = i18n.Toggle(m.lang)
+			return m, nil
+		case "y", "Y":
+			m.confirmIndex = 0
+			return m.answerConfirm(true)
+		case "n", "N":
+			return m.answerConfirm(false)
+		case "enter":
+			return m.answerConfirm(m.confirmIndex == 0)
+		default:
+			return m, nil
+		}
+
+	case screenDone, screenError:
+		switch msg.String() {
+		case "enter":
+			return m.reset(), nil
+		case "l", "L":
+			m.lang = i18n.Toggle(m.lang)
+			return m, nil
+		case "q", "Q":
+			m.quitted = true
+			m.cancel()
+			return m, tea.Quit
+		default:
+			return m, nil
+		}
+	}
+	return m, nil
+}
+
+// beginMode opens the first screen of the chosen mode, once the node is
+// connected.
+func (m Model) beginMode() (Model, tea.Cmd) {
+	switch m.mode {
+	case modeSend:
+		m.screen = screenPickFiles
+		return m, m.picker.Init()
+	case modeReceive:
+		m.screen = screenEnterCode
+		return m, m.codeInput.Focus()
+	}
+	return m, nil
+}
+
+// answerConfirm sends the user's decision back to the transfer.
+func (m Model) answerConfirm(ok bool) (tea.Model, tea.Cmd) {
+	if m.reply != nil {
+		m.reply <- ok
+		m.reply = nil
+	}
+	if !ok {
+		// Declining ends the session. Tear it down rather than just
+		// walking back to the menu: the refused transfer is about to
+		// report itself as failed, and the user who pressed "no" should
+		// not then be shown an error about it.
+		return m.reset(), nil
+	}
+	m.screen = screenTransfer
+	// No waitEvent here: handling the manifest event already re-armed it.
+	return m, nil
+}
+
+// addPath appends a chosen file or folder, skipping duplicates.
+func (m *Model) addPath(path string) {
+	info, err := os.Stat(path)
+	if err != nil {
+		return
+	}
+	for _, f := range m.picked {
+		if f.path == path {
+			return
+		}
+	}
+	pick := pickedFile{path: path, name: info.Name(), size: info.Size()}
+	if info.IsDir() {
+		size, count := folderSize(path)
+		if count == 0 {
+			return // an empty folder would carry nothing across
+		}
+		pick.isDir, pick.size, pick.files = true, size, count
+	} else if !info.Mode().IsRegular() {
+		return
+	}
+	m.picked = append(m.picked, pick)
+}
+
+// folderSize adds up what sending a folder would actually move. Symbolic
+// links are skipped here for the same reason the transfer skips them.
+func folderSize(root string) (int64, int) {
+	var total int64
+	var count int
+	_ = filepath.WalkDir(root, func(_ string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() || !d.Type().IsRegular() {
+			return nil //nolint:nilerr // an unreadable corner should not stop the count
+		}
+		if info, err := d.Info(); err == nil {
+			total += info.Size()
+			count++
+		}
+		return nil
+	})
+	return total, count
+}
+
+// reset ends the session and returns to the main menu. The network layer
+// goes down with it and the next transfer builds a fresh one, which
+// guarantees no leftover event can bleed into the next transfer.
+// Reconnecting costs a second, behind the spinner the user already sees.
+func (m Model) reset() Model {
+	if m.node != nil {
+		_ = m.node.Close()
+		m.node = nil
+	}
+	m.screen = screenWelcome
+	m.mode = modeNone
+	m.menuIndex = 0
+	m.picked = nil
+	m.room = ""
+	m.prepared = false
+	m.serverLost = false
+	m.notice = ""
+	m.codeErr = ""
+	m.remoteDone, m.remoteTotal = 0, 0
+	m.direct = false
+	m.haveConn = false
+	m.relayLimit = 0
+	m.prog = transfer.Progress{}
+	m.prep, m.prepIndex, m.prepFiles = "", 0, 0
+	m.meter = rateMeter{}
+	m.manifest = transfer.Manifest{}
+	m.savedPaths = nil
+	m.err = nil
+	m.warn = ""
+	m.status = ""
+	m.codeInput.SetValue("")
+	return m
+}
