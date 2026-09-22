@@ -4,7 +4,7 @@
 pkgname=puresend-bin
 pkgver=2.0.0
 pkgrel=1
-pkgdesc="Fast, secure, p2p terminal file transfer tool (WebRTC/P2P, End-to-End Encrypted)"
+pkgdesc="End-to-end encrypted peer-to-peer file transfer for the terminal (libp2p)"
 arch=('x86_64')
 url="https://puresend.madebybaki.com"
 license=('GPL-3.0-only')

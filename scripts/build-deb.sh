@@ -63,7 +63,7 @@ Maintainer: Baki <contact@madebybaki.com>
 Homepage: https://github.com/Baaaki/PureSend
 Description: Guvenli, sifreli, dogrudan P2P dosya transfer araci
  PureSend, iki cihaz arasinda araci sunucuya dosya kaydetmeden,
- uctan uca sifreleme (PAKE/SPAKE2) ile dosya ve klasor transferi yapmayi saglar.
+ uctan uca sifreleme ve PAKE kimlik dogrulamasi ile dosya ve klasor transferi yapmayi saglar.
 EOF
 chmod 644 "${BUILD_DIR}/DEBIAN/control"
 
