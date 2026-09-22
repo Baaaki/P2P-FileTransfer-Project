@@ -3,8 +3,32 @@ package i18n
 import (
 	"errors"
 	"os"
+	"reflect"
 	"testing"
 )
+
+// TestBothLanguagesAreComplete: a message added to one language and
+// forgotten in the other is an empty line on screen, or — for the ones
+// that are functions — a crash the moment the screen is drawn.
+func TestBothLanguagesAreComplete(t *testing.T) {
+	tr, en := reflect.ValueOf(*trMessages), reflect.ValueOf(*enMessages)
+	for i := range tr.NumField() {
+		name := tr.Type().Field(i).Name
+		a, b := tr.Field(i), en.Field(i)
+		switch a.Kind() {
+		case reflect.Func:
+			if a.IsNil() || b.IsNil() {
+				t.Errorf("%s: missing in TR=%v EN=%v", name, a.IsNil(), b.IsNil())
+			}
+		case reflect.String:
+			// A few help lines are deliberately blank; blank in one
+			// language only is the mistake.
+			if (a.String() == "") != (b.String() == "") {
+				t.Errorf("%s: set in only one language (TR=%q, EN=%q)", name, a.String(), b.String())
+			}
+		}
+	}
+}
 
 func TestDetectOS(t *testing.T) {
 	origLang := os.Getenv("LANG")

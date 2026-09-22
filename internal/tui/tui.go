@@ -95,14 +95,18 @@ type Model struct {
 	confirmIndex int
 
 	// sending
-	picker       filepicker.Model
-	picked       []pickedFile
-	room         string
-	prepared     bool   // every file has been read and the offer is ready
-	serverLost   bool   // the meeting point dropped; the room is being put back
-	notice       string // something worth knowing that needs no action
-	updateNotice string // notice about an available software update
-	updateTag    string // release tag of available update
+	picker     filepicker.Model
+	picked     []pickedFile
+	room       string
+	prepared   bool // every file has been read and the offer is ready
+	serverLost bool // the meeting point dropped; the room is being put back
+	retrying   bool // an attempt broke off; the room waits for another
+	wrongLeft  int  // wrong codes the room still survives; 0 until one is tried
+
+	// updateTag is the newer release on offer, if any. Notices are kept as
+	// facts like this and put into words when drawn, so they follow the
+	// language the user switches to.
+	updateTag string
 
 	// receiving
 	codeErr     string // what is wrong with the code as typed
@@ -130,7 +134,6 @@ type Model struct {
 	savedPaths []string
 
 	status  string
-	warn    string
 	err     error
 	frame   int
 	quitted bool

@@ -57,6 +57,7 @@ type Messages struct {
 	WelcomeChangeDir string
 	WelcomeSavingTo  string
 	WelcomeFooter    string
+	UpdateAvailable  func(tag string) string
 
 	// Connecting
 	ConnectingTitle  string
@@ -114,6 +115,8 @@ type Messages struct {
 	HostLost      string
 	HostLostHelp1 string
 	HostLostHelp2 string
+	HostRejected  func(left int) string
+	HostRetry     string
 
 	// EnterCode
 	EnterTitle       string
@@ -176,6 +179,8 @@ type Messages struct {
 	ErrorTitle   string
 	ErrorWhatCan string
 	ErrorFooter  string
+
+	Goodbye string
 }
 
 var trMessages = &Messages{
@@ -188,6 +193,9 @@ var trMessages = &Messages{
 	WelcomeChangeDir: "📁  İndirme klasörünü değiştir",
 	WelcomeSavingTo:  "İnenler şuraya kaydediliyor:",
 	WelcomeFooter:    "[↑/↓] Gezin  ·  [Enter] Onayla  ·  [L] Dil: English  ·  [q] Çıkış",
+	UpdateAvailable: func(tag string) string {
+		return fmt.Sprintf("Yeni bir sürüm mevcut (%s)! Güncellemek için: puresend -update", tag)
+	},
 
 	ConnectingTitle:  "Bağlanılıyor",
 	ConnectingStatus: "Buluşma noktasına bağlanılıyor...",
@@ -253,6 +261,11 @@ var trMessages = &Messages{
 	HostLost:      "! Buluşma noktasıyla bağlantı koptu, yeniden bağlanılıyor...",
 	HostLostHelp1: "  Kodun geçerliliğini koruyor. Arkadaşın bu arada denerse",
 	HostLostHelp2: "  birkaç saniye sonra tekrar denesin.",
+	HostRejected: func(left int) string {
+		return fmt.Sprintf("Birisi yanlış bir kodla bağlanmayı denedi. Ona hiçbir şey gösterilmedi. "+
+			"%d yanlış deneme daha olursa kod kapanır.", left)
+	},
+	HostRetry: "Bir deneme yarıda kaldı. Arkadaşın aynı kodla tekrar deneyebilir.",
 
 	EnterTitle:       "📥  Arkadaşının verdiği kodu yaz",
 	EnterHelp1:       "Arkadaşın sana 3 parçalı bir kod verdi.",
@@ -336,6 +349,8 @@ var trMessages = &Messages{
 	ErrorTitle:   "✗  Bir sorun çıktı",
 	ErrorWhatCan: "Ne yapabilirsin:",
 	ErrorFooter:  "[Enter] Ana Menü  ·  [L] Dil: English  ·  [q] Çıkış",
+
+	Goodbye: "Görüşürüz!",
 }
 
 var enMessages = &Messages{
@@ -348,6 +363,9 @@ var enMessages = &Messages{
 	WelcomeChangeDir: "📁  Change download folder",
 	WelcomeSavingTo:  "Downloads are saved to:",
 	WelcomeFooter:    "[↑/↓] Navigate  ·  [Enter] Confirm  ·  [L] Language: Türkçe  ·  [q] Quit",
+	UpdateAvailable: func(tag string) string {
+		return fmt.Sprintf("A new version is available (%s)! To update: puresend -update", tag)
+	},
 
 	ConnectingTitle:  "Connecting",
 	ConnectingStatus: "Connecting to rendezvous server...",
@@ -413,6 +431,15 @@ var enMessages = &Messages{
 	HostLost:      "! Connection to rendezvous dropped, reconnecting...",
 	HostLostHelp1: "  Your code remains valid. If your friend tries now,",
 	HostLostHelp2: "  have them retry in a few seconds.",
+	HostRejected: func(left int) string {
+		attempts := "attempts"
+		if left == 1 {
+			attempts = "attempt"
+		}
+		return fmt.Sprintf("Someone tried to connect with an invalid code. Nothing was shared with them. "+
+			"%d more wrong %s will close the code.", left, attempts)
+	},
+	HostRetry: "An attempt was interrupted. Your friend can retry with the same code.",
 
 	EnterTitle:       "📥  Enter the code from your friend",
 	EnterHelp1:       "Your friend generated a room code for you.",
@@ -495,6 +522,8 @@ var enMessages = &Messages{
 	ErrorTitle:   "✗  Something went wrong",
 	ErrorWhatCan: "What you can do:",
 	ErrorFooter:  "[Enter] Main Menu  ·  [L] Language: Türkçe  ·  [q] Quit",
+
+	Goodbye: "Goodbye!",
 }
 
 // Get returns the localized messages for the given language.

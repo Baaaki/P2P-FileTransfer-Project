@@ -1,7 +1,6 @@
 package tui
 
 import (
-	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -19,11 +18,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case updateAvailableMsg:
 		m.updateTag = msg.tag
-		if m.lang == i18n.EN {
-			m.updateNotice = fmt.Sprintf("A new version is available (%s)! To update: puresend -update", msg.tag)
-		} else {
-			m.updateNotice = fmt.Sprintf("Yeni bir sürüm mevcut (%s)! Güncellemek için: puresend -update", msg.tag)
-		}
 		return m, nil
 
 	case tea.WindowSizeMsg:
@@ -95,7 +89,7 @@ func (m Model) handleEvent(ev p2p.Event) (tea.Model, tea.Cmd) {
 			m.relayLimit = e.RelayLimit
 		}
 		m.haveConn = true
-		m.warn = ""
+		m.retrying = false
 		if m.screen != screenConfirm && m.screen != screenDone {
 			m.screen = screenTransfer
 		}
@@ -120,17 +114,7 @@ func (m Model) handleEvent(ev p2p.Event) (tea.Model, tea.Cmd) {
 		return m, waitEvent(m.node)
 
 	case p2p.RejectedEvent:
-		if m.lang == i18n.EN {
-			attempts := "attempts"
-			if e.Left == 1 {
-				attempts = "attempt"
-			}
-			m.notice = fmt.Sprintf("Someone tried to connect with an invalid code. Nothing was shared with them. "+
-				"%d more wrong %s will close the code.", e.Left, attempts)
-		} else {
-			m.notice = fmt.Sprintf("Birisi yanlış bir kodla bağlanmayı denedi. Ona hiçbir şey gösterilmedi. "+
-				"%d yanlış deneme daha olursa kod kapanır.", e.Left)
-		}
+		m.wrongLeft = e.Left
 		return m, waitEvent(m.node)
 
 	case p2p.ServerLostEvent:
@@ -171,11 +155,7 @@ func (m Model) handleEvent(ev p2p.Event) (tea.Model, tea.Cmd) {
 			// still registered, so go back to waiting and let the
 			// receiver try the same code again.
 			if m.mode == modeSend && m.room != "" {
-				if m.lang == i18n.EN {
-					m.warn = "An attempt was interrupted. Your friend can retry with the same code."
-				} else {
-					m.warn = "Bir deneme yarıda kaldı. Arkadaşın aynı kodla tekrar deneyebilir."
-				}
+				m.retrying = true
 				m.haveConn = false
 				m.prog = transfer.Progress{}
 				m.meter = rateMeter{}
@@ -207,13 +187,6 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		case "l", "L":
 			m.lang = i18n.Toggle(m.lang)
 			m.codeInput.Placeholder = i18n.Get(m.lang).EnterPlaceholder
-			if m.updateTag != "" {
-				if m.lang == i18n.EN {
-					m.updateNotice = fmt.Sprintf("A new version is available (%s)! To update: puresend -update", m.updateTag)
-				} else {
-					m.updateNotice = fmt.Sprintf("Yeni bir sürüm mevcut (%s)! Güncellemek için: puresend -update", m.updateTag)
-				}
-			}
 			return m, nil
 		case "enter":
 			switch m.menuIndex {
@@ -470,7 +443,8 @@ func (m Model) reset() Model {
 	m.room = ""
 	m.prepared = false
 	m.serverLost = false
-	m.notice = ""
+	m.retrying = false
+	m.wrongLeft = 0
 	m.codeErr = ""
 	m.remoteDone, m.remoteTotal = 0, 0
 	m.direct = false
@@ -482,7 +456,6 @@ func (m Model) reset() Model {
 	m.manifest = transfer.Manifest{}
 	m.savedPaths = nil
 	m.err = nil
-	m.warn = ""
 	m.status = ""
 	m.codeInput.SetValue("")
 	return m

@@ -652,6 +652,45 @@ func TestWrongCodeAttemptIsMentioned(t *testing.T) {
 	}
 }
 
+// TestNoticesFollowTheLanguage: a notice is drawn in the language selected
+// when it is shown, not the one selected when it arrived. They used to be
+// stored as finished sentences, so a sender who switched to English kept
+// reading the Turkish ones.
+func TestNoticesFollowTheLanguage(t *testing.T) {
+	m := New(Config{Servers: []string{"x"}, Lang: "tr"})
+	m.mode = modeSend
+	m.screen = screenWaiting
+	m.room = "kiraz-liman-42"
+
+	next, _ := m.Update(updateAvailableMsg{tag: "v9.9.9"})
+	m = next.(Model)
+	m = event(t, m, p2p.RejectedEvent{Left: 2})
+	m = event(t, m, p2p.DoneEvent{Err: fmt.Errorf("stream reset")})
+	if m.screen != screenWaiting {
+		t.Fatalf("a failed attempt moved the sender to %v", m.screen)
+	}
+
+	m = press(t, m, "l")
+	view := m.View()
+	for _, tr := range []string{"yanlış bir kodla", "yarıda kaldı"} {
+		if strings.Contains(view, tr) {
+			t.Errorf("still in Turkish after switching to English (%q):\n%s", tr, view)
+		}
+	}
+	for _, en := range []string{"invalid code", "2 more wrong attempts", "interrupted"} {
+		if !strings.Contains(view, en) {
+			t.Errorf("missing %q after switching to English:\n%s", en, view)
+		}
+	}
+
+	// The update notice lives on the welcome screen, and the switch
+	// happened elsewhere.
+	m.screen = screenWelcome
+	if view := m.View(); !strings.Contains(view, "A new version is available (v9.9.9)") {
+		t.Errorf("the update notice did not follow the language:\n%s", view)
+	}
+}
+
 // TestReceiverSeesSenderPreparing: a big folder takes the sender a while
 // to read, and the receiver is told how far along it is.
 func TestReceiverSeesSenderPreparing(t *testing.T) {

@@ -14,10 +14,7 @@ import (
 
 func (m Model) View() string {
 	if m.quitted {
-		if m.lang == i18n.EN {
-			return "Goodbye!\n"
-		}
-		return "Görüşürüz!\n"
+		return i18n.Get(m.lang).Goodbye + "\n"
 	}
 	var body string
 	switch m.screen {
@@ -75,8 +72,8 @@ func (m Model) viewWelcome() string {
 	}
 	b.WriteString("\n" + helpStyle.Render(t.WelcomeSavingTo) + "\n")
 	b.WriteString(fileStyle.Render(m.outDir) + "\n")
-	if m.updateNotice != "" {
-		b.WriteString("\n" + updateNoticeStyle.Render("✨ "+m.updateNotice) + "\n")
+	if m.updateTag != "" {
+		b.WriteString("\n" + updateNoticeStyle.Render("✨ "+t.UpdateAvailable(m.updateTag)) + "\n")
 	}
 	b.WriteString("\n" + formatFooter(t.WelcomeFooter))
 	return b.String()
@@ -146,8 +143,8 @@ func (m Model) viewWaiting() string {
 	var b strings.Builder
 	b.WriteString(titleStyle.Render(t.WaitingTitle) + "\n\n")
 	b.WriteString(m.spinner() + " " + bodyStyle.Render(t.WaitingStatus) + "\n\n")
-	if m.warn != "" {
-		b.WriteString(warnStyle.Render("! "+m.warn) + "\n\n")
+	if m.retrying {
+		b.WriteString(warnStyle.Render("! "+t.HostRetry) + "\n\n")
 	}
 	b.WriteString(codeStyle.Render(m.room) + "\n\n")
 
@@ -206,8 +203,8 @@ func (m Model) hostingNotes() string {
 		b.WriteString(helpStyle.Render(t.HostLostHelp1) + "\n")
 		b.WriteString(helpStyle.Render(t.HostLostHelp2) + "\n\n")
 	}
-	if m.notice != "" {
-		b.WriteString(helpStyle.Render("• "+m.notice) + "\n\n")
+	if m.wrongLeft > 0 {
+		b.WriteString(helpStyle.Render("• "+t.HostRejected(m.wrongLeft)) + "\n\n")
 	}
 	return b.String()
 }
