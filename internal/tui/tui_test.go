@@ -438,7 +438,6 @@ func TestEveryScreenRenders(t *testing.T) {
 		{"welcome", screenWelcome},
 		{"connecting", screenConnecting},
 		{"pickFiles", screenPickFiles},
-		{"roomCode", screenRoomCode},
 		{"waiting", screenWaiting},
 		{"enterCode", screenEnterCode},
 		{"finding", screenFinding},
@@ -578,7 +577,7 @@ func TestCodeEntryChecksTheCode(t *testing.T) {
 // the code is on screen. That progress is shown, but must never take the
 // code away — the user may be reading it out at that very moment.
 func TestBackgroundPreparationKeepsTheCode(t *testing.T) {
-	for _, sc := range []screen{screenRoomCode, screenWaiting} {
+	for _, sc := range []screen{screenWaiting} {
 		m := New(Config{Servers: []string{"x"}})
 		m.mode = modeSend
 		m.screen = sc

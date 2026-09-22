@@ -274,7 +274,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 
-	case screenRoomCode, screenWaiting:
+	case screenWaiting:
 		switch msg.String() {
 		case "l", "L":
 			m.lang = i18n.Toggle(m.lang)

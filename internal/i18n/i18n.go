@@ -89,16 +89,6 @@ type Messages struct {
 	OutDirSelectBtn func(dir string) string
 	OutDirFooter    string
 
-	// RoomCode
-	RoomTitle     string
-	RoomBody      string
-	RoomHelp1     string
-	RoomHelp2     string
-	RoomHelp3     string
-	RoomSingleUse string
-	RoomSentBtn   string
-	RoomFooter    string
-
 	// Waiting
 	WaitingTitle     string
 	WaitingStatus    string
@@ -231,15 +221,6 @@ var trMessages = &Messages{
 		return "[s]  ·  Burayı seç (" + dir + ")"
 	},
 	OutDirFooter: "[↑/↓] Gezin  ·  [Enter] Gir  ·  [Backspace/←] Üst Klasör  ·  [s] Seç  ·  [Esc] Vazgeç",
-
-	RoomTitle:     "🔑  Oda kodun hazır!",
-	RoomBody:      "Şimdi arkadaşına bu kodu ilet.",
-	RoomHelp1:     "WhatsApp'tan yaz, SMS at ya da telefonda söyle — fark etmez.",
-	RoomHelp2:     "Arkadaşın programı açacak, \"Bana dosya gönderilecek\"i",
-	RoomHelp3:     "seçecek ve bu kodu yazacak.",
-	RoomSingleUse: "Kod tek kullanımlık: dosyalar gittiği anda geçersiz olur.",
-	RoomSentBtn:   "✓  Arkadaşıma ilettim",
-	RoomFooter:    "[Enter] Devam Et  ·  [L] Dil: English  ·  [Ctrl+C] Çıkış",
 
 	WaitingTitle:  "🔑  Oda kodun hazır!",
 	WaitingStatus: "Arkadaşının kodu girmesi bekleniyor...",
@@ -401,15 +382,6 @@ var enMessages = &Messages{
 		return "[s]  ·  Select here (" + dir + ")"
 	},
 	OutDirFooter: "[↑/↓] Navigate  ·  [Enter] Open Folder  ·  [Backspace/←] Parent Dir  ·  [s] Select Dir  ·  [Esc] Cancel",
-
-	RoomTitle:     "🔑  Your room code is ready!",
-	RoomBody:      "Now share this room code with your friend.",
-	RoomHelp1:     "Send via WhatsApp, SMS, or read aloud over phone — anything works.",
-	RoomHelp2:     "Your friend will launch PureSend, choose \"I want to receive\",",
-	RoomHelp3:     "and enter this room code.",
-	RoomSingleUse: "Single-use: code expires as soon as transfer finishes.",
-	RoomSentBtn:   "✓  I shared the code",
-	RoomFooter:    "[Enter] Continue  ·  [L] Language: Türkçe  ·  [Ctrl+C] Quit",
 
 	WaitingTitle:  "🔑  Your room code is ready!",
 	WaitingStatus: "Waiting for your friend to enter the code...",

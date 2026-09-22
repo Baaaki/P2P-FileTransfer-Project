@@ -24,7 +24,7 @@ func (m Model) View() string {
 		body = m.viewConnecting()
 	case screenPickFiles:
 		body = m.viewPickFiles()
-	case screenRoomCode, screenWaiting:
+	case screenWaiting:
 		body = m.viewWaiting()
 	case screenEnterCode:
 		body = m.viewEnterCode()

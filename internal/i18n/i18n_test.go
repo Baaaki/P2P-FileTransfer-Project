@@ -105,9 +105,6 @@ func TestGetCompleteness(t *testing.T) {
 	if tr.PickTitle == "" || en.PickTitle == "" {
 		t.Error("PickTitle is empty")
 	}
-	if tr.RoomTitle == "" || en.RoomTitle == "" {
-		t.Error("RoomTitle is empty")
-	}
 	if tr.WaitingTitle == "" || en.WaitingTitle == "" {
 		t.Error("WaitingTitle is empty")
 	}

@@ -28,7 +28,6 @@ const (
 	screenWelcome screen = iota
 	screenConnecting
 	screenPickFiles
-	screenRoomCode
 	screenWaiting
 	screenEnterCode
 	screenFinding
