@@ -1,7 +1,7 @@
 # PureSend 📦 · [Türkçe](README.md)
 
-> **A production-grade, end-to-end encrypted peer-to-peer (P2P) file transfer tool written in Go.**  
-> Stream files directly between devices across the internet without cloud storage intermediaries, accounts, or complex network configurations — even behind home routers (NAT) and strict firewalls.
+> **An end-to-end encrypted peer-to-peer (P2P) file transfer tool written in Go.**  
+> No cloud storage, no accounts. Two devices behind home routers (NAT) connect directly whenever a hole can be punched; where it cannot, the transfer continues through a relay, still encrypted end to end.
 
 [![CI Pipeline](https://github.com/Baaaki/PureSend/actions/workflows/ci.yml/badge.svg)](https://github.com/Baaaki/PureSend/actions)
 [![Go Version](https://img.shields.io/github/go-mod/go-version/Baaaki/PureSend)](https://go.dev/)
@@ -12,7 +12,7 @@
 
 ## 🎯 Key Features
 
-* 🔒 **No Need to Trust the Server:** The secret words of a code never reach the rendezvous server, so with the **SPAKE2** handshake it can neither read transfers nor put itself in the middle.
+* 🔒 **No Need to Trust the Server:** The secret words of a code never reach the rendezvous server, so with the **PAKE** handshake it can neither read transfers nor put itself in the middle without guessing them.
 * ⚡ **Intelligent NAT Traversal (P2P):** **libp2p (DCUtR)** direct device-to-device streaming without open ports (Relay v2 fallback).
 * 🔄 **Resilience & Resumability:** Interrupted transfers resume from the last byte; every file is verified with SHA-256 once complete.
 * 💻 **TUI & CLI Automation:** Interactive bilingual terminal UI (`Bubble Tea`) or headless automation flags (`-send`, `-receive`).
@@ -25,7 +25,7 @@
 | :--- | :--- |
 | **Language & Runtime** | Go (Golang 1.27) — `CGO_ENABLED=0` (standalone static binary, zero runtime dependencies) |
 | **Networking & Protocols** | libp2p (v0.49), WebSockets, TLS, DCUtR (Hole Punching), Circuit Relay v2, STUN (pion/stun v3.1.7), UPnP |
-| **Cryptography** | SPAKE2 (PAKE / pake v3), Noise / TLS 1.3, per-file SHA-256, minisign-signed releases, Govulncheck |
+| **Cryptography** | PAKE (`schollz/pake` v3, SPAKE2-style, P-256), Noise / TLS 1.3, per-file SHA-256, minisign-signed releases, Govulncheck |
 | **Interface (TUI)** | Charmbracelet Bubble Tea (v1.3 - Elm Architecture), Lipgloss (v1.1) |
 | **DevOps & Packaging** | GoReleaser (v2), GitHub Actions CI/CD, Debian (`.deb`), Arch Linux (`PKGBUILD`), One-Line Installer (`sh`/`ps1`) |
 
@@ -55,15 +55,15 @@ Sender (Peer A)                  Rendezvous Server                     Receiver 
       │ 1. Open room → server gives "42" │                                    │
       │─────────────────────────────────►│◄───────────────────────────────────│ 2. Look up "42" only
       │                                  │                                    │
-      │◄══════════ 3. SPAKE2 Key Exchange & NAT Hole Punching (DCUtR) ════════►│
+      │◄═════ 3. NAT Hole Punching (DCUtR) & PAKE Mutual Authentication ══════►│
       │                                                                       │
-      │═══════════ 4. Files Stream DIRECTLY Peer-to-Peer (SHA-256) ═══════════►│
+      │══════════ 4. Files Stream Over the Encrypted Link (SHA-256) ══════════►│
 ```
 
 1. **Discovery:** The sender gets a room number from the server (`42`) and puts two secret words of its own in front of it: `kiraz-liman-42`. The server only ever knows the number.
-2. **Key Exchange:** Both peers run a **SPAKE2** handshake with the whole code as the password, proving they hold it; a server that never saw the words cannot sit in between. Three wrong codes close the room.
-3. **Direct P2P Upgrade:** **DCUtR** punches through NAT boundaries on both endpoints to establish a direct, low-latency socket.
-4. **Verified Transfer:** Chunks stream directly peer-to-peer, with SHA-256 validation applied to ensure end-to-end data integrity.
+2. **Direct Connection:** The first connection runs through the server's relay; **DCUtR** then tries to replace it with a direct one. Where no hole can be punched (a symmetric NAT, for instance) the transfer stays on the relay — encrypted end to end, limited in size and duration.
+3. **Authentication:** Both peers run a **PAKE** handshake with the whole code as the password, and bind both peer IDs into the key, so a server that never saw the words cannot sit in between. Three wrong codes close the room.
+4. **Verified Transfer:** Files stream in chunks over the encrypted connection; each is checked against its SHA-256 once complete.
 
 ---
 

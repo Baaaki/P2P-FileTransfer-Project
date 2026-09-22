@@ -1,7 +1,7 @@
 # PureSend 📦 · [English](README.en.md)
 
 > **Go (Golang) ile geliştirilmiş, uçtan uca şifreli ve doğrudan eşler arası (P2P) dosya transfer sistemi.**  
-> Bulut sağlayıcılarına, üyeliklere veya üçüncü taraf sunuculara ihtiyaç duymadan; ev modemleri (NAT) ve kurumsal güvenlik duvarları arkasındaki cihazlar arasında doğrudan veri akışı sağlar.
+> Bulut depolamaya ve üyeliğe gerek yok. Ev modemi (NAT) arkasındaki iki cihaz mümkün olduğunda doğrudan bağlanır; delik açılamayan ağlarda aktarım yine şifreli olarak bir röle üzerinden sürer.
 
 [![CI Pipeline](https://github.com/Baaaki/PureSend/actions/workflows/ci.yml/badge.svg)](https://github.com/Baaaki/PureSend/actions)
 [![Go Version](https://img.shields.io/github/go-mod/go-version/Baaaki/PureSend)](https://go.dev/)
@@ -12,7 +12,7 @@
 
 ## 🎯 Öne Çıkan Özellikler
 
-* 🔒 **Sunucuya Güvenmek Gerekmez:** Kodun gizli kelimeleri sunucuya hiç gitmez; **SPAKE2** el sıkışması sayesinde sunucu veriyi göremez ve araya giremez.
+* 🔒 **Sunucuya Güvenmek Gerekmez:** Kodun gizli kelimeleri sunucuya hiç gitmez; **PAKE** el sıkışması sayesinde sunucu veriyi göremez ve kelimeleri tahmin etmeden araya giremez.
 * ⚡ **Akıllı NAT Delme (P2P):** **libp2p (DCUtR)** ile port açmadan doğrudan cihazdan cihaza aktarım (gerekirse Relay v2 yedeği).
 * 🔄 **Kesintisiz Devam (Resume):** Kopan transferler kaldığı bayttan devam eder; her dosya bitince SHA-256 ile doğrulanır.
 * 💻 **TUI & CLI Desteği:** Etkileşimli çift dilli terminal arayüzü (`Bubble Tea`) veya otomasyon için bayraklar (`-send`, `-receive`).
@@ -25,7 +25,7 @@
 | :--- | :--- |
 | **Programlama Dili** | Go (Golang 1.27) — `CGO_ENABLED=0` (tamamen bağımsız statik ikili dosyalar) |
 | **Ağ & Eşler Arası (P2P)** | libp2p (v0.49), WebSockets, TLS, DCUtR (Hole Punching), Circuit Relay v2, STUN (pion/stun v3.1.7), UPnP |
-| **Güvenlik & Kriptografi** | SPAKE2 (PAKE / pake v3), Noise / TLS 1.3, dosya başına SHA-256, minisign imzalı sürümler, Govulncheck |
+| **Güvenlik & Kriptografi** | PAKE (`schollz/pake` v3, SPAKE2 tarzı, P-256), Noise / TLS 1.3, dosya başına SHA-256, minisign imzalı sürümler, Govulncheck |
 | **Kullanıcı Arayüzü** | Charmbracelet Bubble Tea (v1.3 - Elm Mimarisi), Lipgloss (v1.1) |
 | **Dağıtım & DevOps** | GoReleaser (v2), GitHub Actions CI/CD, Debian (`.deb`), Arch Linux (`PKGBUILD`), Tek Satır Kurulumcu (`sh`/`ps1`) |
 
@@ -55,14 +55,14 @@ Gönderici (İstemci A)           Buluşma Sunucusu (Rendezvous)         Alıcı
        │ 1. Oda aç → sunucu "42" verir       │                               │
        │────────────────────────────────────►│◄──────────────────────────────│ 2. Yalnızca "42" numarasını sor
        │                                     │                               │
-       │◄═══════════ 3. SPAKE2 Kriptografik Doğrulama & NAT Delme ══════════►│
+       │◄══════════ 3. NAT Delme & PAKE ile Karşılıklı Doğrulama ═══════════►│
        │                                                                     │
-       │════════════ 4. Dosyalar DOĞRUDAN P2P Olarak Akar (SHA-256) ═════════►│
+       │══════════ 4. Dosyalar Şifreli Bağlantıdan Akar (SHA-256) ═══════════►│
 ```
 
 1. **Buluşma (Discovery):** Gönderici sunucudan bir oda numarası alır (`42`) ve önüne kendi seçtiği iki gizli kelimeyi koyar: `kiraz-liman-42`. Sunucu yalnızca numarayı bilir.
-2. **Kimlik Doğrulama:** Eşler kodun tamamını ortak parola olarak kullanıp **SPAKE2** ile birbirlerini doğrular; kelimeleri bilmeyen sunucu araya giremez. Yanlış kodla 3 denemeden sonra oda kapanır.
-3. **Doğrudan Bağlantı:** **DCUtR** koordinasyonu ile her iki tarafın NAT cihazı delinir ve eşler doğrudan birbirine bağlanır.
+2. **Doğrudan Bağlantı:** İlk bağlantı sunucunun rölesi üzerinden kurulur; **DCUtR** bunu doğrudan bir bağlantıyla değiştirmeye çalışır. Simetrik NAT gibi delik açılamayan durumlarda aktarım röle üzerinden (uçtan uca şifreli, boyut ve süre sınırlı) devam eder.
+3. **Kimlik Doğrulama:** Eşler kodun tamamını ortak parola olarak kullanıp bir **PAKE** el sıkışmasıyla birbirlerini doğrular; iki tarafın peer ID'si de anahtara bağlanır, bu yüzden kelimeleri bilmeyen sunucu araya giremez. Yanlış kodla 3 denemeden sonra oda kapanır.
 4. **Doğrulanmış Aktarım:** Dosyalar şifreli bağlantı üzerinden dilim dilim iletilir; her dosya bitince SHA-256 ile doğrulanır.
 
 ---

@@ -41,7 +41,7 @@ flowchart TB
 
 ## 2. Uçtan Uca Algoritma ve Protokol Akışı (Sequence Diagram)
 
-PureSend protokolünün 4 ana adımı (Sinyal, NAT Delme, SPAKE2 Doğrulama, Akış):
+PureSend protokolünün 4 ana adımı (Sinyal, NAT Delme, PAKE Doğrulama, Akış):
 
 ```mermaid
 sequenceDiagram
@@ -64,7 +64,7 @@ sequenceDiagram
     S->>R: DCUtR Port Eşleme Senkronizasyonu
     S-->>R: Doğrudan P2P Soketi Açıldı (Sunucu Devre Dışı!)
 
-    Note over S,R: 3. Kodun Tamamıyla Kimlik Doğrulama (SPAKE2)
+    Note over S,R: 3. Kodun Tamamıyla Kimlik Doğrulama (PAKE)
     R->>S: PAKE Mesaj 1 (P-256, parola: kodun tamamı)
     S->>R: PAKE Mesaj 2
     Note over S,R: Ortak anahtar türetilir (Peer ID'ler oturuma bağlanır)
@@ -95,13 +95,13 @@ Bağlantı koşullarına göre çalışma zamanı rota seçimi:
 flowchart TD
     Start(["Transfer Başlatıldı"]) --> DirectLAN{"Aynı Yerel Ağda (LAN) mı?"}
     
-    DirectLAN -- "Evet" --> UseLAN["Doğrudan LAN Soketi (Line-Rate Hız: 112+ MB/s)"]
+    DirectLAN -- "Evet" --> UseLAN["Doğrudan LAN Soketi (hız: ağın hat hızı)"]
     DirectLAN -- "Hayır" --> HolePunch{"DCUtR Delik Açma Başarılı mı?<br/>(Konik NAT / Port Eşleme)"}
     
     HolePunch -- "Evet (Varsayılan)" --> UseDirectWAN["Doğrudan WAN P2P Tüneli<br/>(Veri sunucuya uğramaz, hat sınırı hız)"]
     HolePunch -- "Hayır (Simetrik NAT)" --> RelayFallback["Circuit Relay v2 Köprüsü<br/>(Şifreli yedek hat - Hız/kota sınırlı)"]
 
-    UseLAN --> StartCrypto["SPAKE2 (P-256) Kriptografik El Sıkışması"]
+    UseLAN --> StartCrypto["PAKE (P-256) El Sıkışması"]
     UseDirectWAN --> StartCrypto
     RelayFallback --> StartCrypto
 
@@ -115,9 +115,10 @@ flowchart TD
 ## 4. Temel Algoritma Prensipleri
 
 1. **Güvenilmeyen Buluşma Sunucusu:**
+   * El sıkışma `schollz/pake` kütüphanesinin SPAKE2 tarzı değişimidir; RFC 9382 SPAKE2 ya da CPace değildir. Güvenliği taşıyan kısımlar (iki kimliğin anahtara bağlanması ve karşılıklı onay etiketleri) projenin kendi kodudur; gerekçe `internal/transfer/auth.go` içindedir.
    * Oda kodu iki parçadır: `kiraz-liman-42` kodunda `42` sunucunun verdiği, herkese açık oda numarasıdır (nameplate); `kiraz-liman` göndericinin kendi seçtiği gizli kısımdır (16 bit) ve sunucuya hiç gönderilmez.
    * Sunucu dosya içeriğini veya dosya adlarını göremez. Göndericinin yerine kendi düğümünü koymak ya da alıcı gibi davranmak için gizli kelimeleri tahmin etmesi gerekir: her deneme bir el sıkışmadır, başarısızlık görünür, ve gönderici 3 yanlış koddan sonra odayı kapatır.
-   * İstemciler SPAKE2 el sıkışmasında iki Peer ID'yi de anahtara bağlar; arada mesaj taşıyan bir eş iki ucu birbirine bağlayamaz.
+   * İstemciler PAKE el sıkışmasında iki Peer ID'yi de anahtara bağlar; arada mesaj taşıyan bir eş iki ucu birbirine bağlayamaz.
 2. **Sabit Bellekli Akış ($O(1)$ RAM):**
    * Dosyalar belleğe yüklenmez; sabit 32 KB dilimler (chunks) halinde okunur, küçülüyorsa DEFLATE (`flate.HuffmanOnly`) ile sıkıştırılır, küçülmüyorsa olduğu gibi gönderilir.
    * Alıcı tarafında her dilim diske yazılırken dosyanın SHA-256 özetine eklenir; özet dosya bitince bir kez karşılaştırılır.
