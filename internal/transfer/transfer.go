@@ -238,6 +238,18 @@ type SendOptions struct {
 	// blocking the room: connecting costs nothing, but only someone with
 	// the code can take the room away from the friend it was meant for.
 	Claim func() bool
+
+	// Judge, when set, is where the receiver's proof of the code is
+	// judged: it is handed the comparison and returns its verdict — or
+	// false without running it, to refuse the guess. A refused guess is
+	// answered exactly like a wrong one. Nil judges every proof.
+	//
+	// A room that allows only a few guesses has to count them here, as
+	// they are judged, and not once a handshake has ended: a guesser can
+	// hold several handshakes open at once, each past the exchange and
+	// waiting only on its verdict, and a count kept at the end would let
+	// every one of them be judged before the first wrong one was counted.
+	Judge func(proves func() bool) bool
 }
 
 // Send serves an offer on the stream. It runs inside the sending side's
@@ -263,6 +275,7 @@ func Send(s io.ReadWriteCloser, offer *Offer, creds Credentials, opts SendOption
 	if _, err := authenticate(roleSender, creds,
 		func(m *authMsg) error { return dec.Decode(m) },
 		func(m authMsg) error { return enc.Encode(m) },
+		opts.Judge,
 	); err != nil {
 		return err
 	}
@@ -517,6 +530,7 @@ func Receive(s io.ReadWriteCloser, outDir string, creds Credentials, confirm fun
 	if _, err := authenticate(roleReceiver, creds,
 		func(m *authMsg) error { return readJSONLine(r, maxAuthBytes, m) },
 		func(m authMsg) error { return enc.Encode(m) },
+		nil,
 	); err != nil {
 		return nil, err
 	}

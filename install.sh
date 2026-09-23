@@ -8,9 +8,10 @@ REPO="Baaaki/PureSend"
 BINARY="puresend"
 
 # The minisign public key releases are signed with: the same key as the
-# FT_UPDATE_KEY repository variable. Empty until release signing is set up
-# (docs/DEPLOYMENT.md); the SHA-256 check below runs either way.
-PUBKEY=""
+# FT_UPDATE_KEY repository variable (docs/DEPLOYMENT.md). The signature is
+# checked when minisign is installed; the SHA-256 check below runs either
+# way.
+PUBKEY="RWQ2F1ZFuTGorH4GqU4qC3PzJo5Evx2OKfNfJSiLbgyoEkMFDwUV8Kts"
 
 # Colors
 RED='\033[0;31m'

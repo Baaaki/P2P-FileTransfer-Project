@@ -251,7 +251,7 @@ Bundan sonra her yayın `checksums.txt.minisig` dosyasını da içerir ve istemc
 Bir sürümü elle doğrulamak için:
 
 ```bash
-minisign -Vm checksums.txt -P RW...
+minisign -Vm checksums.txt -P RWQ2F1ZFuTGorH4GqU4qC3PzJo5Evx2OKfNfJSiLbgyoEkMFDwUV8Kts
 sha256sum --ignore-missing -c checksums.txt
 ```
 
@@ -260,3 +260,59 @@ sha256sum --ignore-missing -c checksums.txt
 Her istemciye buluşma noktasının adresi, Peer ID'siyle birlikte gömülür: `FT_SERVER` depo değişkeni ayarlıysa o, değilse `release.yml` içindeki varsayılan. Adres yanlışsa bu, ancak insanlar dosyaları indirdikten sonra fark edilir. Bu yüzden iş akışı, gömeceği adresin `FT_SERVER_LIST` (varsayılan `https://puresend.madebybaki.com/server.txt`) içinde listelendiğini denetler ve listede yoksa hiçbir şey derlemeden durur. İkisi uyuşmuyorsa biri eskimiştir; çoğu zaman sunucu anahtarı değiştikten sonra güncellenmemiş varsayılan. Liste o an indirilemezse iş akışı yalnızca uyarı verip devam eder.
 
 Sunucu anahtarı değiştiğinde (bkz. 5.3) sıra şudur: önce `server.txt`'e yeni adres eklenir; eski sürümler gömülü adrese ulaşamayınca oraya bakar. Sonra `FT_SERVER` değişkeni ya da iş akışındaki varsayılan güncellenir, en son yeni sürüm etiketlenir.
+
+### 6.4 Yayın sırası
+
+1. `docs/CHANGELOG.md` içindeki `[Unreleased]` notlarını yeni sürümün başlığı altına taşıyın (`## [2.0.2] - YYYY-AA-GG`); iş akışı başlığı olmayan bir etiketi reddeder.
+2. **Önce etiketi, sonra `main`'i itin:** `git push origin v2.0.2`, iş akışı bitip sürüm yayına çıkınca `git push origin main`. Kurulum betikleri doğrudan `main`'den indirilir; yeni bir açık anahtar ya da yeni bir kural, onu karşılayan sürüm yayında olmadan `main`'e girerse betik o anki son sürümü reddedebilir.
+3. Sürümü doğrulayın: `checksums.txt.minisig` yayında mı, imza açık anahtarla doğrulanıyor mu (6.2), arşivler `checksums.txt` ile eşleşiyor mu.
+4. Web sitesindeki indirmeler sürümün **kendi dosyalarıdır**: doğrulanmış arşivlerden çıkarılır, yerelde ayrıca derlenmez. Yerel bir derlemeye `FT_UPDATE_KEY` gömülmez — o kopya imzasız bir güncellemeyi de kabul eder — ve dosya imzalı listeyle eşleşmez.
+5. `packaging/PKGBUILD` içindeki `pkgver` ve arşiv özetini yeni sürüme çekin; özet ancak sürüm derlendikten sonra bellidir.
+
+---
+
+## 7. Gizli Anahtarlar: Envanter, Saklama ve Yenileme
+
+Projede iki gizli anahtar vardır. Diğer her değer — sunucu adresi, `server.txt`, imzalama anahtarının açık yarısı — herkese açıktır ve öyle kalabilir.
+
+| Anahtar | Nerede durur | Kaybolursa | Sızarsa |
+| :--- | :--- | :--- | :--- |
+| **Sunucu kimlik anahtarı** (`server.key` / `FT_IDENTITY_KEY`) | Sunucudaki `rendezvous-key` volume'ünde (`/data/server.key`); yedeği parola yöneticisinde (5.3) | Peer ID değişir. Yayınlanmış istemciler gömülü adrese ulaşamaz, yeni adresi ancak `server.txt` üzerinden bulur. | Anahtarı kullanmak için alan adının trafiğini de ele geçirmek gerekir; bunu yapabilen biri `server.txt` ile istemcileri zaten kendi sunucusuna yönlendirebilir. Sunucu dosyaları ve kodların gizli kelimelerini görmez (`SECURITY.md`). Yenilemek pahalıdır (7.3), acil değildir. |
+| **İmzalama anahtarı** (minisign, `MINISIGN_SECRET_KEY`) | GitHub Actions secret'ında ve parola yöneticisinde | Anahtarı gömülü istemciler `-update` ile güncellenemez; kullanıcılar kurulum betiğiyle yeniden kurar. | Sürüm sayfasını değiştirebilen biri imzalı görünen bir güncelleme yayınlayabilir. Hemen yenileyin (7.2). |
+
+Saklanması gerekmeyenler: Actions'taki `GITHUB_TOKEN` her çalıştırmada GitHub tarafından verilir; istemciler her açılışta yeni bir kimlik üretir ve hiçbir yere kaydetmez. Sunucudaki Cloudflare Tunnel kimlik dosyası (`/root/.cloudflared/<tünel>.json`) gizlidir ama Cloudflare panelinden yeniden üretilebilir.
+
+### 7.1 Kurallar
+
+- Gizli bir anahtarı hiçbir sohbete, issue'ya, PR'a, log'a ya da ekran görüntüsüne koymayın — yapay zekâ asistanlarıyla yapılan sohbetler dahil; bu araçlar konuşmayı diskte ve sağlayıcıda düz metin saklar. Bir anahtar hakkında konuşurken adını ya da key ID'sini paylaşın.
+- Anahtarları deponun dışında, yalnızca sizin okuyabildiğiniz bir klasörde üretin (`umask 077`). `.gitignore` `*.key` dosyalarını dışarıda tutar, ama bu bir emniyet ağıdır, yöntem değil.
+- Minisign gizli anahtar dosyası iki satırdır: `untrusted comment: ...` ve anahtarın kendisi. Parola yöneticisine de GitHub secret'ına da ikisini birlikte koyun; minisign ilk satırı her zaman yorum olarak okur ve tek satırlık bir dosyayla imza atamaz.
+- GitHub secret'ı kaydedildikten sonra kimse, depo sahibi dahil, onu geri okuyamaz; okunabilir tek kopya parola yöneticisindekidir. Önce parola yöneticisine, sonra GitHub'a kaydedin.
+- GitHub'da **Settings → Secrets and variables → Actions** altında secret'lar *Secrets*, açık anahtar *Variables* sekmesine, ikisi de **Repository** düzeyinde (Environment altında değil) eklenir.
+
+### 7.2 İmzalama anahtarını yenileme
+
+1. Depo dışında yeni bir çift üretin:
+   ```bash
+   umask 077; mkdir -p ~/puresend-signing && cd ~/puresend-signing
+   minisign -G -W -p puresend.pub -s puresend.key
+   ```
+2. `puresend.key` dosyasının iki satırını parola yöneticisinde eskisinin yerine koyun.
+3. GitHub'da `MINISIGN_SECRET_KEY` secret'ını (dosyanın tamamı) ve `FT_UPDATE_KEY` değişkenini (`puresend.pub` dosyasının ikinci satırı) güncelleyin.
+4. Yeni açık anahtarı `install.sh` (`PUBKEY`), `install.ps1` (`$pubKey`), `SECURITY.md` ve 6.2'deki doğrulama örneğine yazın; eski açık anahtarın depoda başka yerde kalmadığını `grep` ile denetleyin.
+5. Yeni bir sürüm yayınlayın (6.4) ve `~/puresend-signing` klasörünü silin.
+
+> ⚠️ Eski anahtarı gömülü istemciler, yeni anahtarla imzalanmış bir sürümü reddeder. Anahtar, onu taşıyan bir sürüm yayınlandıktan sonra değişirse o sürümün kullanıcıları `-update` ile güncelleyemez; sürüm notunda kurulum betiğiyle yeniden kurmalarını söyleyin. Anahtar sızdıysa bu bedel yine de ödenmelidir.
+
+### 7.3 Sunucu anahtarını yenileme
+
+1. Yeni anahtarı depo dışında üretin ve Peer ID'sini öğrenin; sunucu bir anahtar yolunda dosya bulamazsa yenisini üretir ve Peer ID'yi yazar:
+   ```bash
+   umask 077; go run ./cmd/server -key ~/yeni-server.key -ws-port 18080 -health-addr ""
+   # "Peer ID: 12D3KooW..." satırını not edin, Ctrl+C ile durdurun
+   base64 -w0 ~/yeni-server.key   # parola yöneticisine bu çıktı
+   ```
+2. Yeni adresi (`/dns4/<alan-adı>/tcp/443/tls/ws/p2p/<yeni Peer ID>`) `server.txt`'e **ekleyin**, eskisini henüz silmeyin.
+3. Sunucuda `FT_IDENTITY_KEY`'i yeni değere ayarlayıp (5.3) yeniden başlatın. Eski istemciler gömülü adrese ulaşamayınca `server.txt`'teki yeni adresi bulur.
+4. `FT_SERVER` değişkenini ya da `release.yml`'deki varsayılanı güncelleyip yeni bir sürüm yayınlayın (6.3, 6.4).
+5. Eski adresi `server.txt`'ten kaldırın ve `~/yeni-server.key` dosyasını silin.

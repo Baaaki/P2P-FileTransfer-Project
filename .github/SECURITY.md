@@ -144,7 +144,7 @@ A room code such as `kiraz-liman-42` has two parts with different jobs:
    - A peer in the middle cannot relay the handshake messages between the two honest ends: the Peer IDs bound into the key would differ and confirmation fails.
 
 2. **Online Guessing Is Bounded:**
-   Anyone can look up a nameplate and reach the sender, so the secret words are what an attacker has to guess. Each guess costs a full handshake with a live sender. The sender counts handshakes that fail on the code and closes the room after `MaxWrongCodes` (3) of them, telling its user why. The odds of a guess landing are therefore at most 3 in 65,536 per room. A handshake abandoned half way is not counted — and gains the guesser nothing, because the sender reveals its own confirmation tag only to a receiver that proved the key first.
+   Anyone can look up a nameplate and reach the sender, so the secret words are what an attacker has to guess. Each guess costs a full handshake with a live sender. The sender counts handshakes that fail on the code and closes the room after `MaxWrongCodes` (3) of them, telling its user why. Guesses are counted as they are judged, not when their handshakes end, so handshakes held open side by side get no more guesses between them. The odds of a guess landing are therefore at most 3 in 65,536 per room. A handshake abandoned half way is not counted — and gains the guesser nothing, because the sender reveals its own confirmation tag only to a receiver that proved the key first.
 
 3. **Offline Attack Resistance:**
    Nothing derived from the code that could be tested offline crosses the wire: the server receives only the nameplate, and the SPAKE2 messages reveal nothing a listener can test guesses against.
@@ -174,7 +174,7 @@ A room code such as `kiraz-liman-42` has two parts with different jobs:
    Every protocol phase has a deadline (handshake 30 s, approval 5 min, idle 2 min). A room is claimed only by a receiver that completed the handshake, so unauthenticated connections cannot keep the real receiver out.
 
 9. **Release Integrity:**
-   `puresend -update` and the install scripts refuse an archive that does not match the release's `checksums.txt`, and refuse a release with no checksums at all. Builds that carry a minisign public key also require `checksums.txt` to be signed with the matching secret key. Published releases are never replaced: the release workflow refuses to run for a tag that already has one.
+   `puresend -update` and the install scripts refuse an archive that does not match the release's `checksums.txt`, and refuse a release with no checksums at all. Builds that carry a minisign public key also require `checksums.txt` to be signed with the matching secret key. Releases from 2.0.2 on are signed with `RWQ2F1ZFuTGorH4GqU4qC3PzJo5Evx2OKfNfJSiLbgyoEkMFDwUV8Kts`; check one by hand with `minisign -Vm checksums.txt -P <key>`. Published releases are never replaced: the release workflow refuses to run for a tag that already has one.
 
 ---
 
@@ -269,7 +269,7 @@ PureSend maintains a comprehensive automated security regression suite in `inter
 | Test Case | Defensive Guarantee | Test Verification |
 | :--- | :--- | :--- |
 | **Server Blindness** | Across a whole transfer, nothing sent to the rendezvous server contains the secret words of the code. | `TestServerNeverSeesTheWords` |
-| **Guessing Limit** | The sender closes its room after 3 wrong codes; a receiver that skips its own proof never gets the sender's tag. | `TestTooManyWrongCodesCloseTheRoom`, `TestSenderTagNeedsTheReceiversFirst` |
+| **Guessing Limit** | The sender closes its room after 3 wrong codes, however the guesses are timed; a receiver that skips its own proof never gets the sender's tag. | `TestTooManyWrongCodesCloseTheRoom`, `TestGuessesHeldOpenTogetherShareTheLimit`, `TestRefusedGuessIsAnsweredAsWrong`, `TestSenderTagNeedsTheReceiversFirst` |
 | **Path Traversal Defenses** | Rejects `../`, absolute paths, leading slashes, and Windows drive roots. | `TestUnsafePaths` |
 | **Destination Containment** | Refuses the home folder as a destination, writing through links, and replacing existing files. | `TestDestinationIsNotTheHomeFolder`, `TestNoWritingThroughLinks`, `TestPlaceNeverReplaces` |
 | **Resume Privacy** | Only files an interrupted transfer finished are reported as present. | `TestResumeRevealsNoOtherFiles` |

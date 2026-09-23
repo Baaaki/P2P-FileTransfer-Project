@@ -254,7 +254,7 @@ func TestSenderTagNeedsTheReceiversFirst(t *testing.T) {
 				dec, enc := json.NewDecoder(sender), json.NewEncoder(sender)
 				_, _ = authenticate(roleSender, testCreds(),
 					func(m *authMsg) error { return dec.Decode(m) },
-					func(m authMsg) error { return enc.Encode(m) })
+					func(m authMsg) error { return enc.Encode(m) }, nil)
 			}()
 
 			// The right code: the worst case, where the tag would confirm it.
@@ -267,6 +267,41 @@ func TestSenderTagNeedsTheReceiversFirst(t *testing.T) {
 				t.Fatalf("the sender sent a tag to a receiver that never proved the key: %x", reply.Confirm)
 			}
 		})
+	}
+}
+
+// TestRefusedGuessIsAnsweredAsWrong: a sender whose room has had all the
+// guesses it allows refuses to judge any more proofs. A refused proof must
+// get the same answer as a wrong one — even from a receiver that holds the
+// code, since confirming it would be one guess more than the room allows.
+func TestRefusedGuessIsAnsweredAsWrong(t *testing.T) {
+	src := writeTempFile(t, t.TempDir(), "a.txt", []byte("data"))
+	offer, _ := NewOffer([]string{src})
+
+	sender, receiver := net.Pipe()
+	var shown, holds bool
+	sendErr := make(chan error, 1)
+	go func() {
+		sendErr <- Send(sender, offer, testCreds(), SendOptions{
+			Judge: func(proves func() bool) bool {
+				shown, holds = true, proves()
+				return false
+			},
+		})
+	}()
+
+	outDir := filepath.Join(t.TempDir(), "out")
+	if _, err := Receive(receiver, outDir, testCreds(), nil, Hooks{}); !errors.Is(err, ErrWrongCode) {
+		t.Errorf("receiver got %v, want ErrWrongCode", err)
+	}
+	if err := <-sendErr; !errors.Is(err, ErrWrongCode) {
+		t.Errorf("sender got %v, want ErrWrongCode", err)
+	}
+	if !shown || !holds {
+		t.Error("the judge was not handed the receiver's proof")
+	}
+	if _, err := os.Stat(outDir); !os.IsNotExist(err) {
+		t.Error("a refused receiver created its download folder")
 	}
 }
 
@@ -443,6 +478,7 @@ func TestRemoteErrorTextIsCleaned(t *testing.T) {
 	if _, err := authenticate(roleReceiver, testCreds(),
 		func(m *authMsg) error { return dec.Decode(m) },
 		func(m authMsg) error { return enc.Encode(m) },
+		nil,
 	); err != nil {
 		t.Fatal(err)
 	}
@@ -745,7 +781,7 @@ func TestResumeRevealsNoOtherFiles(t *testing.T) {
 		enc, dec := json.NewEncoder(sender), json.NewDecoder(sender)
 		if _, err := authenticate(roleSender, testCreds(),
 			func(m *authMsg) error { return dec.Decode(m) },
-			func(m authMsg) error { return enc.Encode(m) }); err != nil {
+			func(m authMsg) error { return enc.Encode(m) }, nil); err != nil {
 			return
 		}
 		_ = enc.Encode(offerMsg{Manifest: &m})

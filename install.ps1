@@ -7,11 +7,11 @@ $repo = "Baaaki/PureSend"
 $binary = "puresend.exe"
 
 # The minisign public key releases are signed with: the same key as the
-# FT_UPDATE_KEY repository variable and PUBKEY in install.sh. Empty until
-# release signing is set up (docs/DEPLOYMENT.md); the SHA-256 check below
-# runs either way. Windows has no built-in Ed25519 check, so, as in
-# install.sh, the signature is checked when minisign is installed.
-$pubKey = ""
+# FT_UPDATE_KEY repository variable and PUBKEY in install.sh
+# (docs/DEPLOYMENT.md); the SHA-256 check below runs either way. Windows
+# has no built-in Ed25519 check, so, as in install.sh, the signature is
+# checked when minisign is installed.
+$pubKey = "RWQ2F1ZFuTGorH4GqU4qC3PzJo5Evx2OKfNfJSiLbgyoEkMFDwUV8Kts"
 
 Write-Host "==> PureSend Windows kurulumu baslatiliyor..." -ForegroundColor Cyan
 

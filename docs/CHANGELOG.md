@@ -6,6 +6,32 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [2.0.2] - 2026-09-23
+
+### Security
+
+- **A room allows 3 guesses at its code, however they are timed.** Wrong
+  codes were counted when a handshake ended, so a guesser who held several
+  handshakes open at once, each waiting only on its verdict, had every one
+  of them judged before the count caught up: 4 guesses instead of 3, and
+  the fourth, if right, got the files. Each proof is now counted as it is
+  judged, and once a room has had its 3 wrong codes, no further proof is
+  judged at all. Only guesses that are judged count; a handshake that
+  breaks off before its proof, or sends a malformed message, tells the
+  guesser nothing and uses up nothing.
+- **Releases are signed.** `checksums.txt` now comes with a minisign
+  signature. Clients built from this release on refuse an update whose
+  checksum list is not signed with the project's key, and the install
+  scripts carry the same key. The public key is in `SECURITY.md`.
+
+### Added
+
+- `docs/DEPLOYMENT.md` lists every secret the project holds — where each
+  one lives, what losing or leaking it costs, how to store it and how to
+  replace it — and the order a release goes out in: the tag first, `main`
+  once the signed release is live, and the website's downloads taken from
+  the release itself rather than built again.
+
 ## [2.0.1] - 2026-09-23
 
 ### Security

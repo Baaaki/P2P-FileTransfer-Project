@@ -598,8 +598,14 @@ func (n *Node) announce(ctx context.Context, nameplate string) (string, error) {
 
 // serve is the transfer protocol handler for a room.
 func (n *Node) serve(room string, offer *transfer.Offer) network.StreamHandler {
-	// Wrong codes are counted per room, across every handshake it sees.
-	var wrongCodes atomic.Int32
+	// Wrong codes are counted per room, across every handshake it sees, and
+	// counted as each proof is judged rather than when its handshake ends
+	// (see transfer.SendOptions.Judge). Judging is a single comparison, so
+	// the lock only ever makes two proofs take turns.
+	var (
+		guessMu    sync.Mutex
+		wrongCodes int
+	)
 	return func(s network.Stream) {
 		// A handshake is cheap to start and anyone who knows our address
 		// can start one; only so many run at a time.
@@ -620,6 +626,9 @@ func (n *Node) serve(room string, offer *transfer.Offer) network.StreamHandler {
 
 		remotePeer := s.Conn().RemotePeer()
 		claimed := false
+		// left is how many more wrong codes the room survives once this
+		// handshake's has been counted; -1 while none of its has been.
+		left := -1
 		transferCtx, cancelTransfer := context.WithCancel(context.Background())
 		defer cancelTransfer()
 
@@ -629,6 +638,21 @@ func (n *Node) serve(room string, offer *transfer.Offer) network.StreamHandler {
 			Receiver: remotePeer.String(),
 		}, transfer.SendOptions{
 			Hooks: n.hooks(),
+			Judge: func(proves func() bool) bool {
+				guessMu.Lock()
+				defer guessMu.Unlock()
+				if wrongCodes >= MaxWrongCodes {
+					// The room is closing. A proof judged now would be one
+					// guess more than it allows, right or wrong.
+					return false
+				}
+				if proves() {
+					return true
+				}
+				wrongCodes++
+				left = MaxWrongCodes - wrongCodes
+				return false
+			},
 			// One room, one transfer — but the room is only taken by a
 			// receiver that proved the code. Anyone else arriving while a
 			// transfer runs is told the room is busy.
@@ -649,18 +673,17 @@ func (n *Node) serve(room string, offer *transfer.Offer) network.StreamHandler {
 
 		if !claimed {
 			// Nobody's transfer started, so there is nothing to finish.
-			// A wrong code is worth mentioning; a dropped handshake is not,
-			// and does not count: it tells whoever dropped it nothing about
-			// the code (see transfer.authenticate).
-			if errors.Is(err, transfer.ErrWrongCode) {
-				switch left := MaxWrongCodes - int(wrongCodes.Add(1)); {
-				case left > 0:
-					n.emit(RejectedEvent{Left: left})
-				case left == 0:
-					// Exactly one handshake gets here, however many
-					// failed at once.
-					n.abandonRoom(ErrTooManyWrongCodes)
-				}
+			// A wrong code is worth mentioning. A handshake that ended
+			// before its proof was judged is not, and does not count: it
+			// tells whoever dropped it nothing about the code (see
+			// transfer.authenticate).
+			switch {
+			case left > 0:
+				n.emit(RejectedEvent{Left: left})
+			case left == 0:
+				// Exactly one handshake gets here, however many failed
+				// at once.
+				n.abandonRoom(ErrTooManyWrongCodes)
 			}
 			return
 		}

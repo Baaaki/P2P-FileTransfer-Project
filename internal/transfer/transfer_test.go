@@ -232,7 +232,7 @@ func TestHandshakeErrorIsVague(t *testing.T) {
 		creds.Code = "baska-bir-kod-11"
 		authenticate(roleSender, creds,
 			func(m *authMsg) error { return dec.Decode(m) },
-			func(m authMsg) error { return enc.Encode(m) })
+			func(m authMsg) error { return enc.Encode(m) }, nil)
 		a.Close()
 	}()
 
@@ -240,7 +240,7 @@ func TestHandshakeErrorIsVague(t *testing.T) {
 	dec := json.NewDecoder(b)
 	_, err := authenticate(roleReceiver, testCreds(),
 		func(m *authMsg) error { return dec.Decode(m) },
-		func(m authMsg) error { return enc.Encode(m) })
+		func(m authMsg) error { return enc.Encode(m) }, nil)
 	if err == nil {
 		t.Fatal("handshake succeeded with mismatched codes")
 	}
@@ -369,6 +369,7 @@ func fakeSend(t *testing.T, s net.Conn, m Manifest, payload []byte) {
 	if _, err := authenticate(roleSender, testCreds(),
 		func(m *authMsg) error { return dec.Decode(m) },
 		func(m authMsg) error { return enc.Encode(m) },
+		nil,
 	); err != nil {
 		return
 	}
@@ -665,6 +666,7 @@ func TestLegacyUncompressedReceiver(t *testing.T) {
 	_, err := authenticate(roleReceiver, testCreds(),
 		func(m *authMsg) error { return readJSONLine(r, maxAuthBytes, m) },
 		func(m authMsg) error { return enc.Encode(m) },
+		nil,
 	)
 	if err != nil {
 		t.Fatalf("auth: %v", err)
@@ -713,13 +715,13 @@ func BenchmarkHandshake(b *testing.B) {
 			enc, dec := json.NewEncoder(a), json.NewDecoder(a)
 			_, err := authenticate(roleSender, testCreds(),
 				func(m *authMsg) error { return dec.Decode(m) },
-				func(m authMsg) error { return enc.Encode(m) })
+				func(m authMsg) error { return enc.Encode(m) }, nil)
 			done <- err
 		}()
 		enc, dec := json.NewEncoder(c), json.NewDecoder(c)
 		if _, err := authenticate(roleReceiver, testCreds(),
 			func(m *authMsg) error { return dec.Decode(m) },
-			func(m authMsg) error { return enc.Encode(m) }); err != nil {
+			func(m authMsg) error { return enc.Encode(m) }, nil); err != nil {
 			b.Fatal(err)
 		}
 		if err := <-done; err != nil {

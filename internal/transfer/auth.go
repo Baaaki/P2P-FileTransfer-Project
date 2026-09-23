@@ -3,7 +3,6 @@ package transfer
 import (
 	"crypto/hmac"
 	"crypto/sha256"
-	"errors"
 	"fmt"
 
 	"github.com/schollz/pake/v3"
@@ -109,6 +108,10 @@ type (
 	writeMsgFunc func(authMsg) error
 )
 
+// judgeFunc is where the sender judges the receiver's proof of the code;
+// see SendOptions.Judge.
+type judgeFunc func(proves func() bool) bool
+
 // authenticate runs the exchange and returns the session key. Four
 // messages: the two PAKE halves, then a confirmation tag from each side.
 //
@@ -116,7 +119,9 @@ type (
 // with *a* key; only exchanging tags over it proves the other side derived
 // the same one, which is what makes a wrong code fail loudly instead of
 // silently corrupting the transfer that follows.
-func authenticate(role int, creds Credentials, read readMsgFunc, write writeMsgFunc) ([]byte, error) {
+//
+// judge is only consulted on the sender's side; nil judges every proof.
+func authenticate(role int, creds Credentials, read readMsgFunc, write writeMsgFunc, judge judgeFunc) ([]byte, error) {
 	if err := creds.validate(); err != nil {
 		return nil, err
 	}
@@ -166,23 +171,27 @@ func authenticate(role int, creds Credentials, read readMsgFunc, write writeMsgF
 	send := func() error {
 		return write(authMsg{Confirm: confirmTag(key, ours)})
 	}
-	check := func() error {
+	readTag := func() ([]byte, error) {
 		var msg authMsg
 		if err := read(&msg); err != nil {
-			return fmt.Errorf("no confirmation from the other side: %w", describe(err))
+			return nil, fmt.Errorf("no confirmation from the other side: %w", describe(err))
 		}
-		if !hmac.Equal(msg.Confirm, confirmTag(key, expected)) {
-			return ErrWrongCode
-		}
-		return nil
+		return msg.Confirm, nil
+	}
+	proves := func(tag []byte) bool {
+		return hmac.Equal(tag, confirmTag(key, expected))
 	}
 
 	if role == roleReceiver {
 		if err := send(); err != nil {
 			return nil, err
 		}
-		if err := check(); err != nil {
+		tag, err := readTag()
+		if err != nil {
 			return nil, err
+		}
+		if !proves(tag) {
+			return nil, ErrWrongCode
 		}
 		return key, nil
 	}
@@ -195,20 +204,28 @@ func authenticate(role int, creds Credentials, read readMsgFunc, write writeMsgF
 	// learned whether its guess was right without it ever counting against
 	// the room.
 	//
+	// The tag is read before it is judged, and only the judging goes
+	// through judge: a guesser that is slow to send its tag holds nothing
+	// up but its own handshake.
+	//
 	// A wrong tag still gets an answer, an empty one. Hanging up instead
 	// would leave the receiver reading an empty connection, and it would
 	// report a dropped link when the real answer is "that is not the code".
-	failed := check()
-	switch {
-	case failed == nil:
-		if err := send(); err != nil {
-			return nil, err
-		}
-		return key, nil
-	case errors.Is(failed, ErrWrongCode):
-		_ = write(authMsg{})
+	tag, err := readTag()
+	if err != nil {
+		return nil, err
 	}
-	return nil, failed
+	if judge == nil {
+		judge = func(proves func() bool) bool { return proves() }
+	}
+	if !judge(func() bool { return proves(tag) }) {
+		_ = write(authMsg{})
+		return nil, ErrWrongCode
+	}
+	if err := send(); err != nil {
+		return nil, err
+	}
+	return key, nil
 }
 
 // confirmTag is the proof that a side holds the session key.
