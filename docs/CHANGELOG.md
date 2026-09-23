@@ -6,6 +6,19 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- The AUR `PKGBUILD` was still at 2.0.0 after 2.0.1 went out; it now
+  follows 2.0.2, with that release's archive digest.
+
+### Changed
+
+- CI and the release workflow run on the Node 24 versions of their
+  actions (checkout, setup-go, upload-artifact, goreleaser-action)
+  instead of the Node 20 ones GitHub has deprecated, and on
+  `ubuntu-24.04` rather than `ubuntu-latest`, which is about to move to
+  a new Ubuntu under every job at once.
+
 ## [2.0.2] - 2026-09-23
 
 ### Security

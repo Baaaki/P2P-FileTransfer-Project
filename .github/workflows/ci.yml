@@ -9,11 +9,15 @@ permissions:
   contents: read
 
 jobs:
+  # Every job names its runner image rather than ubuntu-latest: the label
+  # moves to a new Ubuntu on GitHub's schedule, and the relay test below
+  # leans on how 24.04 handles user namespaces. A new image should arrive
+  # as a commit that can fail on its own, not under an unrelated one.
   test:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
           cache: true
@@ -40,17 +44,17 @@ jobs:
       - name: Coverage summary
         run: go tool cover -func=coverage.out | tail -1 >> "$GITHUB_STEP_SUMMARY"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: coverage
           path: coverage.out
 
   lint:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
           cache: true
@@ -61,10 +65,10 @@ jobs:
           version: v2.13.2
 
   vulncheck:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
           cache: true
@@ -76,10 +80,10 @@ jobs:
   # no privileges — unprivileged user and network namespaces do it — which
   # is what makes it runnable here on every commit.
   relay-fallback:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
           cache: true
@@ -99,9 +103,9 @@ jobs:
         run: make test-relay
 
   docker:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Build the server image
         run: docker build -t puresend-server:ci .
       - name: It starts and answers its health check
