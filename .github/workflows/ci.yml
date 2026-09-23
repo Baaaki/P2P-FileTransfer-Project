@@ -11,10 +11,10 @@ permissions:
 jobs:
   # Every job names its runner image rather than ubuntu-latest: the label
   # moves to a new Ubuntu on GitHub's schedule, and the relay test below
-  # leans on how 24.04 handles user namespaces. A new image should arrive
+  # leans on how 26.04 handles user namespaces. A new image should arrive
   # as a commit that can fail on its own, not under an unrelated one.
   test:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
@@ -51,7 +51,7 @@ jobs:
           path: coverage.out
 
   lint:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
@@ -65,7 +65,7 @@ jobs:
           version: v2.13.2
 
   vulncheck:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
@@ -80,7 +80,7 @@ jobs:
   # no privileges — unprivileged user and network namespaces do it — which
   # is what makes it runnable here on every commit.
   relay-fallback:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
@@ -91,7 +91,7 @@ jobs:
       # binaries before entering them, but a cold cache is cheaper to
       # rule out here than to debug there.
       - run: go mod download
-      # Ubuntu 24.04 lets AppArmor forbid unprivileged user namespaces,
+      # Ubuntu 24.04 and later let AppArmor forbid unprivileged user namespaces,
       # which is exactly what the test is built on. Runner images have
       # varied on this; lift it only where the switch exists.
       - name: Allow unprivileged user namespaces
@@ -103,7 +103,7 @@ jobs:
         run: make test-relay
 
   docker:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@v7
       - name: Build the server image

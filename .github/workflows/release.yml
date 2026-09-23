@@ -9,7 +9,7 @@ permissions:
 
 jobs:
   release:
-    runs-on: ubuntu-24.04 # a new image is a commit of its own; see ci.yml
+    runs-on: ubuntu-26.04 # a new image is a commit of its own; see ci.yml
     env:
       # The meeting point baked into every client this job builds, peer ID
       # and all, unless the FT_SERVER repository variable names another.
