@@ -13,6 +13,13 @@ updates:
         patterns: ["github.com/libp2p/*", "github.com/multiformats/*"]
       charm:
         patterns: ["charm.land/*", "github.com/charmbracelet/*"]
+    ignore:
+      # go-libp2p carries tags from before it had a go.mod, up to v6.0.23.
+      # The Go proxy lists that one as v6.0.23+incompatible, Dependabot
+      # takes it for the newest release, and resolving it fails the whole
+      # run. Every version from 2 up without a /vN path is one of those.
+      - dependency-name: "github.com/libp2p/go-libp2p"
+        versions: [">= 2.0.0"]
 
   - package-ecosystem: github-actions
     directory: /

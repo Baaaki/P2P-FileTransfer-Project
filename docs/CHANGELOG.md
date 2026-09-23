@@ -6,6 +6,13 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- Dependabot's Go module runs failed: the Go proxy lists an old
+  go-libp2p tag as `v6.0.23+incompatible`, Dependabot took it for the
+  newest release, and it cannot be resolved. Versions of go-libp2p from 2
+  up are now ignored; all of them are those pre-module tags.
+
 ## [2.0.4] - 2026-09-23
 
 ### Security
