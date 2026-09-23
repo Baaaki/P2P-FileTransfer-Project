@@ -6,6 +6,8 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [2.0.4] - 2026-09-23
+
 ### Security
 
 - `golang.org/x/crypto` 0.54.0 → 0.57.0, which fixes GO-2026-6303,
@@ -34,6 +36,8 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   packages), which stays at the versions go-libp2p 0.50.0 is built and
   tested against; newer pion releases do not even compile together.
 - CI and the release job run on `ubuntu-26.04`.
+- The release page's install notes and the `.deb` package description are
+  in English.
 - Dependabot groups the `charm.land` modules with the rest of Charm.
 
 ### Fixed
@@ -43,7 +47,6 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   the new renderer, which redraws only the cells it changed, would have
   left it there. Log output is now kept off the screen while the
   interface runs.
-
 - `make deb` stamped every package it built as 2.0.1, whatever the code
   was. It now takes the version from the latest release tag, and builds
   in the release signing key, so a locally built package checks update
