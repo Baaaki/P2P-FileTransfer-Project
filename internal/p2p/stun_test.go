@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/multiformats/go-multiaddr"
-	"github.com/pion/stun/v3"
+	"github.com/pion/stun/v4"
 )
 
 // startMockSTUNServer starts a local UDP server that answers RFC 5389

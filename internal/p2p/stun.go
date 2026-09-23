@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/multiformats/go-multiaddr"
-	"github.com/pion/stun/v3"
+	"github.com/pion/stun/v4"
 )
 
 // DefaultSTUNServers lists the public STUN servers used to discover the

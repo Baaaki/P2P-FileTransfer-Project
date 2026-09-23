@@ -24,7 +24,7 @@
 | Alan | Teknolojiler |
 | :--- | :--- |
 | **Programlama Dili** | Go (Golang 1.27) — `CGO_ENABLED=0` (tamamen bağımsız statik ikili dosyalar) |
-| **Ağ & Eşler Arası (P2P)** | libp2p (v0.50), WebSockets, TLS, DCUtR (Hole Punching), Circuit Relay v2, STUN (pion/stun v3.1.7), UPnP |
+| **Ağ & Eşler Arası (P2P)** | libp2p (v0.50), WebSockets, TLS, DCUtR (Hole Punching), Circuit Relay v2, STUN (pion/stun v4.0.1), UPnP |
 | **Güvenlik & Kriptografi** | PAKE (`schollz/pake` v3, SPAKE2 tarzı, P-256), Noise / TLS 1.3, dosya başına SHA-256, minisign imzalı sürümler, Govulncheck |
 | **Kullanıcı Arayüzü** | Charmbracelet Bubble Tea (v2.0 - Elm Mimarisi), Lip Gloss (v2.0) |
 | **Dağıtım & DevOps** | GoReleaser (v2), GitHub Actions CI/CD, Debian (`.deb`), Arch Linux (`PKGBUILD`), Tek Satır Kurulumcu (`sh`/`ps1`) |

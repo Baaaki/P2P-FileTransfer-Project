@@ -24,7 +24,7 @@
 | Area | Technologies |
 | :--- | :--- |
 | **Language & Runtime** | Go (Golang 1.27) — `CGO_ENABLED=0` (standalone static binary, zero runtime dependencies) |
-| **Networking & Protocols** | libp2p (v0.50), WebSockets, TLS, DCUtR (Hole Punching), Circuit Relay v2, STUN (pion/stun v3.1.7), UPnP |
+| **Networking & Protocols** | libp2p (v0.50), WebSockets, TLS, DCUtR (Hole Punching), Circuit Relay v2, STUN (pion/stun v4.0.1), UPnP |
 | **Cryptography** | PAKE (`schollz/pake` v3, SPAKE2-style, P-256), Noise / TLS 1.3, per-file SHA-256, minisign-signed releases, Govulncheck |
 | **Interface (TUI)** | Charmbracelet Bubble Tea (v2.0 - Elm Architecture), Lip Gloss (v2.0) |
 | **DevOps & Packaging** | GoReleaser (v2), GitHub Actions CI/CD, Debian (`.deb`), Arch Linux (`PKGBUILD`), One-Line Installer (`sh`/`ps1`) |
