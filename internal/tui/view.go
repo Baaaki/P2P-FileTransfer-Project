@@ -10,10 +10,20 @@ import (
 	"puresend/internal/p2p"
 	"puresend/internal/transfer"
 
-	"github.com/charmbracelet/lipgloss"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 )
 
-func (m Model) View() string {
+// View draws the current screen on the terminal's alternate screen, so
+// quitting gives the user their terminal back as it was.
+func (m Model) View() tea.View {
+	v := tea.NewView(m.render())
+	v.AltScreen = true
+	return v
+}
+
+// render is the text of the current screen.
+func (m Model) render() string {
 	if m.quitted {
 		return i18n.Get(m.lang).Goodbye + "\n"
 	}
@@ -42,22 +52,21 @@ func (m Model) View() string {
 	case screenOutDir:
 		body = m.viewOutDir()
 	}
-	return appStyle.Render(body)
+	return m.st.app.Render(body)
 }
 
 func (m Model) spinner() string {
-	return lipgloss.NewStyle().Foreground(colAccent).
-		Render(spinnerFrames[m.frame%len(spinnerFrames)])
+	return m.st.spinner.Render(spinnerFrames[m.frame%len(spinnerFrames)])
 }
 
 func (m Model) viewWelcome() string {
 	t := i18n.Get(m.lang)
 	var b strings.Builder
-	b.WriteString(titleStyle.Render("📦  PureSend") + "\n\n")
-	b.WriteString(bodyStyle.Render(t.WelcomeHeadline) + "\n")
-	b.WriteString(helpStyle.Render(t.WelcomeHelp1) + "\n")
-	b.WriteString(helpStyle.Render(t.WelcomeHelp2) + "\n\n")
-	b.WriteString(bodyStyle.Render(t.WelcomeQuestion) + "\n\n")
+	b.WriteString(m.st.title.Render("📦  PureSend") + "\n\n")
+	b.WriteString(m.st.body.Render(t.WelcomeHeadline) + "\n")
+	b.WriteString(m.st.help.Render(t.WelcomeHelp1) + "\n")
+	b.WriteString(m.st.help.Render(t.WelcomeHelp2) + "\n\n")
+	b.WriteString(m.st.body.Render(t.WelcomeQuestion) + "\n\n")
 
 	opts := []string{
 		t.WelcomeSend,
@@ -66,44 +75,44 @@ func (m Model) viewWelcome() string {
 	}
 	for i, o := range opts {
 		if i == m.menuIndex {
-			b.WriteString(choiceSelStyle.Render("▸ "+o) + "\n")
+			b.WriteString(m.st.choiceSel.Render("▸ "+o) + "\n")
 		} else {
-			b.WriteString(choiceStyle.Render(o) + "\n")
+			b.WriteString(m.st.choice.Render(o) + "\n")
 		}
 	}
-	b.WriteString("\n" + helpStyle.Render(t.WelcomeSavingTo) + "\n")
-	b.WriteString(fileStyle.Render(m.outDir) + "\n")
+	b.WriteString("\n" + m.st.help.Render(t.WelcomeSavingTo) + "\n")
+	b.WriteString(m.st.file.Render(m.outDir) + "\n")
 	if m.updateTag != "" {
-		b.WriteString("\n" + updateNoticeStyle.Render("✨ "+t.UpdateAvailable(m.updateTag)) + "\n")
+		b.WriteString("\n" + m.st.updateNotice.Render("✨ "+t.UpdateAvailable(m.updateTag)) + "\n")
 	}
-	b.WriteString("\n" + formatFooter(t.WelcomeFooter))
+	b.WriteString("\n" + m.st.formatFooter(t.WelcomeFooter))
 	return b.String()
 }
 
 func (m Model) viewConnecting() string {
 	t := i18n.Get(m.lang)
 	var b strings.Builder
-	b.WriteString(titleStyle.Render(t.ConnectingTitle) + "\n\n")
-	b.WriteString(m.spinner() + " " + bodyStyle.Render(t.ConnectingStatus) + "\n\n")
-	b.WriteString(helpStyle.Render(t.ConnectingHelp1) + "\n")
-	b.WriteString(helpStyle.Render(t.ConnectingHelp2) + "\n")
-	b.WriteString(helpStyle.Render(t.ConnectingHelp3) + "\n\n")
-	b.WriteString(formatFooter(t.ConnectingFooter))
+	b.WriteString(m.st.title.Render(t.ConnectingTitle) + "\n\n")
+	b.WriteString(m.spinner() + " " + m.st.body.Render(t.ConnectingStatus) + "\n\n")
+	b.WriteString(m.st.help.Render(t.ConnectingHelp1) + "\n")
+	b.WriteString(m.st.help.Render(t.ConnectingHelp2) + "\n")
+	b.WriteString(m.st.help.Render(t.ConnectingHelp3) + "\n\n")
+	b.WriteString(m.st.formatFooter(t.ConnectingFooter))
 	return b.String()
 }
 
 func (m Model) viewPickFiles() string {
 	t := i18n.Get(m.lang)
 	var b strings.Builder
-	b.WriteString(titleStyle.Render(t.PickTitle) + "\n\n")
-	b.WriteString(helpStyle.Render(t.PickHelp1) + "\n")
-	b.WriteString(helpStyle.Render(t.PickHelp2) + "\n")
-	b.WriteString(helpStyle.Render(t.PickHelp3) + "\n\n")
+	b.WriteString(m.st.title.Render(t.PickTitle) + "\n\n")
+	b.WriteString(m.st.help.Render(t.PickHelp1) + "\n")
+	b.WriteString(m.st.help.Render(t.PickHelp2) + "\n")
+	b.WriteString(m.st.help.Render(t.PickHelp3) + "\n\n")
 	b.WriteString(m.picker.View() + "\n")
 
 	if len(m.picked) > 0 {
 		var total int64
-		b.WriteString(okStyle.Render(t.PickSelected(len(m.picked))) + "\n")
+		b.WriteString(m.st.ok.Render(t.PickSelected(len(m.picked))) + "\n")
 		for _, f := range m.picked {
 			label := "• " + f.name
 			detail := formatBytes(f.size)
@@ -111,15 +120,15 @@ func (m Model) viewPickFiles() string {
 				label = "• 📁 " + f.name
 				detail = t.PickFolderFiles(f.files, formatBytes(f.size))
 			}
-			b.WriteString(fileStyle.Render(label) + " " + sizeStyle.Render("("+detail+")") + "\n")
+			b.WriteString(m.st.file.Render(label) + " " + m.st.size.Render("("+detail+")") + "\n")
 			total += f.size
 		}
-		b.WriteString(sizeStyle.Render(t.PickTotal(formatBytes(total))) + "\n\n")
-		b.WriteString(buttonSelStyle.Render(t.PickStartBtn) + "\n\n")
-		b.WriteString(formatFooter(t.PickFooterSelected))
+		b.WriteString(m.st.size.Render(t.PickTotal(formatBytes(total))) + "\n\n")
+		b.WriteString(m.st.buttonSel.Render(t.PickStartBtn) + "\n\n")
+		b.WriteString(m.st.formatFooter(t.PickFooterSelected))
 	} else {
-		b.WriteString("\n" + helpStyle.Render(t.PickEmpty) + "\n\n")
-		b.WriteString(formatFooter(t.PickFooterEmpty))
+		b.WriteString("\n" + m.st.help.Render(t.PickEmpty) + "\n\n")
+		b.WriteString(m.st.formatFooter(t.PickFooterEmpty))
 	}
 	return b.String()
 }
@@ -127,39 +136,39 @@ func (m Model) viewPickFiles() string {
 func (m Model) viewOutDir() string {
 	t := i18n.Get(m.lang)
 	var b strings.Builder
-	b.WriteString(titleStyle.Render(t.OutDirTitle) + "\n\n")
-	b.WriteString(helpStyle.Render(t.OutDirHelp1) + "\n")
-	b.WriteString(helpStyle.Render(t.OutDirHelp2) + "\n")
-	b.WriteString(helpStyle.Render(t.OutDirHelp3) + "\n\n")
-	b.WriteString(bodyStyle.Render(t.OutDirCurrent) + "\n")
-	b.WriteString(fileStyle.Render(m.dirPicker.CurrentDirectory) + "\n\n")
+	b.WriteString(m.st.title.Render(t.OutDirTitle) + "\n\n")
+	b.WriteString(m.st.help.Render(t.OutDirHelp1) + "\n")
+	b.WriteString(m.st.help.Render(t.OutDirHelp2) + "\n")
+	b.WriteString(m.st.help.Render(t.OutDirHelp3) + "\n\n")
+	b.WriteString(m.st.body.Render(t.OutDirCurrent) + "\n")
+	b.WriteString(m.st.file.Render(m.dirPicker.CurrentDirectory) + "\n\n")
 	if m.outDirErr != "" {
-		b.WriteString(warnStyle.Render("! "+m.outDirErr) + "\n\n")
+		b.WriteString(m.st.warn.Render("! "+m.outDirErr) + "\n\n")
 	}
 	b.WriteString(m.dirPicker.View() + "\n")
-	b.WriteString(buttonSelStyle.Render(t.OutDirSelectBtn(filepath.Base(m.dirPicker.CurrentDirectory))) + "\n\n")
-	b.WriteString(formatFooter(t.OutDirFooter))
+	b.WriteString(m.st.buttonSel.Render(t.OutDirSelectBtn(filepath.Base(m.dirPicker.CurrentDirectory))) + "\n\n")
+	b.WriteString(m.st.formatFooter(t.OutDirFooter))
 	return b.String()
 }
 
 func (m Model) viewWaiting() string {
 	t := i18n.Get(m.lang)
 	var b strings.Builder
-	b.WriteString(titleStyle.Render(t.WaitingTitle) + "\n\n")
-	b.WriteString(m.spinner() + " " + bodyStyle.Render(t.WaitingStatus) + "\n\n")
+	b.WriteString(m.st.title.Render(t.WaitingTitle) + "\n\n")
+	b.WriteString(m.spinner() + " " + m.st.body.Render(t.WaitingStatus) + "\n\n")
 	if m.retrying {
-		b.WriteString(warnStyle.Render("! "+t.HostRetry) + "\n\n")
+		b.WriteString(m.st.warn.Render("! "+t.HostRetry) + "\n\n")
 	}
-	b.WriteString(codeStyle.Render(m.room) + "\n\n")
+	b.WriteString(m.st.code.Render(m.room) + "\n\n")
 
 	if len(m.picked) > 0 {
 		var total int64
-		b.WriteString(bodyStyle.Render(t.WaitingFiles(len(m.picked))) + "\n")
+		b.WriteString(m.st.body.Render(t.WaitingFiles(len(m.picked))) + "\n")
 		limit := 5
 		for i, f := range m.picked {
 			if i >= limit {
 				remaining := len(m.picked) - limit
-				b.WriteString(helpStyle.Render(t.WaitingMoreFiles(remaining)) + "\n")
+				b.WriteString(m.st.help.Render(t.WaitingMoreFiles(remaining)) + "\n")
 				break
 			}
 			label := "• " + f.name
@@ -168,25 +177,25 @@ func (m Model) viewWaiting() string {
 				label = "• 📁 " + f.name
 				detail = t.PickFolderFiles(f.files, formatBytes(f.size))
 			}
-			b.WriteString(fileStyle.Render(label) + " " + sizeStyle.Render("("+detail+")") + "\n")
+			b.WriteString(m.st.file.Render(label) + " " + m.st.size.Render("("+detail+")") + "\n")
 		}
 		for _, f := range m.picked {
 			total += f.size
 		}
-		b.WriteString(sizeStyle.Render(t.PickTotal(formatBytes(total))) + "\n\n")
+		b.WriteString(m.st.size.Render(t.PickTotal(formatBytes(total))) + "\n\n")
 	}
 
 	b.WriteString(m.hostingNotes())
 	if t.WaitingHelp1 != "" {
-		b.WriteString(helpStyle.Render(t.WaitingHelp1) + "\n")
+		b.WriteString(m.st.help.Render(t.WaitingHelp1) + "\n")
 	}
 	if t.WaitingHelp2 != "" {
-		b.WriteString(helpStyle.Render(t.WaitingHelp2) + "\n\n")
+		b.WriteString(m.st.help.Render(t.WaitingHelp2) + "\n\n")
 	}
 	if t.WaitingHelp3 != "" {
-		b.WriteString(helpStyle.Render(t.WaitingHelp3) + "\n\n")
+		b.WriteString(m.st.help.Render(t.WaitingHelp3) + "\n\n")
 	}
-	b.WriteString(formatFooter(t.WaitingFooter))
+	b.WriteString(m.st.formatFooter(t.WaitingFooter))
 	return b.String()
 }
 
@@ -198,17 +207,17 @@ func (m Model) hostingNotes() string {
 	var b strings.Builder
 	switch {
 	case m.prepared:
-		b.WriteString(okStyle.Render(t.HostReady) + "\n\n")
+		b.WriteString(m.st.ok.Render(t.HostReady) + "\n\n")
 	case m.prepFiles > 0:
-		b.WriteString(m.spinner() + " " + helpStyle.Render(t.HostPreparing(m.prepIndex, m.prepFiles)) + "\n\n")
+		b.WriteString(m.spinner() + " " + m.st.help.Render(t.HostPreparing(m.prepIndex, m.prepFiles)) + "\n\n")
 	}
 	if m.serverLost {
-		b.WriteString(warnStyle.Render(t.HostLost) + "\n")
-		b.WriteString(helpStyle.Render(t.HostLostHelp1) + "\n")
-		b.WriteString(helpStyle.Render(t.HostLostHelp2) + "\n\n")
+		b.WriteString(m.st.warn.Render(t.HostLost) + "\n")
+		b.WriteString(m.st.help.Render(t.HostLostHelp1) + "\n")
+		b.WriteString(m.st.help.Render(t.HostLostHelp2) + "\n\n")
 	}
 	if m.wrongLeft > 0 {
-		b.WriteString(helpStyle.Render("• "+t.HostRejected(m.wrongLeft)) + "\n\n")
+		b.WriteString(m.st.help.Render("• "+t.HostRejected(m.wrongLeft)) + "\n\n")
 	}
 	return b.String()
 }
@@ -216,27 +225,27 @@ func (m Model) hostingNotes() string {
 func (m Model) viewEnterCode() string {
 	t := i18n.Get(m.lang)
 	var b strings.Builder
-	b.WriteString(titleStyle.Render(t.EnterTitle) + "\n\n")
-	b.WriteString(helpStyle.Render(t.EnterHelp1) + "\n")
-	b.WriteString(helpStyle.Render(t.EnterHelp2) + "\n\n")
+	b.WriteString(m.st.title.Render(t.EnterTitle) + "\n\n")
+	b.WriteString(m.st.help.Render(t.EnterHelp1) + "\n")
+	b.WriteString(m.st.help.Render(t.EnterHelp2) + "\n\n")
 	b.WriteString(m.codeInput.View() + "\n\n")
 	if m.codeErr != "" {
-		b.WriteString(warnStyle.Render("! "+m.codeErr) + "\n\n")
+		b.WriteString(m.st.warn.Render("! "+m.codeErr) + "\n\n")
 	}
-	b.WriteString(helpStyle.Render(t.EnterSavingTo) + "\n")
-	b.WriteString(fileStyle.Render(m.outDir) + "\n\n")
-	b.WriteString(formatFooter(t.EnterFooter))
+	b.WriteString(m.st.help.Render(t.EnterSavingTo) + "\n")
+	b.WriteString(m.st.file.Render(m.outDir) + "\n\n")
+	b.WriteString(m.st.formatFooter(t.EnterFooter))
 	return b.String()
 }
 
 func (m Model) viewFinding() string {
 	t := i18n.Get(m.lang)
 	var b strings.Builder
-	b.WriteString(titleStyle.Render(t.FindingTitle) + "\n\n")
-	b.WriteString(m.spinner() + " " + bodyStyle.Render(m.statusText()) + "\n\n")
-	b.WriteString(helpStyle.Render(t.FindingHelp1) + "\n")
-	b.WriteString(helpStyle.Render(t.FindingHelp2) + "\n\n")
-	b.WriteString(formatFooter(t.FindingFooter))
+	b.WriteString(m.st.title.Render(t.FindingTitle) + "\n\n")
+	b.WriteString(m.spinner() + " " + m.st.body.Render(m.statusText()) + "\n\n")
+	b.WriteString(m.st.help.Render(t.FindingHelp1) + "\n")
+	b.WriteString(m.st.help.Render(t.FindingHelp2) + "\n\n")
+	b.WriteString(m.st.formatFooter(t.FindingFooter))
 	return b.String()
 }
 
@@ -258,7 +267,7 @@ func (m Model) statusText() string {
 func (m Model) viewConfirm() string {
 	t := i18n.Get(m.lang)
 	var b strings.Builder
-	b.WriteString(titleStyle.Render(t.ConfirmTitle) + "\n\n")
+	b.WriteString(m.st.title.Render(t.ConfirmTitle) + "\n\n")
 
 	// A folder of a thousand files would bury the question. A short list
 	// is shown whole; a long one is shown as what it would put directly
@@ -270,47 +279,47 @@ func (m Model) viewConfirm() string {
 	entries := topLevel(m.manifest)
 	if len(files) <= maxListed {
 		for _, f := range files {
-			b.WriteString(fileStyle.Render("• "+f.Path) + " " +
-				sizeStyle.Render("("+formatBytes(f.Size)+")") + "\n")
+			b.WriteString(m.st.file.Render("• "+f.Path) + " " +
+				m.st.size.Render("("+formatBytes(f.Size)+")") + "\n")
 		}
 	} else {
 		for i, e := range entries {
 			if i == maxListed {
-				b.WriteString(helpStyle.Render(t.ConfirmMoreEntries(len(entries)-maxListed)) + "\n")
+				b.WriteString(m.st.help.Render(t.ConfirmMoreEntries(len(entries)-maxListed)) + "\n")
 				break
 			}
 			if e.dir {
-				b.WriteString(fileStyle.Render("• "+e.name+"/") + " " +
-					sizeStyle.Render("("+t.ConfirmFolder(e.files, formatBytes(e.size))+")") + "\n")
+				b.WriteString(m.st.file.Render("• "+e.name+"/") + " " +
+					m.st.size.Render("("+t.ConfirmFolder(e.files, formatBytes(e.size))+")") + "\n")
 			} else {
-				b.WriteString(fileStyle.Render("• "+e.name) + " " +
-					sizeStyle.Render("("+formatBytes(e.size)+")") + "\n")
+				b.WriteString(m.st.file.Render("• "+e.name) + " " +
+					m.st.size.Render("("+formatBytes(e.size)+")") + "\n")
 			}
 		}
 	}
 	if hidden := hiddenNames(entries); hidden != "" {
-		b.WriteString("\n" + warnStyle.Render(t.ConfirmHidden(hidden)) + "\n")
+		b.WriteString("\n" + m.st.warn.Render(t.ConfirmHidden(hidden)) + "\n")
 	}
 
 	total := m.manifest.TotalSize()
-	b.WriteString("\n" + sizeStyle.Render(t.ConfirmTotal(len(files), formatBytes(total))) + "\n\n")
+	b.WriteString("\n" + m.st.size.Render(t.ConfirmTotal(len(files), formatBytes(total))) + "\n\n")
 
 	if warning := m.relayWarning(total); warning != "" {
-		b.WriteString(warnStyle.Render(warning) + "\n\n")
+		b.WriteString(m.st.warn.Render(warning) + "\n\n")
 	}
 
-	b.WriteString(helpStyle.Render(t.ConfirmDest) + "\n")
-	b.WriteString(fileStyle.Render(m.outDir) + "\n\n")
-	b.WriteString(bodyStyle.Render(t.ConfirmQuestion) + "\n\n")
+	b.WriteString(m.st.help.Render(t.ConfirmDest) + "\n")
+	b.WriteString(m.st.file.Render(m.outDir) + "\n\n")
+	b.WriteString(m.st.body.Render(t.ConfirmQuestion) + "\n\n")
 
-	yes, no := buttonStyle.Render(t.ConfirmYes), buttonStyle.Render(t.ConfirmNo)
+	yes, no := m.st.button.Render(t.ConfirmYes), m.st.button.Render(t.ConfirmNo)
 	if m.confirmIndex == 0 {
-		yes = buttonSelStyle.Render(t.ConfirmYes)
+		yes = m.st.buttonSel.Render(t.ConfirmYes)
 	} else {
-		no = buttonSelStyle.Render(t.ConfirmNo)
+		no = m.st.buttonSel.Render(t.ConfirmNo)
 	}
 	b.WriteString(lipgloss.JoinHorizontal(lipgloss.Top, yes, no) + "\n\n")
-	b.WriteString(formatFooter(t.ConfirmFooter))
+	b.WriteString(m.st.formatFooter(t.ConfirmFooter))
 	return b.String()
 }
 
@@ -397,19 +406,19 @@ func (m Model) viewTransfer() string {
 	t := i18n.Get(m.lang)
 	var b strings.Builder
 	if m.mode == modeSend {
-		b.WriteString(titleStyle.Render(t.TransferSendTitle) + "\n\n")
+		b.WriteString(m.st.title.Render(t.TransferSendTitle) + "\n\n")
 	} else {
-		b.WriteString(titleStyle.Render(t.TransferRecvTitle) + "\n\n")
+		b.WriteString(m.st.title.Render(t.TransferRecvTitle) + "\n\n")
 	}
 
 	if m.haveConn {
 		if m.direct {
-			b.WriteString(okStyle.Render(t.TransferDirectOk) + "\n")
-			b.WriteString(helpStyle.Render(t.TransferDirectHelp) + "\n\n")
+			b.WriteString(m.st.ok.Render(t.TransferDirectOk) + "\n")
+			b.WriteString(m.st.help.Render(t.TransferDirectHelp) + "\n\n")
 		} else {
-			b.WriteString(warnStyle.Render(t.TransferRelayWarn) + "\n")
-			b.WriteString(helpStyle.Render(t.TransferRelayHelp1) + "\n")
-			b.WriteString(helpStyle.Render(t.TransferRelayHelp2) + "\n\n")
+			b.WriteString(m.st.warn.Render(t.TransferRelayWarn) + "\n")
+			b.WriteString(m.st.help.Render(t.TransferRelayHelp1) + "\n")
+			b.WriteString(m.st.help.Render(t.TransferRelayHelp2) + "\n\n")
 		}
 	}
 
@@ -417,17 +426,17 @@ func (m Model) viewTransfer() string {
 	case m.prog.Total > 0 || m.prog.OverallTotal > 0:
 		b.WriteString(m.viewProgress())
 	case m.prep != "":
-		b.WriteString(m.spinner() + " " + helpStyle.Render(t.TransferPrepFiles(m.prepIndex, m.prepFiles)) + "\n")
-		b.WriteString(fileStyle.Render(truncate(m.prep, 46)) + "\n\n")
+		b.WriteString(m.spinner() + " " + m.st.help.Render(t.TransferPrepFiles(m.prepIndex, m.prepFiles)) + "\n")
+		b.WriteString(m.st.file.Render(truncate(m.prep, 46)) + "\n\n")
 	case m.mode == modeReceive && m.remoteTotal > 0:
 		// A large folder takes the sender a while to read; say so, with
 		// numbers, rather than an open-ended "preparing".
-		b.WriteString(m.spinner() + " " + helpStyle.Render(t.TransferRemotePrep(
+		b.WriteString(m.spinner() + " " + m.st.help.Render(t.TransferRemotePrep(
 			min(m.remoteDone, m.remoteTotal), m.remoteTotal)) + "\n\n")
 	default:
-		b.WriteString(m.spinner() + " " + helpStyle.Render(t.TransferPreparing) + "\n\n")
+		b.WriteString(m.spinner() + " " + m.st.help.Render(t.TransferPreparing) + "\n\n")
 	}
-	b.WriteString(formatFooter(t.TransferFooter))
+	b.WriteString(m.st.formatFooter(t.TransferFooter))
 	return b.String()
 }
 
@@ -439,9 +448,9 @@ func (m Model) viewProgress() string {
 	var b strings.Builder
 
 	if p.Files > 1 {
-		b.WriteString(helpStyle.Render(t.TransferFileIndex(p.Index, p.Files)) + "\n")
+		b.WriteString(m.st.help.Render(t.TransferFileIndex(p.Index, p.Files)) + "\n")
 	}
-	b.WriteString(fileStyle.Render(truncate(p.Name, 46)) + "\n")
+	b.WriteString(m.st.file.Render(truncate(p.Name, 46)) + "\n")
 
 	done, total := p.OverallDone, p.OverallTotal
 	if total == 0 {
@@ -451,16 +460,16 @@ func (m Model) viewProgress() string {
 	if total > 0 {
 		pct = done * 100 / total
 	}
-	b.WriteString("  " + progressBar(done, total, 30) +
+	b.WriteString("  " + m.st.progressBar(done, total, 30) +
 		fmt.Sprintf("  %3d%%  ", pct) +
-		sizeStyle.Render(formatBytes(done)+" / "+formatBytes(total)) + "\n")
+		m.st.size.Render(formatBytes(done)+" / "+formatBytes(total)) + "\n")
 
 	if rate := m.meter.rate(); rate > 0 {
 		line := formatRateLang(rate, m.lang)
 		if eta, ok := m.meter.eta(total - done); ok {
 			line += "  ·  " + t.TransferEta(formatDurationLang(eta, m.lang))
 		}
-		b.WriteString("  " + sizeStyle.Render(line) + "\n")
+		b.WriteString("  " + m.st.size.Render(line) + "\n")
 	}
 	b.WriteString("\n")
 	return b.String()
@@ -470,23 +479,23 @@ func (m Model) viewDone() string {
 	t := i18n.Get(m.lang)
 	var b strings.Builder
 	if m.mode == modeSend {
-		b.WriteString(okStyle.Render(t.DoneSendTitle) + "\n\n")
-		b.WriteString(bodyStyle.Render(t.DoneSendBody) + "\n\n")
-		b.WriteString(helpStyle.Render(t.DoneSendHelp) + "\n\n")
+		b.WriteString(m.st.ok.Render(t.DoneSendTitle) + "\n\n")
+		b.WriteString(m.st.body.Render(t.DoneSendBody) + "\n\n")
+		b.WriteString(m.st.help.Render(t.DoneSendHelp) + "\n\n")
 	} else {
-		b.WriteString(okStyle.Render(t.DoneRecvTitle) + "\n\n")
-		b.WriteString(bodyStyle.Render(t.DoneRecvBody) + "\n\n")
+		b.WriteString(m.st.ok.Render(t.DoneRecvTitle) + "\n\n")
+		b.WriteString(m.st.body.Render(t.DoneRecvBody) + "\n\n")
 		const maxListed = 12
 		for i, p := range m.savedPaths {
 			if i == maxListed {
-				b.WriteString(helpStyle.Render(t.DoneMoreFiles(len(m.savedPaths)-maxListed)) + "\n")
+				b.WriteString(m.st.help.Render(t.DoneMoreFiles(len(m.savedPaths)-maxListed)) + "\n")
 				break
 			}
-			b.WriteString(fileStyle.Render("• "+p) + "\n")
+			b.WriteString(m.st.file.Render("• "+p) + "\n")
 		}
-		b.WriteString("\n" + helpStyle.Render(t.DoneVerified) + "\n\n")
+		b.WriteString("\n" + m.st.help.Render(t.DoneVerified) + "\n\n")
 	}
-	b.WriteString(formatFooter(t.DoneFooter))
+	b.WriteString(m.st.formatFooter(t.DoneFooter))
 	return b.String()
 }
 
@@ -495,15 +504,15 @@ func (m Model) viewError() string {
 	headline, hints := i18n.Explain(m.err, m.lang)
 
 	var b strings.Builder
-	b.WriteString(errStyle.Render(t.ErrorTitle) + "\n\n")
-	b.WriteString(bodyStyle.Render(headline) + "\n\n")
+	b.WriteString(m.st.err.Render(t.ErrorTitle) + "\n\n")
+	b.WriteString(m.st.body.Render(headline) + "\n\n")
 	if len(hints) > 0 {
-		b.WriteString(helpStyle.Render(t.ErrorWhatCan) + "\n")
+		b.WriteString(m.st.help.Render(t.ErrorWhatCan) + "\n")
 		for _, h := range hints {
-			b.WriteString(helpStyle.Render("  • "+h) + "\n")
+			b.WriteString(m.st.help.Render("  • "+h) + "\n")
 		}
 		b.WriteString("\n")
 	}
-	b.WriteString(formatFooter(t.ErrorFooter))
+	b.WriteString(m.st.formatFooter(t.ErrorFooter))
 	return b.String()
 }

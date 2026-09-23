@@ -8,7 +8,7 @@ import (
 
 	"puresend/internal/tui"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 )
 
 // ansi matches the styling lipgloss adds, so assertions can be made
@@ -16,7 +16,7 @@ import (
 var ansi = regexp.MustCompile(`\x1b\[[0-9;]*[a-zA-Z]`)
 
 func screenText(m tea.Model) string {
-	return ansi.ReplaceAllString(m.View(), "")
+	return ansi.ReplaceAllString(m.View().Content, "")
 }
 
 // runCmd executes a Bubble Tea command and returns the message it emits.
@@ -51,8 +51,8 @@ func TestTUIReachesCodeEntryOverWebSocket(t *testing.T) {
 	}
 
 	// "Bana dosya gönderilecek", then confirm.
-	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})
-	m, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyDown})
+	m, cmd := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 
 	if !strings.Contains(screenText(m), "Buluşma noktasına bağlanılıyor") {
 		t.Errorf("expected the connecting screen, got:\n%s", screenText(m))
@@ -79,7 +79,7 @@ func TestTUIReportsAnUnreachableServerInPlainLanguage(t *testing.T) {
 	dead := "/ip4/127.0.0.1/tcp/1/ws/p2p/12D3KooWKKqpYTw3D8arNmcNG7ZK1mPfSH2cQ7ohZqHBmYN6eEAn"
 
 	var m tea.Model = tui.New(tui.Config{Servers: []string{dead}})
-	m, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m, cmd := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	m, _ = m.Update(runCmd(t, cmd, 60*time.Second))
 
 	text := screenText(m)

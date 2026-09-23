@@ -10,7 +10,7 @@ import (
 	"puresend/internal/p2p"
 	"puresend/internal/transfer"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 )
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -30,11 +30,28 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.frame++
 		return m, tick()
 
-	case tea.KeyMsg:
-		if msg.Type == tea.KeyCtrlC {
+	case tea.BackgroundColorMsg:
+		dark := msg.IsDark()
+		m.st = newStyles(dark)
+		m.codeInput.SetStyles(inputStyles(dark))
+		return m, nil
+
+	case tea.KeyPressMsg:
+		if msg.String() == "ctrl+c" {
 			return m.quit()
 		}
 		return m.handleKey(msg)
+
+	case tea.PasteMsg:
+		// A paste arrives as one message rather than as keys, and pasting
+		// is how most codes get typed.
+		if m.screen != screenEnterCode {
+			return m, nil
+		}
+		var cmd tea.Cmd
+		m.codeInput, cmd = m.codeInput.Update(msg)
+		m.codeErr = ""
+		return m, cmd
 
 	case nodeReadyMsg:
 		m.node = msg.node
@@ -173,7 +190,7 @@ func (m Model) handleEvent(ev p2p.Event) (tea.Model, tea.Cmd) {
 }
 
 // handleKey routes a keypress to the active screen.
-func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	key := msg.String()
 	if (key == "l" || key == "L") && m.screen.switchesLanguage() {
 		m.lang = i18n.Toggle(m.lang)
@@ -236,7 +253,7 @@ func (m Model) welcomeKey(key string) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m Model) pickFilesKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+func (m Model) pickFilesKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "esc":
 		m.screen = screenWelcome
@@ -265,7 +282,7 @@ func (m Model) pickFilesKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m Model) outDirKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+func (m Model) outDirKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "s", "S":
 		if err := transfer.CheckDestination(m.dirPicker.CurrentDirectory); err != nil {
@@ -294,7 +311,7 @@ func (m Model) outDirKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m Model) enterCodeKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+func (m Model) enterCodeKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "esc":
 		m.screen = screenWelcome

@@ -11,24 +11,29 @@ import (
 	"puresend/internal/p2p"
 	"puresend/internal/transfer"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/x/ansi"
 )
 
 // press feeds one keypress to the model and returns the new state.
 func press(t *testing.T, m Model, key string) Model {
 	t.Helper()
-	var msg tea.KeyMsg
+	var msg tea.KeyPressMsg
 	switch key {
 	case "enter":
-		msg = tea.KeyMsg{Type: tea.KeyEnter}
+		msg = tea.KeyPressMsg{Code: tea.KeyEnter}
 	case "up":
-		msg = tea.KeyMsg{Type: tea.KeyUp}
+		msg = tea.KeyPressMsg{Code: tea.KeyUp}
 	case "down":
-		msg = tea.KeyMsg{Type: tea.KeyDown}
+		msg = tea.KeyPressMsg{Code: tea.KeyDown}
 	case "left":
-		msg = tea.KeyMsg{Type: tea.KeyLeft}
+		msg = tea.KeyPressMsg{Code: tea.KeyLeft}
+	case "esc":
+		msg = tea.KeyPressMsg{Code: tea.KeyEscape}
+	case "backspace":
+		msg = tea.KeyPressMsg{Code: tea.KeyBackspace}
 	default:
-		msg = tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(key)}
+		msg = tea.KeyPressMsg{Code: []rune(key)[0], Text: key}
 	}
 	next, _ := m.Update(msg)
 	got, ok := next.(Model)
@@ -78,7 +83,7 @@ func TestRoomReadyTransitionsToWaitingAndShowsFiles(t *testing.T) {
 		t.Fatalf("screen after roomReady = %v, want screenWaiting", nm.screen)
 	}
 
-	view := nm.View()
+	view := nm.render()
 	if !strings.Contains(view, "kiraz-liman-42") {
 		t.Error("waiting screen does not show the room code")
 	}
@@ -148,7 +153,7 @@ func TestConfirmShowsEverythingThatLandsInTheFolder(t *testing.T) {
 	m.mode = modeReceive
 	m.screen = screenConfirm
 	m.manifest = transfer.Manifest{Files: files}
-	view := m.View()
+	view := m.render()
 
 	if !strings.Contains(view, ".config/") {
 		t.Errorf("the hidden folder is not shown:\n%s", view)
@@ -165,7 +170,7 @@ func TestConfirmShowsEverythingThatLandsInTheFolder(t *testing.T) {
 
 	// A short list is still shown file by file, with no warning to cry wolf.
 	m.manifest = transfer.Manifest{Files: files[:3]}
-	view = m.View()
+	view = m.render()
 	if !strings.Contains(view, "decoy02/photo.jpg") || strings.Contains(view, "Gizli") {
 		t.Errorf("a short list is not shown as it is:\n%s", view)
 	}
@@ -296,7 +301,7 @@ func TestPickFolder(t *testing.T) {
 	if !got.isDir || got.files != 2 || got.size != 8 {
 		t.Errorf("picked folder = %+v, want 2 files totalling 8 bytes", got)
 	}
-	if !strings.Contains(next.View(), "2 dosya") {
+	if !strings.Contains(next.render(), "2 dosya") {
 		t.Error("the folder's file count is not shown")
 	}
 }
@@ -360,8 +365,8 @@ func TestOutDirUnsafeRejected(t *testing.T) {
 	if m.outDirErr == "" {
 		t.Error("outDirErr is empty, want warning notice")
 	}
-	if !strings.Contains(m.View(), m.outDirErr) {
-		t.Errorf("view does not render outDirErr: %s", m.View())
+	if !strings.Contains(m.render(), m.outDirErr) {
+		t.Errorf("view does not render outDirErr: %s", m.render())
 	}
 
 	// Navigating with an arrow key should clear the warning
@@ -396,13 +401,13 @@ func TestRelayLimitWarning(t *testing.T) {
 
 	relayed := base
 	relayed.direct = false
-	if !strings.Contains(relayed.View(), "yedek yoldan geçemez") {
+	if !strings.Contains(relayed.render(), "yedek yoldan geçemez") {
 		t.Error("no warning for a transfer too big for the fallback route")
 	}
 
 	direct := base
 	direct.direct = true
-	if strings.Contains(direct.View(), "yedek yoldan geçemez") {
+	if strings.Contains(direct.render(), "yedek yoldan geçemez") {
 		t.Error("warned about the fallback limit on a direct connection")
 	}
 
@@ -410,7 +415,7 @@ func TestRelayLimitWarning(t *testing.T) {
 	small.manifest = transfer.Manifest{
 		Files: []transfer.FileInfo{{Path: "not.txt", Size: 1 << 10}},
 	}
-	if strings.Contains(small.View(), "yedek yoldan geçemez") {
+	if strings.Contains(small.render(), "yedek yoldan geçemez") {
 		t.Error("warned about a transfer that fits comfortably")
 	}
 }
@@ -425,8 +430,8 @@ func TestDynamicConnectionUpgrade(t *testing.T) {
 	m.direct = false
 	m.relayLimit = 256 << 20
 
-	if !strings.Contains(m.View(), "Yedek yol kullanılıyor") {
-		t.Fatalf("expected initial view to mention relay route: %s", m.View())
+	if !strings.Contains(m.render(), "Yedek yol kullanılıyor") {
+		t.Fatalf("expected initial view to mention relay route: %s", m.render())
 	}
 
 	updated, _ := m.handleEvent(p2p.ConnectedEvent{Direct: true})
@@ -438,11 +443,11 @@ func TestDynamicConnectionUpgrade(t *testing.T) {
 	if upgraded.relayLimit != 0 {
 		t.Errorf("expected relayLimit to be reset to 0, got %d", upgraded.relayLimit)
 	}
-	if !strings.Contains(upgraded.View(), "Doğrudan bağlantı kuruldu") {
-		t.Errorf("expected view to reflect direct P2P connection after upgrade: %s", upgraded.View())
+	if !strings.Contains(upgraded.render(), "Doğrudan bağlantı kuruldu") {
+		t.Errorf("expected view to reflect direct P2P connection after upgrade: %s", upgraded.render())
 	}
-	if strings.Contains(upgraded.View(), "Yedek yol") {
-		t.Errorf("view still mentions relay route after upgrade: %s", upgraded.View())
+	if strings.Contains(upgraded.render(), "Yedek yol") {
+		t.Errorf("view still mentions relay route after upgrade: %s", upgraded.render())
 	}
 }
 
@@ -491,7 +496,7 @@ func TestEveryScreenRenders(t *testing.T) {
 			// Exercise both branches of the connection-quality notice.
 			for _, direct := range []bool{true, false} {
 				m.direct = direct
-				out := m.View()
+				out := m.render()
 				if strings.TrimSpace(out) == "" {
 					t.Errorf("%s (mode %v, direct %v) rendered nothing", sc.name, mode, direct)
 				}
@@ -589,8 +594,8 @@ func TestCodeEntryChecksTheCode(t *testing.T) {
 		if m.screen != screenEnterCode {
 			t.Errorf("%q: left the code screen for a code that cannot work", typed)
 		}
-		if !strings.Contains(m.View(), want) {
-			t.Errorf("%q: the screen does not say what is wrong (%q):\n%s", typed, want, m.View())
+		if !strings.Contains(m.render(), want) {
+			t.Errorf("%q: the screen does not say what is wrong (%q):\n%s", typed, want, m.render())
 		}
 		if typedMore := press(t, m, "a"); typedMore.codeErr != "" {
 			t.Errorf("%q: the complaint stayed after the user started fixing it", typed)
@@ -622,12 +627,12 @@ func TestBackgroundPreparationKeepsTheCode(t *testing.T) {
 		if m.screen != sc {
 			t.Fatalf("background reading moved the screen from %v to %v", sc, m.screen)
 		}
-		if !strings.Contains(m.View(), "hazırlanıyor (2/5)") {
-			t.Errorf("progress of the background read is not shown:\n%s", m.View())
+		if !strings.Contains(m.render(), "hazırlanıyor (2/5)") {
+			t.Errorf("progress of the background read is not shown:\n%s", m.render())
 		}
 		m = event(t, m, p2p.PreparedEvent{})
-		if !strings.Contains(m.View(), "hazır") || !strings.Contains(m.View(), "kiraz-liman-42") {
-			t.Errorf("the finished read is not reported next to the code:\n%s", m.View())
+		if !strings.Contains(m.render(), "hazır") || !strings.Contains(m.render(), "kiraz-liman-42") {
+			t.Errorf("the finished read is not reported next to the code:\n%s", m.render())
 		}
 	}
 }
@@ -641,11 +646,11 @@ func TestLosingTheServerIsShown(t *testing.T) {
 	m.room = "kiraz-liman-42"
 
 	m = event(t, m, p2p.ServerLostEvent{})
-	if !strings.Contains(m.View(), "yeniden bağlanılıyor") {
-		t.Errorf("losing the meeting point is not shown:\n%s", m.View())
+	if !strings.Contains(m.render(), "yeniden bağlanılıyor") {
+		t.Errorf("losing the meeting point is not shown:\n%s", m.render())
 	}
 	m = event(t, m, p2p.ServerBackEvent{})
-	if strings.Contains(m.View(), "yeniden bağlanılıyor") {
+	if strings.Contains(m.render(), "yeniden bağlanılıyor") {
 		t.Error("the warning stayed after the room was back")
 	}
 }
@@ -659,8 +664,8 @@ func TestRoomLostEndsTheSession(t *testing.T) {
 	m.room = "kiraz-liman-42"
 
 	m = event(t, m, p2p.RoomLostEvent{Err: errString("the room code expired")})
-	if m.screen != screenError || !strings.Contains(m.View(), "süresi doldu") {
-		t.Errorf("screen %v:\n%s", m.screen, m.View())
+	if m.screen != screenError || !strings.Contains(m.render(), "süresi doldu") {
+		t.Errorf("screen %v:\n%s", m.screen, m.render())
 	}
 }
 
@@ -676,13 +681,13 @@ func TestWrongCodeAttemptIsMentioned(t *testing.T) {
 	if m.screen != screenWaiting {
 		t.Errorf("a rejected stranger moved the screen to %v", m.screen)
 	}
-	if !strings.Contains(m.View(), "yanlış bir kodla") {
-		t.Errorf("the attempt is not mentioned:\n%s", m.View())
+	if !strings.Contains(m.render(), "yanlış bir kodla") {
+		t.Errorf("the attempt is not mentioned:\n%s", m.render())
 	}
 	// And how many more the code survives, so a sender watching the screen
 	// knows what the next one means.
-	if !strings.Contains(m.View(), "2 yanlış deneme") {
-		t.Errorf("the attempts left are not mentioned:\n%s", m.View())
+	if !strings.Contains(m.render(), "2 yanlış deneme") {
+		t.Errorf("the attempts left are not mentioned:\n%s", m.render())
 	}
 }
 
@@ -705,7 +710,7 @@ func TestNoticesFollowTheLanguage(t *testing.T) {
 	}
 
 	m = press(t, m, "l")
-	view := m.View()
+	view := m.render()
 	for _, tr := range []string{"yanlış bir kodla", "yarıda kaldı"} {
 		if strings.Contains(view, tr) {
 			t.Errorf("still in Turkish after switching to English (%q):\n%s", tr, view)
@@ -720,7 +725,7 @@ func TestNoticesFollowTheLanguage(t *testing.T) {
 	// The update notice lives on the welcome screen, and the switch
 	// happened elsewhere.
 	m.screen = screenWelcome
-	if view := m.View(); !strings.Contains(view, "A new version is available (v9.9.9)") {
+	if view := m.render(); !strings.Contains(view, "A new version is available (v9.9.9)") {
 		t.Errorf("the update notice did not follow the language:\n%s", view)
 	}
 }
@@ -734,8 +739,8 @@ func TestReceiverSeesSenderPreparing(t *testing.T) {
 	m.haveConn = true
 
 	m = event(t, m, p2p.RemotePreparingEvent{Done: 3, Total: 10})
-	if !strings.Contains(m.View(), "hazırlıyor (3/10)") {
-		t.Errorf("the sender's progress is not shown:\n%s", m.View())
+	if !strings.Contains(m.render(), "hazırlıyor (3/10)") {
+		t.Errorf("the sender's progress is not shown:\n%s", m.render())
 	}
 }
 
@@ -746,7 +751,7 @@ func TestWelcomeShowsUpdateNotification(t *testing.T) {
 	next, _ := m.Update(updateAvailableMsg{tag: "v0.3.0"})
 	updated := next.(Model)
 
-	view := updated.View()
+	view := updated.render()
 	if !strings.Contains(view, "Yeni bir sürüm mevcut (v0.3.0)") {
 		t.Errorf("expected update banner in view, got:\n%s", view)
 	}
@@ -761,11 +766,11 @@ func TestLanguageToggle(t *testing.T) {
 	if m.lang != i18n.TR {
 		t.Fatalf("expected initial default language to be TR, got %v", m.lang)
 	}
-	if !strings.Contains(m.View(), "Dosyalarını arkadaşına doğrudan gönderirsin.") {
-		t.Errorf("expected Turkish welcome text, got:\n%s", m.View())
+	if !strings.Contains(m.render(), "Dosyalarını arkadaşına doğrudan gönderirsin.") {
+		t.Errorf("expected Turkish welcome text, got:\n%s", m.render())
 	}
-	if !strings.Contains(m.View(), "[L]") || !strings.Contains(m.View(), "English") {
-		t.Errorf("expected footer to show '[L] Dil: English' shortcut, got:\n%s", m.View())
+	if !strings.Contains(m.render(), "[L]") || !strings.Contains(m.render(), "English") {
+		t.Errorf("expected footer to show '[L] Dil: English' shortcut, got:\n%s", m.render())
 	}
 
 	// Press "l" to switch to English
@@ -773,7 +778,7 @@ func TestLanguageToggle(t *testing.T) {
 	if enModel.lang != i18n.EN {
 		t.Fatalf("expected lang to be EN after 'l', got %v", enModel.lang)
 	}
-	enView := enModel.View()
+	enView := enModel.render()
 	if !strings.Contains(enView, "Send files directly to your friend peer-to-peer.") {
 		t.Errorf("expected English welcome text, got:\n%s", enView)
 	}
@@ -789,8 +794,8 @@ func TestLanguageToggle(t *testing.T) {
 	if trModel.lang != i18n.TR {
 		t.Fatalf("expected lang to be TR after 'L', got %v", trModel.lang)
 	}
-	if !strings.Contains(trModel.View(), "Dosyalarını arkadaşına doğrudan gönderirsin.") {
-		t.Errorf("expected Turkish welcome text after toggle back, got:\n%s", trModel.View())
+	if !strings.Contains(trModel.render(), "Dosyalarını arkadaşına doğrudan gönderirsin.") {
+		t.Errorf("expected Turkish welcome text after toggle back, got:\n%s", trModel.render())
 	}
 }
 
@@ -800,14 +805,14 @@ func TestConfigInitialLanguage(t *testing.T) {
 	if m.lang != i18n.EN {
 		t.Fatalf("expected lang to be EN, got %v", m.lang)
 	}
-	if !strings.Contains(m.View(), "Send files directly to your friend peer-to-peer.") {
-		t.Errorf("expected English view, got:\n%s", m.View())
+	if !strings.Contains(m.render(), "Send files directly to your friend peer-to-peer.") {
+		t.Errorf("expected English view, got:\n%s", m.render())
 	}
 
 	mErr := m
 	mErr.screen = screenError
 	mErr.err = errString("room code expired")
-	errView := mErr.View()
+	errView := mErr.render()
 	if !strings.Contains(errView, "Room code expired.") {
 		t.Errorf("expected English error headline, got:\n%s", errView)
 	}
@@ -826,7 +831,7 @@ func TestWaitingScreenCodeBoxAlignment(t *testing.T) {
 		m.room = "kiraz-liman-42"
 		m.lang = lang
 
-		view := m.View()
+		view := m.render()
 		if !strings.Contains(view, "kiraz-liman-42") {
 			t.Fatalf("expected room code in view:\n%s", view)
 		}
@@ -898,7 +903,7 @@ func TestPickFilesLanguageToggle(t *testing.T) {
 // TestFooterThreeColumnLayout verifies formatFooter wraps items into 3 columns per line.
 func TestFooterThreeColumnLayout(t *testing.T) {
 	sample := "[1] One  ·  [2] Two  ·  [3] Three  ·  [4] Four  ·  [5] Five  ·  [6] Six  ·  [7] Seven"
-	formatted := formatFooter(sample)
+	formatted := ansi.Strip(newStyles(true).formatFooter(sample))
 	lines := strings.Split(formatted, "\n")
 	if len(lines) != 3 {
 		t.Fatalf("expected 3 lines for 7 items (3 + 3 + 1), got %d lines:\n%s", len(lines), formatted)

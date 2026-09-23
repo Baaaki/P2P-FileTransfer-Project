@@ -12,7 +12,7 @@ updates:
       libp2p:
         patterns: ["github.com/libp2p/*", "github.com/multiformats/*"]
       charm:
-        patterns: ["github.com/charmbracelet/*"]
+        patterns: ["charm.land/*", "github.com/charmbracelet/*"]
 
   - package-ecosystem: github-actions
     directory: /

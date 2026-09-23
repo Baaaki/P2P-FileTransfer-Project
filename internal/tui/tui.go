@@ -16,10 +16,10 @@ import (
 	"puresend/internal/transfer"
 	"puresend/internal/update"
 
-	"github.com/charmbracelet/bubbles/filepicker"
-	"github.com/charmbracelet/bubbles/key"
-	"github.com/charmbracelet/bubbles/textinput"
-	tea "github.com/charmbracelet/bubbletea"
+	"charm.land/bubbles/v2/filepicker"
+	"charm.land/bubbles/v2/key"
+	"charm.land/bubbles/v2/textinput"
+	tea "charm.land/bubbletea/v2"
 )
 
 type screen int
@@ -84,6 +84,7 @@ type Model struct {
 	mode        mode
 	width       int
 	height      int
+	st          styles
 
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -183,6 +184,7 @@ func New(cfg Config) Model {
 	ti.Placeholder = i18n.Get(l).EnterPlaceholder
 	ti.CharLimit = 64
 	ti.Prompt = "  ➜  "
+	ti.SetStyles(inputStyles(true))
 
 	outDir := cfg.OutDir
 	if outDir == "" {
@@ -198,6 +200,7 @@ func New(cfg Config) Model {
 		version:     cfg.Version,
 		lang:        l,
 		screen:      screenWelcome,
+		st:          newStyles(true),
 		ctx:         ctx,
 		cancel:      cancel,
 		picker:      fp,
@@ -210,7 +213,7 @@ func New(cfg Config) Model {
 // Run starts the interface and blocks until the user quits.
 func Run(cfg Config) error {
 	m := New(cfg)
-	p := tea.NewProgram(m, tea.WithAltScreen())
+	p := tea.NewProgram(m)
 	final, err := p.Run()
 	m.cancel()
 	if fm, ok := final.(Model); ok && fm.node != nil {
@@ -306,5 +309,7 @@ func checkUpdateCmd(version string) tea.Cmd {
 }
 
 func (m Model) Init() tea.Cmd {
-	return tea.Batch(m.picker.Init(), tick(), checkUpdateCmd(m.version))
+	// The terminal's background decides between the light and dark
+	// colours; the answer arrives as a BackgroundColorMsg.
+	return tea.Batch(tea.RequestBackgroundColor, m.picker.Init(), tick(), checkUpdateCmd(m.version))
 }
