@@ -65,7 +65,7 @@ nfpms:
     vendor: Baki
     homepage: https://github.com/Baaaki/PureSend
     maintainer: Baki <contact@madebybaki.com>
-    description: Guvenli, sifreli, dogrudan P2P dosya transfer araci
+    description: Secure, encrypted, direct peer-to-peer file transfer tool
     license: GPL-3.0
     bindir: /usr/bin
     contents:
@@ -119,12 +119,12 @@ release:
   header: |
     ## PureSend {{ .Tag }}
 
-    Go ile geliştirilmiş, uçtan uca şifreli ve doğrudan eşler arası (P2P) dosya ve klasör transfer sistemi.
+    End-to-end encrypted, direct peer-to-peer (P2P) file and folder transfer system built with Go.
 
   footer: |
     ---
 
-    ### ⚡ Hızlı Kurulum (Tek Satır)
+    ### ⚡ Quick Install (One-Line)
 
     - **Linux & macOS (Arch, Ubuntu, Fedora, Debian, macOS):**
       ```bash
@@ -137,13 +137,13 @@ release:
 
     ---
 
-    ### 📦 Manuel Kurulum & Doğrudan İndirme (Assets)
+    ### 📦 Manual Installation & Direct Download (Assets)
 
-    - 🪟 **Windows (`x86_64`)**: `.zip` arşivini indirip çıkartın ve `puresend.exe`yi çalıştırın.
-    - 📦 **Debian / Ubuntu (`amd64`)**: `.deb` paketini indirip çift tıklayarak veya `sudo dpkg -i puresend_*.deb` komutu ile kurun.
-    - 🐧 **Linux (`x86_64`)**: `.tar.gz` arşivini çıkartıp doğrudan terminalden çalıştırın (`./puresend`).
-    - 🍏 **macOS (Apple Silicon - M1/M2/M3/M4)**: `.tar.gz` arşivini çıkartıp terminalden çalıştırın (`./puresend`).
+    - 🪟 **Windows (`x86_64`)**: Extract the `.zip` archive and run `puresend.exe`.
+    - 📦 **Debian / Ubuntu (`amd64`)**: Download the `.deb` package and install by double-clicking or running `sudo dpkg -i puresend_*.deb`.
+    - 🐧 **Linux (`x86_64`)**: Extract the `.tar.gz` archive and run directly from the terminal (`./puresend`).
+    - 🍏 **macOS (Apple Silicon - M1/M2/M3/M4)**: Extract the `.tar.gz` archive and run directly from the terminal (`./puresend`).
 
     ---
-    > 💡 **macOS Notu:** macOS Gatekeeper ilk açılışta *"geliştirici doğrulanamadı"* uyarısı verirse, terminalde şu komutu çalıştırarak karantina bayrağını kaldırabilirsiniz:  
+    > 💡 **macOS Note:** If macOS Gatekeeper displays an *"unverified developer"* warning on first launch, you can remove the quarantine attribute by running:  
     > `xattr -d com.apple.quarantine puresend`
