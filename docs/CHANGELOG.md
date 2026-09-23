@@ -6,6 +6,49 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security
+
+- `golang.org/x/crypto` 0.54.0 → 0.57.0, which fixes GO-2026-6303,
+  GO-2026-6354 and GO-2026-6355. `govulncheck` found none of them
+  reachable from PureSend's code; the update takes them out of the build.
+
+### Changed
+
+- `go-libp2p` 0.49.0 → 0.50.0 (quic-go 0.62.0). It carries a hole-punching
+  fix: the attempt's timeout is set before the connection notifications
+  that can start it.
+- **The terminal interface runs on Bubble Tea v2, Lip Gloss v2 and
+  Bubbles v2.** The screens and keys are the same. Colours now follow the
+  background the terminal reports when asked, and the code box keeps the
+  terminal's own text colour for its prompt and cursor, which the new
+  defaults would have drawn in a grey that is hard to see on a light
+  background. A pasted code still lands in the code box: v2 delivers a
+  paste as one message rather than as keys, and it is routed there.
+- `pion/stun` 3.1.7 → 4.0.1.
+- Go 1.27.1: go.mod names it as the toolchain, so a machine with an older
+  1.27 fetches it, and the server image builds on `golang:1.27.1-alpine3.24`
+  rather than whatever `1.27-alpine` a builder has cached. The server
+  image runs on Alpine 3.24 instead of 3.22.
+- The rest of the dependency tree is current as of September 2026, except
+  libp2p's own network stack (quic-go, webtransport-go, the pion WebRTC
+  packages), which stays at the versions go-libp2p 0.50.0 is built and
+  tested against; newer pion releases do not even compile together.
+- CI and the release job run on `ubuntu-26.04`.
+- Dependabot groups the `charm.land` modules with the rest of Charm.
+
+### Fixed
+
+- Something a library logged — quic-go's warning about UDP buffer sizes,
+  on most Linux machines — was written over the terminal interface, and
+  the new renderer, which redraws only the cells it changed, would have
+  left it there. Log output is now kept off the screen while the
+  interface runs.
+
+- `make deb` stamped every package it built as 2.0.1, whatever the code
+  was. It now takes the version from the latest release tag, and builds
+  in the release signing key, so a locally built package checks update
+  signatures the way the released one does.
+
 ## [2.0.3] - 2026-09-23
 
 Nothing in the program changed; the binaries differ from 2.0.2 only in
