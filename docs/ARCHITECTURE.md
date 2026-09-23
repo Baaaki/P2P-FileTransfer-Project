@@ -1,6 +1,6 @@
 # PureSend — Mimari ve Algoritma Akışı (Architecture & Protocol Spec)
 
-Bu belge; PureSend (FileTransferilla) eşler arası (P2P) dosya aktarım sisteminin ağ topolojisini, şifreleme mekanizmalarını ve algoritma akışını şematik olarak açıklar.
+Bu belge; PureSend eşler arası (P2P) dosya aktarım sisteminin ağ topolojisini, şifreleme mekanizmalarını ve algoritma akışını şematik olarak açıklar.
 
 ---
 
