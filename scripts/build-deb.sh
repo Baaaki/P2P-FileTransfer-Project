@@ -5,7 +5,10 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
-VERSION="${1:-2.0.1}"
+# Default to the latest release tag, so the package never carries a stale
+# version number.
+VERSION="${1:-$(git -C "${ROOT_DIR}" describe --tags --abbrev=0 2>/dev/null | sed 's/^v//')}"
+[ -n "${VERSION}" ] || { echo "no version given and no git tag found" >&2; exit 1; }
 ARCH="${2:-amd64}"
 DEB_NAME="puresend_${VERSION}_${ARCH}.deb"
 OUTPUT_DIR="${ROOT_DIR}/bin"
@@ -15,6 +18,9 @@ mkdir -p "${OUTPUT_DIR}"
 
 SERVER_ADDR="/dns4/rendezvous.madebybaki.com/tcp/443/tls/ws/p2p/12D3KooWJdXaT1FN4UGLCrrTpdqvpo7cqrJZK6tHvbUPQbJ6APtK"
 SERVER_LIST="https://puresend.madebybaki.com/server.txt"
+# The minisign key releases are signed with (SECURITY.md); without it
+# `puresend -update` checks checksums but not their signature.
+UPDATE_KEY="${FT_UPDATE_KEY:-RWQ2F1ZFuTGorH4GqU4qC3PzJo5Evx2OKfNfJSiLbgyoEkMFDwUV8Kts}"
 
 # If binary already exists and no rebuild requested, we can use it or rebuild:
 if [ ! -f "${OUTPUT_DIR}/puresend" ]; then
@@ -23,6 +29,7 @@ if [ ! -f "${OUTPUT_DIR}/puresend" ]; then
   CGO_ENABLED=0 GOOS=linux GOARCH="${ARCH}" go build -trimpath -ldflags "-s -w \
     -X main.defaultServer=${SERVER_ADDR} \
     -X main.defaultServerList=${SERVER_LIST} \
+    -X puresend/internal/update.publicKey=${UPDATE_KEY} \
     -X main.version=v${VERSION} \
     -X main.commit=$(git rev-parse --short HEAD 2>/dev/null || echo 'unknown') \
     -X main.date=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
