@@ -8,6 +8,8 @@ package tui
 
 import (
 	"context"
+	"io"
+	"log"
 	"os"
 	"time"
 
@@ -212,6 +214,13 @@ func New(cfg Config) Model {
 
 // Run starts the interface and blocks until the user quits.
 func Run(cfg Config) error {
+	// The terminal belongs to the interface while it runs. Anything a
+	// library logs — quic-go warns about UDP buffer sizes, for one — would
+	// land on top of the screen, and the renderer, which only redraws the
+	// cells it changed, would never paint over it.
+	log.SetOutput(io.Discard)
+	defer log.SetOutput(os.Stderr)
+
 	m := New(cfg)
 	p := tea.NewProgram(m)
 	final, err := p.Run()
