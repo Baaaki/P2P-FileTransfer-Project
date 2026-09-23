@@ -4,9 +4,10 @@
 # client (cmd/client) is a desktop app users download — never run it in a
 # container, the extra NAT layer breaks hole punching.
 
-# Stage 1: build. The Go version matches the go line in go.mod; CI and
-# the release build use the same one.
-FROM golang:1.27-alpine AS build
+# Stage 1: build. The Go version matches the toolchain line in go.mod; CI
+# and the release build use the same one. Pinned to the patch release so
+# a builder with an older image cached still gets the fixes.
+FROM golang:1.27.1-alpine3.24 AS build
 WORKDIR /app
 
 # Download dependencies first so this layer is cached across code changes.
@@ -26,7 +27,7 @@ RUN CGO_ENABLED=0 go build -trimpath \
       -o /server ./cmd/server
 
 # Stage 2: runtime — a small image containing only the binary
-FROM alpine:3.22
+FROM alpine:3.24
 WORKDIR /data
 COPY --from=build /server /usr/local/bin/server
 
