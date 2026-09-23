@@ -6,10 +6,16 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [2.0.3] - 2026-09-23
+
+Nothing in the program changed; the binaries differ from 2.0.2 only in
+their version stamp. This release is the first one built by the updated
+release workflow below.
+
 ### Fixed
 
 - The AUR `PKGBUILD` was still at 2.0.0 after 2.0.1 went out; it now
-  follows 2.0.2, with that release's archive digest.
+  follows each release, with that release's archive digest.
 
 ### Changed
 
